@@ -1,4 +1,3 @@
-// Validated data model — see docs/plans/02-pdf-parser-and-categorization.md
 import { z } from 'zod';
 
 const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
