@@ -71,9 +71,10 @@ const MERCHANT_RULES: Rule[] = [
     category: 'Food & Dining',
   },
 
-  // Groceries
+  // Groceries. `co.op` is anchored (and the common "coopmart" spelling added)
+  // so it does not match inside words like "cooperation" or "scoop".
   {
-    pattern: /aeon|circle\s?k|co\.?op|bach hoa|vinmart|langfarm/i,
+    pattern: /aeon|circle\s?k|coopmart|\bco\.?op\b|bach hoa|vinmart|langfarm/i,
     category: 'Groceries',
   },
 
@@ -83,10 +84,11 @@ const MERCHANT_RULES: Rule[] = [
   // Entertainment (youtube before bare google)
   { pattern: /youtube|steam|netflix|spotify/i, category: 'Entertainment' },
 
-  // Software & Subscriptions
+  // Software & Subscriptions. `aws` is anchored with word boundaries so it does
+  // not match inside words like "LAWSON"; "amazon web services" still matches.
   {
     pattern:
-      /apple\.com|itunes|claude\.ai|anthropic|amazon web services|aws|google(?! youtube)|adobe|microsoft/i,
+      /apple\.com|itunes|claude\.ai|anthropic|amazon web services|\baws\b|google(?! youtube)|adobe|microsoft/i,
     category: 'Software & Subscriptions',
   },
 
