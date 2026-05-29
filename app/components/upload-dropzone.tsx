@@ -9,6 +9,7 @@ export function UploadDropzone({ onParsed }: { onParsed: (s: Statement) => void 
   const [error, setError] = useState<string | null>(null);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    disabled: loading,
     accept: { 'application/pdf': ['.pdf'] },
     maxFiles: 1,
     maxSize: 5 * 1024 * 1024,
