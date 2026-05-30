@@ -27,7 +27,12 @@ export function formatVND(n: number): string {
  */
 export function formatVNDCompact(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M ₫`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(0)}K ₫`;
+  if (value >= 1_000) {
+    // Guard the K→M boundary: values in [999_500, 999_999] round to "1000K",
+    // which should read "1.0M" instead.
+    const k = Math.round(value / 1_000);
+    return k >= 1_000 ? `${(value / 1_000_000).toFixed(1)}M ₫` : `${k}K ₫`;
+  }
   return `${value} ₫`;
 }
 

@@ -35,6 +35,10 @@ describe('formatVNDCompact', () => {
     expect(formatVNDCompact(999)).toBe('999 ₫');
   });
 
+  it('999_800 → "1.0M ₫" (K→M boundary does not produce "1000K")', () => {
+    expect(formatVNDCompact(999_800)).toBe('1.0M ₫');
+  });
+
   it('0 → "0 ₫"', () => {
     expect(formatVNDCompact(0)).toBe('0 ₫');
   });
