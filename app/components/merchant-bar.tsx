@@ -29,7 +29,7 @@ export function MerchantBar({
           tick={{ fontSize: 12 }}
         />
         <Tooltip formatter={(v) => formatVND(Number(v))} />
-        <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]} />
+        <Bar dataKey="value" fill="var(--primary)" radius={[0, 4, 4, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );
