@@ -16,7 +16,7 @@ export function Dashboard({ view }: { view: AggregatedView }) {
       {/* Row 2: KPI cards */}
       <KpiCards view={view} />
 
-      {/* Row 2: Spending trend across sub-periods (the headline multi-period chart) */}
+      {/* Row 3: Spending trend across sub-periods (the headline multi-period chart) */}
       <Card className="min-w-0 overflow-hidden">
         <CardHeader>
           <CardTitle>Spending trend</CardTitle>
@@ -26,7 +26,7 @@ export function Dashboard({ view }: { view: AggregatedView }) {
         </CardContent>
       </Card>
 
-      {/* Row 3: Category pie + Top merchants bar */}
+      {/* Row 4: Category pie + Top merchants bar */}
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="min-w-0 overflow-hidden">
           <CardHeader>
@@ -47,7 +47,7 @@ export function Dashboard({ view }: { view: AggregatedView }) {
         </Card>
       </div>
 
-      {/* Row 4: Transactions table */}
+      {/* Row 5: Transactions table */}
       <Card className="min-w-0 overflow-hidden">
         <CardHeader>
           <CardTitle>Transactions</CardTitle>

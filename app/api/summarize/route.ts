@@ -39,6 +39,12 @@ Give a year-in-review. Use the ${subPeriods.length} sub-periods (months) to iden
 2. Dominant categories and any category shifts over the year
 3. Any fees, interest, or charges worth being aware of
 4. One actionable suggestion for next year`;
+
+    default: {
+      // Exhaustiveness guard: a new PeriodType member must be handled above.
+      const _exhaustive: never = periodType;
+      throw new Error(`Unhandled period type: ${String(_exhaustive)}`);
+    }
   }
 }
 
@@ -67,11 +73,37 @@ export async function POST(request: Request) {
 
   const prompt = `${SYSTEM_PROMPT}\n\n${periodInstructions(payload)}\n\nData:\n${JSON.stringify(payload, null, 2)}`;
 
+  // Peek the first chunk BEFORE returning the Response. Only errors that occur
+  // here — before any headers/bytes are sent — can be mapped to an HTTP status
+  // (e.g. 429 for upstream rate limits). Once the stream is returned the status
+  // is locked to 200; mid-stream failures surface to the client's reader as a
+  // generic error, not an HTTP code.
+  const gen = streamSummary(prompt);
+  let first: IteratorResult<string>;
+  try {
+    first = await gen.next();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const isRateLimit = /\b429\b|rate.?limit|quota|RESOURCE_EXHAUSTED/i.test(msg);
+    console.error('Summary generation failed before stream:', msg);
+    return Response.json(
+      {
+        error: isRateLimit
+          ? 'The AI is busy right now — try again in a minute.'
+          : 'Could not generate summary.',
+      },
+      { status: isRateLimit ? 429 : 502 },
+    );
+  }
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        for await (const chunk of streamSummary(prompt)) {
+        if (!first.done) {
+          controller.enqueue(encoder.encode(first.value));
+        }
+        for await (const chunk of gen) {
           controller.enqueue(encoder.encode(chunk));
         }
         controller.close();
