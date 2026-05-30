@@ -44,14 +44,14 @@ function reducer(state: State, action: Action): State {
 export function AiSummaryCard({ view }: { view: AggregatedView }) {
   const [state, dispatch] = useReducer(reducer, { phase: 'idle' });
 
-  // Stable key for the current period — re-fetch when this changes.
+  // Stable key for the current period — drives cache lookups and reset.
   const specKey = JSON.stringify(view.spec);
 
-  const isEmpty =
-    view.statementCount === 0 || view.transactions.length === 0;
+  const isEmpty = view.statementCount === 0 || view.transactions.length === 0;
 
-  // In-component cache of summary text keyed by spec, so navigating back to an
-  // already-summarized period shows the cached text without re-calling Gemini.
+  // In-component cache of completed summary text keyed by spec, so navigating
+  // back to an already-summarized period shows the cached text without
+  // re-calling Gemini.
   const cacheRef = useRef<Map<string, string>>(new Map());
 
   // Holds the AbortController for any in-flight request so we can cancel on
@@ -84,6 +84,13 @@ export function AiSummaryCard({ view }: { view: AggregatedView }) {
         let message: string;
         if (res.status === 429) {
           message = 'The AI is busy right now — try again in a minute.';
+        } else if (res.status === 503) {
+          try {
+            const data = (await res.json()) as { error?: string };
+            message = data.error ?? 'AI summary is not configured.';
+          } catch {
+            message = 'AI summary is not configured.';
+          }
         } else {
           try {
             const data = (await res.json()) as { error?: string };
@@ -97,7 +104,10 @@ export function AiSummaryCard({ view }: { view: AggregatedView }) {
       }
 
       if (!res.body) {
-        dispatch({ type: 'ERROR', message: 'Could not generate summary.' });
+        dispatch({
+          type: 'ERROR',
+          message: 'Could not generate summary — try again.',
+        });
         return;
       }
 
@@ -125,15 +135,12 @@ export function AiSummaryCard({ view }: { view: AggregatedView }) {
     }
   }, []);
 
-  // Re-fetch (or load from cache) whenever the period spec changes.
+  // When the period changes: abort any in-flight request, then either show the
+  // cached summary (if this period was already summarized) or reset to idle so
+  // the user must click to summarize the new period. Never auto-fetches.
   useEffect(() => {
     acRef.current?.abort();
     acRef.current = null;
-
-    if (isEmpty) {
-      dispatch({ type: 'RESET' });
-      return;
-    }
 
     const cached = cacheRef.current.get(specKey);
     if (cached !== undefined) {
@@ -141,9 +148,8 @@ export function AiSummaryCard({ view }: { view: AggregatedView }) {
       return;
     }
 
-    void runSummary();
-    // specKey fully captures spec identity; runSummary is stable.
-  }, [specKey, isEmpty, runSummary]);
+    dispatch({ type: 'RESET' });
+  }, [specKey]);
 
   // Clean up on unmount.
   useEffect(() => {
@@ -162,6 +168,15 @@ export function AiSummaryCard({ view }: { view: AggregatedView }) {
           <p className="text-muted-foreground text-sm">
             No spending data to summarize for this period.
           </p>
+        ) : state.phase === 'idle' ? (
+          <div className="flex flex-col items-start gap-3">
+            <p className="text-muted-foreground text-sm">
+              Generate an AI overview of {view.label} spending.
+            </p>
+            <Button onClick={() => void runSummary()}>
+              Summarize expenses with AI
+            </Button>
+          </div>
         ) : state.phase === 'loading' ? (
           state.text ? (
             <div className="prose prose-sm max-w-none whitespace-pre-wrap">
@@ -182,7 +197,7 @@ export function AiSummaryCard({ view }: { view: AggregatedView }) {
               Try again
             </Button>
           </div>
-        ) : state.phase === 'done' ? (
+        ) : (
           <div className="space-y-4">
             <div className="prose prose-sm max-w-none whitespace-pre-wrap">
               {state.text}
@@ -195,13 +210,6 @@ export function AiSummaryCard({ view }: { view: AggregatedView }) {
             >
               Regenerate
             </Button>
-          </div>
-        ) : (
-          // idle: brief gap before the fetch effect kicks in.
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-[90%]" />
-            <Skeleton className="h-4 w-[80%]" />
           </div>
         )}
       </CardContent>
