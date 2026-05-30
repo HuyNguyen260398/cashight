@@ -44,6 +44,9 @@ export function PeriodSelector({ current }: { current: PeriodSpec }) {
                 : quarterOf(new Date().getMonth() + 1),
         };
       case 'month':
+        // A year/quarter spec carries no specific month, so fall back to the
+        // current calendar month. Round-trips like month→quarter→month do not
+        // restore the original month — this is intentional.
         return {
           type: 'month',
           year: current.year,

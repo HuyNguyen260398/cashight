@@ -29,8 +29,6 @@ export default async function HomePage({
     error = err instanceof Error ? err.message : 'Failed to load statements';
   }
 
-  const view = aggregate(statements, spec);
-
   return (
     <main className="container mx-auto p-4 md:p-6 max-w-7xl">
       <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -42,7 +40,7 @@ export default async function HomePage({
       ) : statements.length === 0 ? (
         <EmptyState />
       ) : (
-        <Dashboard view={view} />
+        <Dashboard view={aggregate(statements, spec)} />
       )}
     </main>
   );
