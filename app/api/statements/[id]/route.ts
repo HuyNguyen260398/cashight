@@ -5,7 +5,12 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const key = decodeURIComponent(id);
+  let key: string;
+  try {
+    key = decodeURIComponent(id);
+  } catch {
+    return Response.json({ error: 'Invalid key' }, { status: 400 });
+  }
   if (!key.startsWith('statements/')) {
     return Response.json({ error: 'Invalid key' }, { status: 400 });
   }
@@ -22,7 +27,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const key = decodeURIComponent(id);
+  let key: string;
+  try {
+    key = decodeURIComponent(id);
+  } catch {
+    return Response.json({ error: 'Invalid key' }, { status: 400 });
+  }
   if (!key.startsWith('statements/')) {
     return Response.json({ error: 'Invalid key' }, { status: 400 });
   }
