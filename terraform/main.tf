@@ -28,4 +28,5 @@ variable "project_name" {
 variable "bucket_suffix" {
   type        = string
   description = "Random suffix to ensure global uniqueness"
+  default     = "cashight-2026"
 }

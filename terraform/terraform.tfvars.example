@@ -1,1 +1,1 @@
-bucket_suffix = "huy-9674"  # any short unique string
+bucket_suffix = "cashight-2026"  # any short unique string; overrides the default in main.tf

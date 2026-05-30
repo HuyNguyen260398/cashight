@@ -1,0 +1,7 @@
+# Copy to backend.hcl (gitignored) and fill in your state bucket.
+# Then: terraform init -backend-config=backend.hcl
+bucket       = "expense-tracker-tfstate-<suffix>"
+key          = "expense-tracker/terraform.tfstate"
+region       = "ap-southeast-1"
+encrypt      = true # encrypt state object at rest (SSE)
+use_lockfile = true # native S3 state locking (Terraform >= 1.10; no DynamoDB needed)
