@@ -1,34 +1,35 @@
-import type { Statement } from '@/lib/schemas';
-import {
-  byCategory,
-  topMerchants,
-  cumulativeByDay,
-} from '@/lib/dashboard-aggregations';
+import type { AggregatedView } from '@/lib/aggregations';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { KpiCards } from '@/app/components/kpi-cards';
 import { TransactionsTable } from '@/app/components/transactions-table';
 import { CategoryPie } from '@/app/components/category-pie';
 import { MerchantBar } from '@/app/components/merchant-bar';
-import { DailySpendLine } from '@/app/components/daily-spend-line';
-import { AiSummaryCard } from '@/app/components/ai-summary-card';
+import { TrendChart } from '@/app/components/trend-chart';
 
-export function Dashboard({ statement }: { statement: Statement }) {
+export function Dashboard({ view }: { view: AggregatedView }) {
   return (
     <div className="space-y-6">
-      {/* AI spending summary */}
-      <AiSummaryCard statement={statement} />
-
       {/* Row 1: KPI cards */}
-      <KpiCards statement={statement} />
+      <KpiCards view={view} />
 
-      {/* Row 2: Category pie + Top merchants bar */}
+      {/* Row 2: Spending trend across sub-periods (the headline multi-period chart) */}
+      <Card className="min-w-0 overflow-hidden">
+        <CardHeader>
+          <CardTitle>Spending trend</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TrendChart view={view} />
+        </CardContent>
+      </Card>
+
+      {/* Row 3: Category pie + Top merchants bar */}
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="min-w-0 overflow-hidden">
           <CardHeader>
             <CardTitle>Spending by category</CardTitle>
           </CardHeader>
           <CardContent>
-            <CategoryPie data={byCategory(statement)} />
+            <CategoryPie data={view.byCategory} />
           </CardContent>
         </Card>
 
@@ -37,20 +38,10 @@ export function Dashboard({ statement }: { statement: Statement }) {
             <CardTitle>Top merchants</CardTitle>
           </CardHeader>
           <CardContent>
-            <MerchantBar data={topMerchants(statement, 10)} />
+            <MerchantBar data={view.topMerchants} />
           </CardContent>
         </Card>
       </div>
-
-      {/* Row 3: Cumulative spend area chart */}
-      <Card className="min-w-0 overflow-hidden">
-        <CardHeader>
-          <CardTitle>Cumulative spend</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DailySpendLine data={cumulativeByDay(statement)} />
-        </CardContent>
-      </Card>
 
       {/* Row 4: Transactions table */}
       <Card className="min-w-0 overflow-hidden">
@@ -58,7 +49,7 @@ export function Dashboard({ statement }: { statement: Statement }) {
           <CardTitle>Transactions</CardTitle>
         </CardHeader>
         <CardContent>
-          <TransactionsTable transactions={statement.transactions} />
+          <TransactionsTable transactions={view.transactions} />
         </CardContent>
       </Card>
     </div>

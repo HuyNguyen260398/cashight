@@ -58,6 +58,73 @@ export function previousPeriod(spec: PeriodSpec): PeriodSpec {
   }
 }
 
+/** Valid PeriodType values as a set for O(1) membership checks. */
+const VALID_PERIOD_TYPES = new Set<PeriodType>(['month', 'quarter', 'year']);
+
+/**
+ * Parse an integer from a string, returning `fallback` if the string is null,
+ * non-numeric (NaN), or outside the optional inclusive [min, max] range.
+ */
+function parseIntWithFallback(
+  raw: string | null,
+  fallback: number,
+  range?: [min: number, max: number],
+): number {
+  if (raw === null) return fallback;
+  const parsed = parseInt(raw, 10);
+  if (Number.isNaN(parsed)) return fallback;
+  if (range !== undefined && (parsed < range[0] || parsed > range[1])) return fallback;
+  return parsed;
+}
+
+/**
+ * Parse a `PeriodSpec` from URL search params.
+ *
+ * Reads `period`, `year`, `month`, and `quarter` from `params`.
+ * Unknown or missing values fall back to the current date at call time.
+ * Non-numeric numeric params (e.g. `?year=abc`) also fall back to the
+ * current-date default — NaN is never present in the returned spec.
+ * Out-of-range values are also rejected: `month` must be 1–12 and `quarter`
+ * must be 1–4; values outside those ranges fall back to the current-date
+ * default. `year` accepts any integer (no range clamping).
+ *
+ * This function is pure and side-effect-free; `new Date()` is the only
+ * implicit input (evaluated at call time, not module load time).
+ */
+export function parsePeriodFromSearch(params: URLSearchParams): PeriodSpec {
+  const now = new Date();
+
+  // Validate type — unknown values fall back to 'month'.
+  const rawType = params.get('period') ?? '';
+  const type: PeriodType = VALID_PERIOD_TYPES.has(rawType as PeriodType)
+    ? (rawType as PeriodType)
+    : 'month';
+
+  // Parse year, falling back to current year if absent or non-numeric.
+  const year = parseIntWithFallback(params.get('year'), now.getFullYear());
+
+  if (type === 'year') {
+    return { type, year };
+  }
+
+  if (type === 'quarter') {
+    const quarter = parseIntWithFallback(
+      params.get('quarter'),
+      quarterOf(now.getMonth() + 1),
+      [1, 4],
+    );
+    return { type, year, quarter };
+  }
+
+  // type === 'month'
+  const month = parseIntWithFallback(
+    params.get('month'),
+    now.getMonth() + 1,
+    [1, 12],
+  );
+  return { type, year, month };
+}
+
 /** Return the period immediately after `spec`. */
 export function nextPeriod(spec: PeriodSpec): PeriodSpec {
   switch (spec.type) {
