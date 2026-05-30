@@ -44,7 +44,26 @@ export async function POST(request: Request) {
     const key = await saveStatement(statement);
     return Response.json({ ...statement, _storageKey: key });
   } catch (err) {
-    console.error('Save failed:', err instanceof Error ? err.message : err);
-    return Response.json({ error: 'Failed to save statement' }, { status: 500 });
+    const e = err as {
+      name?: string;
+      message?: string;
+      $metadata?: unknown;
+      Code?: string;
+      stack?: string;
+    };
+    console.error('[save] FAILED', {
+      name: e.name,
+      code: e.Code,
+      message: e.message,
+      awsMetadata: e.$metadata,
+      region: process.env.AWS_REGION ?? '(unset)',
+      bucketSet: Boolean(process.env.STATEMENTS_BUCKET),
+    });
+    if (e.stack) console.error('[save] stack:', e.stack);
+    // Surface the error name to the client (not sensitive) to ease debugging.
+    return Response.json(
+      { error: 'Failed to save statement', detail: e.name ?? 'UnknownError', message: e.message },
+      { status: 500 },
+    );
   }
 }
