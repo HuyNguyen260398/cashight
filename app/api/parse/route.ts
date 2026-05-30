@@ -44,7 +44,12 @@ export async function POST(request: Request) {
     const key = await saveStatement(statement);
     return Response.json({ ...statement, _storageKey: key });
   } catch (err) {
-    console.error('Save failed:', err instanceof Error ? err.message : err);
-    return Response.json({ error: 'Failed to save statement' }, { status: 500 });
+    const e = err as { name?: string; message?: string };
+    console.error('Save failed:', e.name, '-', e.message);
+    // Surface the error name (not the raw message) to the client to ease debugging.
+    return Response.json(
+      { error: 'Failed to save statement', detail: e.name ?? 'UnknownError' },
+      { status: 500 },
+    );
   }
 }
