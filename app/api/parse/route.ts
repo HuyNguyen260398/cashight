@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
 import { parseTPBankStatement } from '@/lib/parsers/tpbank';
+import { saveStatement } from '@/lib/storage';
 
 export async function POST(request: Request) {
   let formData: FormData;
@@ -28,14 +29,22 @@ export async function POST(request: Request) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
 
+  let statement: Awaited<ReturnType<typeof parseTPBankStatement>>;
   try {
-    const statement = await parseTPBankStatement(buffer);
-    return Response.json(statement);
+    statement = await parseTPBankStatement(buffer);
   } catch (err) {
     console.error('Parse failed:', err instanceof Error ? err.message : err);
     return Response.json(
       { error: 'Could not parse PDF. Make sure it is a TPBank statement.' },
       { status: 422 },
     );
+  }
+
+  try {
+    const key = await saveStatement(statement);
+    return Response.json({ ...statement, _storageKey: key });
+  } catch (err) {
+    console.error('Save failed:', err instanceof Error ? err.message : err);
+    return Response.json({ error: 'Failed to save statement' }, { status: 500 });
   }
 }

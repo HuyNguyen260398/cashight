@@ -1,0 +1,36 @@
+import { getStatement, deleteStatement } from '@/lib/storage';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const key = decodeURIComponent(id);
+  if (!key.startsWith('statements/')) {
+    return Response.json({ error: 'Invalid key' }, { status: 400 });
+  }
+  try {
+    return Response.json(await getStatement(key));
+  } catch (err) {
+    if ((err as { name?: string }).name === 'NoSuchKey') {
+      return Response.json({ error: 'Not found' }, { status: 404 });
+    }
+    console.error('Get statement failed:', err instanceof Error ? err.message : err);
+    return Response.json({ error: 'Failed to fetch statement' }, { status: 500 });
+  }
+}
+
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const key = decodeURIComponent(id);
+  if (!key.startsWith('statements/')) {
+    return Response.json({ error: 'Invalid key' }, { status: 400 });
+  }
+  try {
+    await deleteStatement(key);
+    return new Response(null, { status: 204 });
+  } catch (err) {
+    console.error('Delete failed:', err instanceof Error ? err.message : err);
+    return Response.json({ error: 'Failed to delete statement' }, { status: 500 });
+  }
+}
