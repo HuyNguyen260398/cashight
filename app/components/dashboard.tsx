@@ -1,5 +1,6 @@
 import type { AggregatedView } from '@/lib/aggregations';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { AiSummaryCard } from '@/app/components/ai-summary-card';
 import { KpiCards } from '@/app/components/kpi-cards';
 import { TransactionsTable } from '@/app/components/transactions-table';
 import { CategoryPie } from '@/app/components/category-pie';
@@ -9,7 +10,10 @@ import { TrendChart } from '@/app/components/trend-chart';
 export function Dashboard({ view }: { view: AggregatedView }) {
   return (
     <div className="space-y-6">
-      {/* Row 1: KPI cards */}
+      {/* Row 1: AI summary */}
+      <AiSummaryCard view={view} />
+
+      {/* Row 2: KPI cards */}
       <KpiCards view={view} />
 
       {/* Row 2: Spending trend across sub-periods (the headline multi-period chart) */}

@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { UploadDropzone } from '@/app/components/upload-dropzone';
 import { Dashboard } from '@/app/components/dashboard';
-import { AiSummaryCard } from '@/app/components/ai-summary-card';
 import { aggregate } from '@/lib/aggregations';
 import type { Statement } from '@/lib/schemas';
 
@@ -24,7 +23,6 @@ export default function UploadPage() {
       <UploadDropzone onParsed={setStatement} />
       {statement && view && (
         <div className="mt-6 space-y-6">
-          <AiSummaryCard statement={statement} />
           <Dashboard view={view} />
         </div>
       )}

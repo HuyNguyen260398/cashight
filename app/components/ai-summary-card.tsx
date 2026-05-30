@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useReducer, useRef } from 'react';
-import type { Statement } from '@/lib/schemas';
+import type { AggregatedView } from '@/lib/aggregations';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,8 @@ type Action =
   | { type: 'APPEND'; chunk: string }
   | { type: 'ERROR'; message: string }
   | { type: 'DONE' }
-  | { type: 'RESET' };
+  | { type: 'RESET' }
+  | { type: 'CACHED'; text: string };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -31,6 +32,8 @@ function reducer(state: State, action: Action): State {
     case 'DONE':
       if (state.phase !== 'loading') return state;
       return { phase: 'done', text: state.text };
+    case 'CACHED':
+      return { phase: 'done', text: action.text };
     case 'RESET':
       return { phase: 'idle' };
     default:
@@ -38,25 +41,109 @@ function reducer(state: State, action: Action): State {
   }
 }
 
-export function AiSummaryCard({ statement }: { statement: Statement }) {
+export function AiSummaryCard({ view }: { view: AggregatedView }) {
   const [state, dispatch] = useReducer(reducer, { phase: 'idle' });
 
-  // Key on stable primitives to detect statement identity changes.
-  const { cardLast4, statementDate } = statement;
+  // Stable key for the current period — re-fetch when this changes.
+  const specKey = JSON.stringify(view.spec);
+
+  const isEmpty =
+    view.statementCount === 0 || view.transactions.length === 0;
+
+  // In-component cache of summary text keyed by spec, so navigating back to an
+  // already-summarized period shows the cached text without re-calling Gemini.
+  const cacheRef = useRef<Map<string, string>>(new Map());
 
   // Holds the AbortController for any in-flight request so we can cancel on
-  // statement change or unmount without re-creating the controller unnecessarily.
+  // period change or unmount.
   const acRef = useRef<AbortController | null>(null);
 
-  // Reset to idle whenever the statement identity changes, and abort any
-  // in-flight request from the previous statement.
+  // Latest view kept in a ref so the fetch callback always serializes the
+  // current view without being part of the effect dependency array.
+  const viewRef = useRef(view);
+  viewRef.current = view;
+
+  const runSummary = useCallback(async () => {
+    // Abort any previous in-flight request before starting a new one.
+    acRef.current?.abort();
+    const ac = new AbortController();
+    acRef.current = ac;
+    const key = JSON.stringify(viewRef.current.spec);
+
+    dispatch({ type: 'START' });
+
+    try {
+      const res = await fetch('/api/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(viewRef.current),
+        signal: ac.signal,
+      });
+
+      if (!res.ok) {
+        let message: string;
+        if (res.status === 429) {
+          message = 'The AI is busy right now — try again in a minute.';
+        } else {
+          try {
+            const data = (await res.json()) as { error?: string };
+            message = data.error ?? 'Could not generate summary.';
+          } catch {
+            message = 'Could not generate summary.';
+          }
+        }
+        dispatch({ type: 'ERROR', message });
+        return;
+      }
+
+      if (!res.body) {
+        dispatch({ type: 'ERROR', message: 'Could not generate summary.' });
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let text = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        text += chunk;
+        dispatch({ type: 'APPEND', chunk });
+      }
+
+      cacheRef.current.set(key, text);
+      dispatch({ type: 'DONE' });
+    } catch {
+      if (ac.signal.aborted) return;
+      dispatch({
+        type: 'ERROR',
+        message:
+          'Could not reach the summary service. Check your connection and try again.',
+      });
+    }
+  }, []);
+
+  // Re-fetch (or load from cache) whenever the period spec changes.
   useEffect(() => {
     acRef.current?.abort();
     acRef.current = null;
-    dispatch({ type: 'RESET' });
-    // Intentionally keyed only on primitive identifiers — object reference
-    // churn from parent re-renders must not reset the card.
-  }, [cardLast4, statementDate]);
+
+    if (isEmpty) {
+      dispatch({ type: 'RESET' });
+      return;
+    }
+
+    const cached = cacheRef.current.get(specKey);
+    if (cached !== undefined) {
+      dispatch({ type: 'CACHED', text: cached });
+      return;
+    }
+
+    void runSummary();
+    // specKey fully captures spec identity; runSummary is stable.
+  }, [specKey, isEmpty, runSummary]);
 
   // Clean up on unmount.
   useEffect(() => {
@@ -65,74 +152,16 @@ export function AiSummaryCard({ statement }: { statement: Statement }) {
     };
   }, []);
 
-  const runSummary = useCallback(async () => {
-    // Abort any previous in-flight request before starting a new one.
-    acRef.current?.abort();
-    const ac = new AbortController();
-    acRef.current = ac;
-
-    dispatch({ type: 'START' });
-
-    try {
-      const res = await fetch('/api/summarize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(statement),
-        signal: ac.signal,
-      });
-
-      if (!res.ok) {
-        let message = 'Could not generate summary';
-        try {
-          const data = (await res.json()) as { error?: string };
-          message = data.error ?? message;
-        } catch {
-          // ignore JSON parse error; use default message
-        }
-        dispatch({ type: 'ERROR', message });
-        return;
-      }
-
-      if (!res.body) {
-        dispatch({ type: 'ERROR', message: 'Could not generate summary' });
-        return;
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        dispatch({ type: 'APPEND', chunk: decoder.decode(value, { stream: true }) });
-      }
-
-      dispatch({ type: 'DONE' });
-    } catch {
-      if (!ac.signal.aborted) {
-        dispatch({ type: 'ERROR', message: 'Could not generate summary' });
-      }
-    }
-  // statement is captured at call time; the reset effect above ensures any
-  // stale closure from a previous statement is never executed.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardLast4, statementDate]);
-
   return (
     <Card>
       <CardHeader>
         <CardTitle>AI summary</CardTitle>
       </CardHeader>
       <CardContent>
-        {state.phase === 'idle' ? (
-          <div className="flex flex-col items-start gap-3">
-            <p className="text-muted-foreground text-sm">
-              Generate an AI overview of this month&apos;s spending.
-            </p>
-            <Button onClick={() => void runSummary()}>
-              Summarize expenses with AI
-            </Button>
-          </div>
+        {isEmpty ? (
+          <p className="text-muted-foreground text-sm">
+            No spending data to summarize for this period.
+          </p>
         ) : state.phase === 'loading' ? (
           state.text ? (
             <div className="prose prose-sm max-w-none whitespace-pre-wrap">
@@ -153,7 +182,7 @@ export function AiSummaryCard({ statement }: { statement: Statement }) {
               Try again
             </Button>
           </div>
-        ) : (
+        ) : state.phase === 'done' ? (
           <div className="space-y-4">
             <div className="prose prose-sm max-w-none whitespace-pre-wrap">
               {state.text}
@@ -166,6 +195,13 @@ export function AiSummaryCard({ statement }: { statement: Statement }) {
             >
               Regenerate
             </Button>
+          </div>
+        ) : (
+          // idle: brief gap before the fetch effect kicks in.
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-[90%]" />
+            <Skeleton className="h-4 w-[80%]" />
           </div>
         )}
       </CardContent>
