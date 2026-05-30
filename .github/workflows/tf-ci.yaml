@@ -3,6 +3,9 @@ name: Terraform CI
 on:
   pull_request:
     branches: [main]
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/tf-ci.yaml'
 
 # Cancel in-progress runs for the same PR when new commits are pushed
 concurrency:
