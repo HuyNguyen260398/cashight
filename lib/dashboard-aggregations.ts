@@ -15,7 +15,7 @@ import type { Statement } from '@/lib/schemas';
  * Installments and Fees & Interest have their own slices in `byCategory` but
  * are excluded from the "pure spend" total.
  */
-const NON_SPEND = new Set([
+export const NON_SPEND = new Set([
   'Installments',
   'Cashback',
   'Fees & Interest',

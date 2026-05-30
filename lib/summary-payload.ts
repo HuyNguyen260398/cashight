@@ -11,7 +11,11 @@
  */
 
 import type { Statement } from '@/lib/schemas';
-import { byCategory, topMerchants } from '@/lib/dashboard-aggregations';
+import {
+  byCategory,
+  topMerchants,
+  NON_SPEND,
+} from '@/lib/dashboard-aggregations';
 
 export interface SummaryPayload {
   period: { year: number; month: number };
@@ -25,14 +29,6 @@ export interface SummaryPayload {
   topMerchants: Array<{ merchant: string; amount: number }>;
   internationalSpendPct: number; // % of spend that is international, 0–100, rounded to 1 decimal
 }
-
-/** Categories that are NOT considered spend for internationalSpendPct calculation. */
-const NON_SPEND = new Set([
-  'Installments',
-  'Cashback',
-  'Fees & Interest',
-  'Payment',
-]);
 
 function round1(x: number): number {
   return Math.round(x * 10) / 10;
