@@ -8,8 +8,23 @@ import {
 import { StatementSchema } from '@/lib/schemas';
 import type { Statement } from '@/lib/schemas';
 
-const s3 = new S3Client({ region: process.env.AWS_REGION });
-const BUCKET = process.env.STATEMENTS_BUCKET!;
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(
+      `${name} is not set. Add it to .env.local, then fully restart the server — ` +
+        `env vars and ~/.aws/config are read only at startup, not on hot-reload.`,
+    );
+  }
+  return value;
+}
+
+// Fail fast with a clear message instead of a cryptic AWS error if these are
+// missing. A missing AWS_REGION silently falls back to the SDK's resolved
+// region (which may be wrong) and yields a confusing PermanentRedirect.
+const REGION = requireEnv('AWS_REGION');
+const BUCKET = requireEnv('STATEMENTS_BUCKET');
+const s3 = new S3Client({ region: REGION });
 
 export function statementKey(cardLast4: string, year: number, month: number): string {
   const mm = String(month).padStart(2, '0');
