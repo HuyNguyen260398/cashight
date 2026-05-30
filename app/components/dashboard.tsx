@@ -10,10 +10,14 @@ import { TransactionsTable } from '@/app/components/transactions-table';
 import { CategoryPie } from '@/app/components/category-pie';
 import { MerchantBar } from '@/app/components/merchant-bar';
 import { DailySpendLine } from '@/app/components/daily-spend-line';
+import { AiSummaryCard } from '@/app/components/ai-summary-card';
 
 export function Dashboard({ statement }: { statement: Statement }) {
   return (
     <div className="space-y-6">
+      {/* AI spending summary */}
+      <AiSummaryCard statement={statement} />
+
       {/* Row 1: KPI cards */}
       <KpiCards statement={statement} />
 
