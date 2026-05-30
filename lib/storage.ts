@@ -19,12 +19,20 @@ function requireEnv(name: string): string {
   return value;
 }
 
-// Fail fast with a clear message instead of a cryptic AWS error if these are
-// missing. A missing AWS_REGION silently falls back to the SDK's resolved
-// region (which may be wrong) and yields a confusing PermanentRedirect.
-const REGION = requireEnv('AWS_REGION');
-const BUCKET = requireEnv('STATEMENTS_BUCKET');
-const s3 = new S3Client({ region: REGION });
+// Resolve the client and bucket lazily on first use. Validating at module load
+// would break `next build` (it imports route modules with no env present);
+// validating on first S3 call still fails fast with a clear message at runtime
+// instead of a cryptic AWS error. A missing AWS_REGION otherwise silently falls
+// back to the SDK's resolved region and yields a confusing PermanentRedirect.
+let cached: { s3: S3Client; bucket: string } | undefined;
+function getS3(): { s3: S3Client; bucket: string } {
+  if (!cached) {
+    const region = requireEnv('AWS_REGION');
+    const bucket = requireEnv('STATEMENTS_BUCKET');
+    cached = { s3: new S3Client({ region }), bucket };
+  }
+  return cached;
+}
 
 export function statementKey(cardLast4: string, year: number, month: number): string {
   const mm = String(month).padStart(2, '0');
@@ -32,12 +40,13 @@ export function statementKey(cardLast4: string, year: number, month: number): st
 }
 
 export async function saveStatement(s: Statement): Promise<string> {
+  const { s3, bucket } = getS3();
   // statementDate is YYYY-MM-DD; the storage key uses year+month only
   const [year, month] = s.statementDate.split('-').map(Number);
   const key = statementKey(s.cardLast4, year, month);
   await s3.send(
     new PutObjectCommand({
-      Bucket: BUCKET,
+      Bucket: bucket,
       Key: key,
       Body: JSON.stringify(s),
       ContentType: 'application/json',
@@ -47,8 +56,9 @@ export async function saveStatement(s: Statement): Promise<string> {
 }
 
 export async function getStatement(key: string): Promise<Statement> {
+  const { s3, bucket } = getS3();
   const response = await s3.send(
-    new GetObjectCommand({ Bucket: BUCKET, Key: key }),
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
   );
   const text = await response.Body!.transformToString();
   return StatementSchema.parse(JSON.parse(text));
@@ -57,8 +67,9 @@ export async function getStatement(key: string): Promise<Statement> {
 export async function listStatements(prefix = 'statements/'): Promise<
   { key: string; cardLast4: string; year: number; month: number; lastModified: Date | undefined }[]
 > {
+  const { s3, bucket } = getS3();
   const response = await s3.send(
-    new ListObjectsV2Command({ Bucket: BUCKET, Prefix: prefix }),
+    new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix }),
   );
   // NOTE: ListObjectsV2 returns up to 1000 keys; pagination (IsTruncated/NextContinuationToken) is intentionally unhandled — fine for personal scale (~12-36/yr).
   const keyRegex = /^statements\/(\d{4})\/(\d{4})\/(\d{4})-(\d{2})\.json$/;
@@ -77,7 +88,8 @@ export async function listStatements(prefix = 'statements/'): Promise<
 }
 
 export async function deleteStatement(key: string): Promise<void> {
-  await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
+  const { s3, bucket } = getS3();
+  await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }
 
 export async function getAllStatements(): Promise<Statement[]> {
