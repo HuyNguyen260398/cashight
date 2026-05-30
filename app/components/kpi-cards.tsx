@@ -1,5 +1,4 @@
-import type { Statement } from '@/lib/schemas';
-import { totalSpend } from '@/lib/dashboard-aggregations';
+import type { AggregatedView } from '@/lib/aggregations';
 import { formatVND } from '@/lib/format';
 import {
   Card,
@@ -8,45 +7,29 @@ import {
   CardContent,
 } from '@/components/ui/card';
 
-export function KpiCards({ statement }: { statement: Statement }) {
-  const spend = totalSpend(statement);
-  const { totals } = statement;
+export function KpiCards({ view }: { view: AggregatedView }) {
+  const { totals, statementCount } = view;
 
   return (
     <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-      {/* 1. Statement balance — the total owed on this statement (headline). */}
+      {/* 1. Total spend across the period — new card purchases. */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground">
-            Statement Balance
+            Total Spend
           </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-2xl font-semibold">
-            {formatVND(totals.statementBalance)}
+            {formatVND(totals.totalSpend)}
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Total owed (Dư nợ sao kê)
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* 2. Spend this month — the statement's "Your Spend for this Month". */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            Spent this month
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-2xl font-semibold">{formatVND(spend)}</p>
           <p className="mt-1 text-xs text-muted-foreground">
             New card purchases
           </p>
         </CardContent>
       </Card>
 
-      {/* 3. Installments billed this period (tracked separately from spend). */}
+      {/* 2. Installments billed this period (tracked separately from spend). */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -61,7 +44,7 @@ export function KpiCards({ statement }: { statement: Statement }) {
         </CardContent>
       </Card>
 
-      {/* 4. Fees & interest. */}
+      {/* 3. Fees & interest. */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -75,11 +58,11 @@ export function KpiCards({ statement }: { statement: Statement }) {
         </CardContent>
       </Card>
 
-      {/* 5. Cashback received (positive magnitude). */}
+      {/* 4. Cashback received (positive magnitude). */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground">
-            Cashback Received
+            Cashback
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -89,17 +72,16 @@ export function KpiCards({ statement }: { statement: Statement }) {
         </CardContent>
       </Card>
 
-      {/* 6. Minimum payment due. */}
+      {/* 5. How many statements rolled up into this view (a count, not money). */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground">
-            Minimum Payment Due
+            Statements
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-2xl font-semibold">
-            {formatVND(totals.minimumPayment)}
-          </p>
+          <p className="text-2xl font-semibold">{statementCount}</p>
+          <p className="mt-1 text-xs text-muted-foreground">in this period</p>
         </CardContent>
       </Card>
     </div>
