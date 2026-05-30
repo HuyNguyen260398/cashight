@@ -10,6 +10,11 @@ export function AiSummaryCard({ statement }: { statement: Statement }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Key the effect on stable primitive identifiers so that a new object
+  // reference with identical data (e.g. after a server-component re-render)
+  // does not cancel and restart the in-progress stream.
+  const { cardLast4, statementDate } = statement;
+
   useEffect(() => {
     const ac = new AbortController();
 
@@ -34,7 +39,12 @@ export function AiSummaryCard({ statement }: { statement: Statement }) {
           return;
         }
 
-        const reader = res.body!.getReader();
+        if (!res.body) {
+          setError('Could not generate summary');
+          return;
+        }
+
+        const reader = res.body.getReader();
         const decoder = new TextDecoder();
 
         while (true) {
@@ -56,7 +66,11 @@ export function AiSummaryCard({ statement }: { statement: Statement }) {
     return () => {
       ac.abort();
     };
-  }, [statement]);
+    // statement object is captured at effect-creation time; re-keying on
+    // cardLast4 + statementDate (primitives) prevents spurious re-fetches
+    // when the parent re-renders with a new reference to identical data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardLast4, statementDate]);
 
   return (
     <Card>
@@ -73,10 +87,12 @@ export function AiSummaryCard({ statement }: { statement: Statement }) {
           </div>
         ) : error ? (
           <p className="text-destructive text-sm">{error}</p>
-        ) : (
+        ) : summary ? (
           <div className="prose prose-sm max-w-none whitespace-pre-wrap">
             {summary}
           </div>
+        ) : (
+          <p className="text-muted-foreground text-sm">No summary available.</p>
         )}
       </CardContent>
     </Card>

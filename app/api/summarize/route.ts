@@ -38,11 +38,12 @@ export async function POST(request: Request) {
 
   const prompt = `${SYSTEM_PROMPT}\n\nData:\n${JSON.stringify(payload, null, 2)}`;
 
+  const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
       try {
         for await (const chunk of streamSummary(prompt)) {
-          controller.enqueue(new TextEncoder().encode(chunk));
+          controller.enqueue(encoder.encode(chunk));
         }
         controller.close();
       } catch (err) {
