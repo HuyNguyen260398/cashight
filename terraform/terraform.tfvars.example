@@ -1,0 +1,1 @@
+bucket_suffix = "cashight-2026"  # any short unique string; overrides the default in main.tf
