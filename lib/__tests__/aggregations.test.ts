@@ -58,11 +58,17 @@ function makeStatement(
 
 let realStatement: Statement;
 
+// test-pdfs/ is gitignored (it holds real statements — never committed), so the
+// fixture is absent in CI. Run the real-PDF acceptance suites only when it exists
+// (locally); the hand-built fixtures below cover the aggregation logic everywhere.
+const pdfPath = path.resolve(
+  __dirname,
+  '../../test-pdfs/VC_sao_ke_the_tin_dung_05_2026_9674.pdf',
+);
+const hasFixture = fs.existsSync(pdfPath);
+
 beforeAll(async () => {
-  const pdfPath = path.resolve(
-    __dirname,
-    '../../test-pdfs/VC_sao_ke_the_tin_dung_05_2026_9674.pdf',
-  );
+  if (!hasFixture) return;
   const buffer = fs.readFileSync(pdfPath);
   realStatement = await parseTPBankStatement(buffer);
 });
@@ -154,7 +160,7 @@ describe('nextPeriod', () => {
 // aggregate — real PDF: monthly view
 // ---------------------------------------------------------------------------
 
-describe('aggregate with real May 2026 statement — monthly', () => {
+describe.skipIf(!hasFixture)('aggregate with real May 2026 statement — monthly', () => {
   let view: ReturnType<typeof aggregate>;
 
   beforeAll(() => {
@@ -212,7 +218,7 @@ describe('aggregate with real May 2026 statement — monthly', () => {
 // aggregate — real PDF: yearly view
 // ---------------------------------------------------------------------------
 
-describe('aggregate with real May 2026 statement — yearly', () => {
+describe.skipIf(!hasFixture)('aggregate with real May 2026 statement — yearly', () => {
   let view: ReturnType<typeof aggregate>;
 
   beforeAll(() => {
