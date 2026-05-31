@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Link from "next/link";
 import { Toaster } from "@/components/ui/sonner";
+import { Nav } from "./components/nav";
 import { ThemeProvider } from "./components/theme-provider";
-import { ThemeToggle } from "./components/theme-toggle";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -34,20 +33,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <header className="border-b">
-            <nav className="container mx-auto flex flex-wrap items-center gap-4 px-4 py-3 text-sm md:px-6">
-              <Link href="/" className="font-medium hover:underline">
-                Dashboard
-              </Link>
-              <Link href="/upload" className="hover:underline">
-                Upload
-              </Link>
-              <Link href="/statements" className="hover:underline">
-                Statements
-              </Link>
-              <ThemeToggle className="ml-auto" />
-            </nav>
-          </header>
+          <Nav />
           {children}
           <Toaster />
         </ThemeProvider>
