@@ -3,7 +3,13 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
 import { parseTPBankStatement } from '@/lib/parsers/tpbank';
-import { saveStatement, statementExists, statementKey } from '@/lib/storage';
+import {
+  saveStatement,
+  statementExists,
+  statementKey,
+  isAuthError,
+  STORAGE_AUTH_HINT,
+} from '@/lib/storage';
 
 export async function POST(request: Request) {
   let formData: FormData;
@@ -65,6 +71,15 @@ export async function POST(request: Request) {
   } catch (err) {
     const e = err as { name?: string; message?: string };
     console.error('Save failed:', e.name, '-', e.message);
+    // A credentials/auth failure is environmental, not a bug — return an
+    // actionable message and 503 (storage dependency unavailable) instead of a
+    // generic 500 "Failed to save statement" that hides the real cause.
+    if (isAuthError(err)) {
+      return Response.json(
+        { error: STORAGE_AUTH_HINT, detail: e.name ?? 'AuthError' },
+        { status: 503 },
+      );
+    }
     // Surface the error name (not the raw message) to the client to ease debugging.
     return Response.json(
       { error: 'Failed to save statement', detail: e.name ?? 'UnknownError' },

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { getAllStatements } from '@/lib/storage';
+import { getAllStatements, isAuthError, STORAGE_AUTH_HINT } from '@/lib/storage';
 import { aggregate } from '@/lib/aggregations';
 import { parsePeriodFromSearch } from '@/lib/period';
 import { Dashboard } from '@/app/components/dashboard';
@@ -28,7 +28,11 @@ export default async function HomePage({
   try {
     statements = await getAllStatements();
   } catch (err) {
-    error = err instanceof Error ? err.message : 'Failed to load statements';
+    error = isAuthError(err)
+      ? STORAGE_AUTH_HINT
+      : err instanceof Error
+        ? err.message
+        : 'Failed to load statements';
   }
 
   // Default to the most recent month with data when no period is requested.

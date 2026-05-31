@@ -9,6 +9,37 @@ import {
 import { StatementSchema } from '@/lib/schemas';
 import type { Statement } from '@/lib/schemas';
 
+/**
+ * Actionable hint shown when an S3 call fails because credentials are missing,
+ * expired, or lack permission — the most common local-dev failure (e.g. an
+ * expired SSO session). Routes surface this instead of a cryptic 500.
+ */
+export const STORAGE_AUTH_HINT =
+  'Could not reach storage — your AWS credentials are missing, expired, or lack permission. ' +
+  'Re-authenticate (e.g. run `aws login`, then `eval "$(aws configure export-credentials --format env)"`) ' +
+  'and restart the dev server.';
+
+/** AWS error `name`s that indicate a credentials/auth problem, not a code bug. */
+const AUTH_ERROR_NAMES = new Set([
+  'CredentialsProviderError',
+  'ExpiredToken',
+  'ExpiredTokenException',
+  'InvalidToken',
+  'TokenRefreshRequired',
+  'UnrecognizedClientException',
+  'AccessDenied',
+  'AccessDeniedException',
+]);
+
+/** True when `err` looks like an AWS credentials/authentication/authorization failure. */
+export function isAuthError(err: unknown): boolean {
+  const name =
+    typeof err === 'object' && err !== null
+      ? (err as { name?: unknown }).name
+      : undefined;
+  return typeof name === 'string' && AUTH_ERROR_NAMES.has(name);
+}
+
 function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
