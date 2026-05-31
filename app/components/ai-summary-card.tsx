@@ -58,17 +58,15 @@ export function AiSummaryCard({ view }: { view: AggregatedView }) {
   // period change or unmount.
   const acRef = useRef<AbortController | null>(null);
 
-  // Latest view kept in a ref so the fetch callback always serializes the
-  // current view without being part of the effect dependency array.
-  const viewRef = useRef(view);
-  viewRef.current = view;
-
+  // Depends on `view` so it always serializes the current period. This callback
+  // is only invoked from click handlers (never inside an effect dependency
+  // array), so recreating it per view change is harmless.
   const runSummary = useCallback(async () => {
     // Abort any previous in-flight request before starting a new one.
     acRef.current?.abort();
     const ac = new AbortController();
     acRef.current = ac;
-    const key = JSON.stringify(viewRef.current.spec);
+    const key = JSON.stringify(view.spec);
 
     dispatch({ type: 'START' });
 
@@ -76,7 +74,7 @@ export function AiSummaryCard({ view }: { view: AggregatedView }) {
       const res = await fetch('/api/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(viewRef.current),
+        body: JSON.stringify(view),
         signal: ac.signal,
       });
 
@@ -133,7 +131,7 @@ export function AiSummaryCard({ view }: { view: AggregatedView }) {
           'Could not reach the summary service. Check your connection and try again.',
       });
     }
-  }, []);
+  }, [view]);
 
   // When the period changes: abort any in-flight request, then either show the
   // cached summary (if this period was already summarized) or reset to idle so
