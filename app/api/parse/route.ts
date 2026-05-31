@@ -3,7 +3,13 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
 import { parseTPBankStatement } from '@/lib/parsers/tpbank';
-import { saveStatement } from '@/lib/storage';
+import {
+  saveStatement,
+  statementExists,
+  statementKey,
+  isAuthError,
+  STORAGE_AUTH_HINT,
+} from '@/lib/storage';
 
 export async function POST(request: Request) {
   let formData: FormData;
@@ -40,12 +46,40 @@ export async function POST(request: Request) {
     );
   }
 
+  const force = new URL(request.url).searchParams.get('force') === 'true';
+  const [year, month] = statement.statementDate.split('-').map(Number);
+  const key = statementKey(statement.cardLast4, year, month);
+
+  if (!force) {
+    try {
+      if (await statementExists(key)) {
+        return Response.json(
+          { error: 'conflict', cardLast4: statement.cardLast4, year, month, key },
+          { status: 409 },
+        );
+      }
+    } catch (err) {
+      // A flaky existence check should not block the upload; the save below has
+      // its own error handling for real storage failures.
+      console.error('statementExists check failed:', err instanceof Error ? err.message : err);
+    }
+  }
+
   try {
-    const key = await saveStatement(statement);
+    await saveStatement(statement);
     return Response.json({ ...statement, _storageKey: key });
   } catch (err) {
     const e = err as { name?: string; message?: string };
     console.error('Save failed:', e.name, '-', e.message);
+    // A credentials/auth failure is environmental, not a bug — return an
+    // actionable message and 503 (storage dependency unavailable) instead of a
+    // generic 500 "Failed to save statement" that hides the real cause.
+    if (isAuthError(err)) {
+      return Response.json(
+        { error: STORAGE_AUTH_HINT, detail: e.name ?? 'AuthError' },
+        { status: 503 },
+      );
+    }
     // Surface the error name (not the raw message) to the client to ease debugging.
     return Response.json(
       { error: 'Failed to save statement', detail: e.name ?? 'UnknownError' },

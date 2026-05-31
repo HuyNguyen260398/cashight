@@ -9,7 +9,7 @@ import {
   Tooltip,
 } from 'recharts';
 import type { AggregatedView } from '@/lib/aggregations';
-import { formatVND } from '@/lib/format';
+import { formatVND, formatVNDCompact } from '@/lib/format';
 
 export function TrendChart({ view }: { view: AggregatedView }) {
   return (
@@ -29,7 +29,7 @@ export function TrendChart({ view }: { view: AggregatedView }) {
           />
           <YAxis
             tick={{ fontSize: 12 }}
-            tickFormatter={(v) => `${(Number(v) / 1_000_000).toFixed(1)}M`}
+            tickFormatter={(v) => formatVNDCompact(Number(v))}
           />
           <Tooltip formatter={(v) => formatVND(Number(v))} />
           <Bar dataKey="value" fill="var(--primary)" radius={[4, 4, 0, 0]} />

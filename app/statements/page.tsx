@@ -1,49 +1,65 @@
-import { listStatements } from '@/lib/storage';
+import Link from 'next/link';
+
+import { Button } from '@/components/ui/button';
+import { listStatements, getStatement } from '@/lib/storage';
+import {
+  StatementsTable,
+  type StatementRow,
+} from '@/app/components/statements-table';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-type StatementItem = {
-  key: string;
-  cardLast4: string;
-  year: number;
-  month: number;
-  lastModified: Date | undefined;
-};
-
 export default async function StatementsPage() {
-  let items: StatementItem[] = [];
+  let rows: StatementRow[] = [];
   let error: string | null = null;
 
   try {
-    items = await listStatements();
+    const items = await listStatements();
+    const statements = await Promise.all(
+      items.map((item) => getStatement(item.key)),
+    );
+    rows = items
+      .map((item, i) => ({
+        key: item.key,
+        cardLast4: item.cardLast4,
+        year: item.year,
+        month: item.month,
+        totalSpend: statements[i].totals.totalSpend,
+        uploadedAt: item.lastModified?.toISOString() ?? null,
+      }))
+      .sort((a, b) => b.year - a.year || b.month - a.month);
   } catch (err) {
     error = err instanceof Error ? err.message : 'Failed to load statements';
   }
 
   return (
-    <main style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
-      <h1>Saved Statements</h1>
-      {error && <p style={{ color: 'red' }}>Error: {error}</p>}
-      {items.length === 0 && !error && <p>No statements saved yet.</p>}
-      <ul style={{ listStyle: 'none', padding: 0 }}>
-        {items.map((item) => {
-          const mm = String(item.month).padStart(2, '0');
-          return (
-            <li
-              key={item.key}
-              style={{
-                border: '1px solid #ccc',
-                borderRadius: '6px',
-                padding: '0.75rem 1rem',
-                marginBottom: '0.5rem',
-              }}
-            >
-              Card ****{item.cardLast4} — {item.year}-{mm}
-            </li>
-          );
-        })}
-      </ul>
+    <main className="container mx-auto p-4 md:p-6 max-w-5xl">
+      <div className="flex items-center justify-between gap-4 mb-6">
+        <h1 className="text-2xl font-semibold">Statements</h1>
+        <Button asChild>
+          <Link href="/upload">Upload another</Link>
+        </Button>
+      </div>
+
+      {error ? (
+        <div className="rounded-md border border-destructive/50 bg-destructive/5 p-4 text-sm text-destructive">
+          <p className="font-medium">Could not load statements.</p>
+          <p className="text-muted-foreground">{error}</p>
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="text-center py-16">
+          <h2 className="text-xl mb-2">No statements yet</h2>
+          <p className="text-muted-foreground mb-6">
+            Upload a statement to get started.
+          </p>
+          <Button asChild>
+            <Link href="/upload">Upload statement</Link>
+          </Button>
+        </div>
+      ) : (
+        <StatementsTable rows={rows} />
+      )}
     </main>
   );
 }

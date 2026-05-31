@@ -8,7 +8,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { formatVND } from '@/lib/format';
+import { formatVND, formatVNDCompact } from '@/lib/format';
 
 export function MerchantBar({
   data,
@@ -20,7 +20,7 @@ export function MerchantBar({
       <BarChart data={data} layout="vertical" margin={{ left: 16, right: 16 }}>
         <XAxis
           type="number"
-          tickFormatter={(v) => `${Math.round(v / 1_000_000)}M`}
+          tickFormatter={(v) => formatVNDCompact(Number(v))}
         />
         <YAxis
           type="category"

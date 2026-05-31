@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { parsePeriodFromSearch, quarterOf } from '@/lib/period';
+import { parsePeriodFromSearch } from '@/lib/period';
 
 /** Build a URLSearchParams from a plain object for convenience. */
 function params(obj: Record<string, string>): URLSearchParams {

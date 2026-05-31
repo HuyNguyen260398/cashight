@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { AggregatedView } from '@/lib/aggregations';
 
 const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
 
@@ -36,3 +37,48 @@ export const StatementSchema = z.object({
   transactions: z.array(TransactionSchema),
 });
 export type Statement = z.infer<typeof StatementSchema>;
+
+/**
+ * Boundary schema for an AggregatedView (lib/aggregations.ts).
+ *
+ * Used to validate the POST body of /api/summarize ("Zod at the boundary").
+ * Kept field-for-field with the AggregatedView interface so a parsed value is
+ * assignable to that type — the route casts the validated data accordingly.
+ */
+const PeriodSpecSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('month'), year: z.number(), month: z.number() }),
+  z.object({ type: z.literal('quarter'), year: z.number(), quarter: z.number() }),
+  z.object({ type: z.literal('year'), year: z.number() }),
+]);
+
+export const AggregatedViewSchema = z.object({
+  spec: PeriodSpecSchema,
+  label: z.string(),
+  statementCount: z.number(),
+  totals: z.object({
+    totalSpend: z.number(),
+    totalInstallments: z.number(),
+    totalCashback: z.number(),
+    totalFeesAndInterest: z.number(),
+  }),
+  transactions: z.array(TransactionSchema),
+  byCategory: z.array(
+    z.object({
+      category: z.string(),
+      value: z.number(),
+      pct: z.number(),
+    }),
+  ),
+  topMerchants: z.array(
+    z.object({
+      merchant: z.string(),
+      value: z.number(),
+    }),
+  ),
+  subPeriods: z.array(
+    z.object({
+      label: z.string(),
+      value: z.number(),
+    }),
+  ),
+}) satisfies z.ZodType<AggregatedView>;
