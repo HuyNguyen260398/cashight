@@ -2,7 +2,7 @@
 
 Step-by-step breakdown of the [Expense Tracker implementation plan](./expense-tracker-implementation-plan.md). Each step is a self-contained unit of work with clear acceptance criteria.
 
-**Total estimated effort:** 18–28 hours across 11 steps.
+**Total estimated effort:** 18–28 hours across 11 steps, plus a Phase 4 feature pass (Steps 12–17) before deployment.
 
 ---
 
@@ -29,10 +29,28 @@ Tick off as you complete each step.
 
 > **Milestone:** Upload 3+ statements, switch between month/quarter/year views.
 
-### Phase 3 — Polish & deployment
+### Phase 3 — Polish
 
 - [ ] **[Step 10](./10-polish.md)** — Error states, empty states, responsive design *(2h)*
-- [ ] **[Step 11](./11-amplify-deployment.md)** — Deploy to AWS Amplify *(1–2h)*
+
+> **Milestone:** App feels finished for all in-app states.
+
+### Phase 4 — Feature pass (before deployment)
+
+Self-contained enhancements requested before going live. Mostly independent — Steps 12–16 can be done in any order; do **Step 17 (auth) last** since it gates the now-complete app. All must land before Step 11.
+
+- [ ] **[Step 12](./12-rebrand-cashight.md)** — Rebrand "Expense tracker" → "Cashight" *(15m)*
+- [ ] **[Step 13](./13-dark-mode-toggle.md)** — Dark / light mode toggle *(30–45m)*
+- [ ] **[Step 14](./14-transactions-category-filter.md)** — Transactions table: filter by category *(30–45m)*
+- [ ] **[Step 15](./15-software-subscriptions-card.md)** — "Software & Subscriptions" KPI card *(15–20m)*
+- [ ] **[Step 16](./16-password-protected-pdf.md)** — Handle password-protected PDF statements *(45–60m)*
+- [ ] **[Step 17](./17-google-auth.md)** — Google authentication, single allowed user *(2–3h)*
+
+> **Milestone:** Cashight is branded, themeable, filterable, and access-controlled.
+
+### Phase 5 — Deployment
+
+- [ ] **[Step 11](./11-amplify-deployment.md)** — Deploy to AWS Amplify *(1–2h)* — env-var checklist must include `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `ALLOWED_EMAIL`, `PDF_PASSWORD`
 
 > **Milestone:** Production deployment accessible via Amplify URL.
 
@@ -44,12 +62,15 @@ Tick off as you complete each step.
 01 ──┬─▶ 02 ──▶ 03 ──┬─▶ 04 ──┐
      │                │        │
      │                │        ▼
-     │                │        05 ──▶ 06 ──▶ 07 ──▶ 08 ──▶ 09 ──▶ 10 ──▶ 11
+     │                │        05 ──▶ 06 ──▶ 07 ──▶ 08 ──▶ 09 ──▶ 10
      │                │
      └────────────────┘
+
+10 ──▶ 12 ─ 13 ─ 14 ─ 15 ─ 16 ─ 17 ──▶ 11
+         (12–16 any order; 17 last)
 ```
 
-Most steps are linear, but Step 04 (dashboard) and Step 05 (AI) could be parallelized once Step 03 is done if you want to context-switch.
+Most steps are linear, but Step 04 (dashboard) and Step 05 (AI) could be parallelized once Step 03 is done if you want to context-switch. In Phase 4, Steps 12–16 are independent and can be tackled in any order (or parallel worktrees); Step 17 (auth) comes last because it gates the finished app, and Step 11 (deploy) comes after everything.
 
 ## How to use this plan
 
