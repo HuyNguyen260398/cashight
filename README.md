@@ -1,6 +1,6 @@
 # Cashight
 
-A personal expense tracker that turns **TPBank credit card PDF statements** into a categorized dashboard with an AI-generated spending summary.
+**Cashight** is a personal expense tracker that turns **TPBank credit card PDF statements** into a categorized dashboard with an AI-generated spending summary.
 
 Upload a statement, get back KPI cards, category breakdowns, top merchants, and a natural-language overview of where the money went — across one month or rolled up by quarter or year.
 

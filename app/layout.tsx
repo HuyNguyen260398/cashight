@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Expense tracker",
-  description: "Parse, categorize, and track spending from credit card statements.",
+  title: "Cashight",
+  description: "Cashight — parse, categorize, and track spending from your credit card statements.",
 };
 
 export default function RootLayout({
