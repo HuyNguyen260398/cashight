@@ -67,6 +67,11 @@ Commit and push.
    - `GEMINI_API_KEY` = `<from Google AI Studio>`
    - `STATEMENTS_BUCKET` = `<from terraform output>`
    - `AWS_REGION` = `ap-southeast-1`
+   - `PDF_PASSWORD` = `<password for protected TPBank statement PDFs>`
+   - `AUTH_SECRET` = `<openssl rand -base64 32 / npx auth secret>`
+   - `AUTH_GOOGLE_ID` = `<Google OAuth client ID>`
+   - `AUTH_GOOGLE_SECRET` = `<Google OAuth client secret>`
+   - `ALLOWED_EMAIL` = `<the single allowed Google account email>`
 7. **Service role:** create a new one (or pick existing). Note the role name.
 8. Save and deploy.
 
