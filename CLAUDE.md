@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository state
 
-This repo currently contains **only the implementation plan** for a personal expense tracker — no code has been scaffolded yet. The numbered markdown files (`00-INDEX.md` through `11-amplify-deployment.md`) are the build instructions; `00-INDEX.md` is the entry point and shows the step dependency graph.
+This repo contains **Cashight**, a personal expense tracker. The numbered markdown files (`00-INDEX.md` through `11-amplify-deployment.md`) are the build instructions; `00-INDEX.md` is the entry point and shows the step dependency graph.
 
 Step 01 (`01-project-setup.md`) creates the Next.js app at the repo root via `pnpm create next-app`. Once that runs, application code lives at the repo root alongside these plan files (not in a subdirectory — Step 01 uses `--no-src-dir` and scaffolds `app/`, `lib/`, etc. directly).
 

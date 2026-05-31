@@ -51,7 +51,7 @@ export default async function HomePage({
   return (
     <main className="container mx-auto p-4 md:p-6 max-w-7xl">
       <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-medium">Expense tracker</h1>
+        <h1 className="text-2xl font-medium">Cashight</h1>
         <PeriodSelector current={spec} />
       </header>
       {error ? (
