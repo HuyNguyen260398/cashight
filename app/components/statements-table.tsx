@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
   Table,
   TableHeader,
@@ -40,6 +40,7 @@ export type StatementRow = {
 export function StatementsTable({ rows }: { rows: StatementRow[] }) {
   const router = useRouter();
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
+  const [openKey, setOpenKey] = useState<string | null>(null);
 
   async function handleDelete(row: StatementRow) {
     setDeletingKey(row.key);
@@ -49,6 +50,8 @@ export function StatementsTable({ rows }: { rows: StatementRow[] }) {
         { method: 'DELETE' },
       );
       if (res.ok) {
+        // Close the dialog immediately; router.refresh() then drops the row.
+        setOpenKey(null);
         toast.success('Statement deleted');
         router.refresh();
       } else {
@@ -104,7 +107,10 @@ export function StatementsTable({ rows }: { rows: StatementRow[] }) {
                   {row.uploadedAt ? formatDate(row.uploadedAt) : '—'}
                 </TableCell>
                 <TableCell className="text-right">
-                  <AlertDialog>
+                  <AlertDialog
+                    open={openKey === row.key}
+                    onOpenChange={(o) => setOpenKey(o ? row.key : null)}
+                  >
                     <AlertDialogTrigger asChild>
                       <Button
                         variant="destructive"
@@ -130,14 +136,14 @@ export function StatementsTable({ rows }: { rows: StatementRow[] }) {
                           Cancel
                         </AlertDialogCancel>
                         <AlertDialogAction
-                          className="bg-destructive text-white hover:bg-destructive/90"
+                          className={buttonVariants({ variant: 'destructive' })}
                           disabled={isDeleting}
                           onClick={(e) => {
                             e.preventDefault();
                             handleDelete(row);
                           }}
                         >
-                          Delete
+                          {isDeleting ? 'Deleting…' : 'Delete'}
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
