@@ -8,7 +8,9 @@ import {
 } from '@/components/ui/card';
 
 export function KpiCards({ view }: { view: AggregatedView }) {
-  const { totals, statementCount } = view;
+  const { totals, statementCount, byCategory } = view;
+  const software =
+    byCategory.find((c) => c.category === 'Software & Subscriptions')?.value ?? 0;
 
   return (
     <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
@@ -44,7 +46,20 @@ export function KpiCards({ view }: { view: AggregatedView }) {
         </CardContent>
       </Card>
 
-      {/* 3. Fees & interest. */}
+      {/* 3. Software & Subscriptions spend for the period. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            Software &amp; Subscriptions
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-2xl font-semibold">{formatVND(software)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Subscriptions this period</p>
+        </CardContent>
+      </Card>
+
+      {/* 4. Fees & interest. */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -58,7 +73,7 @@ export function KpiCards({ view }: { view: AggregatedView }) {
         </CardContent>
       </Card>
 
-      {/* 4. Cashback received (positive magnitude). */}
+      {/* 5. Cashback received (positive magnitude). */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -72,7 +87,7 @@ export function KpiCards({ view }: { view: AggregatedView }) {
         </CardContent>
       </Card>
 
-      {/* 5. How many statements rolled up into this view (a count, not money). */}
+      {/* 6. How many statements rolled up into this view (a count, not money). */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground">
