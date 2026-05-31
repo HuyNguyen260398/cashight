@@ -71,7 +71,7 @@ Self-contained enhancements requested before going live. Mostly independent — 
          (12–16 any order; 17 then 18 last)
 ```
 
-Most steps are linear, but Step 04 (dashboard) and Step 05 (AI) could be parallelized once Step 03 is done if you want to context-switch. In Phase 4, Steps 12–16 are independent and can be tackled in any order (or parallel worktrees); Step 17 (auth) comes last because it gates the finished app, and Step 11 (deploy) comes after everything.
+Most steps are linear, but Step 04 (dashboard) and Step 05 (AI) could be parallelized once Step 03 is done if you want to context-switch. In Phase 4, Steps 12–16 are independent and can be tackled in any order (or parallel worktrees); the auth steps come last (Step 17 Google, then Step 18 Cognito which builds on it) because they gate the finished app, and Step 11 (deploy) comes after everything.
 
 ## How to use this plan
 
