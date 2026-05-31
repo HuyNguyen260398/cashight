@@ -46,7 +46,20 @@ export function KpiCards({ view }: { view: AggregatedView }) {
         </CardContent>
       </Card>
 
-      {/* 3. Fees & interest. */}
+      {/* 3. Software & Subscriptions spend for the period. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            Software &amp; Subscriptions
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-2xl font-semibold">{formatVND(software)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Subscriptions this period</p>
+        </CardContent>
+      </Card>
+
+      {/* 4. Fees & interest. */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -60,7 +73,7 @@ export function KpiCards({ view }: { view: AggregatedView }) {
         </CardContent>
       </Card>
 
-      {/* 4. Cashback received (positive magnitude). */}
+      {/* 5. Cashback received (positive magnitude). */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -74,7 +87,7 @@ export function KpiCards({ view }: { view: AggregatedView }) {
         </CardContent>
       </Card>
 
-      {/* 5. How many statements rolled up into this view (a count, not money). */}
+      {/* 6. How many statements rolled up into this view (a count, not money). */}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -84,19 +97,6 @@ export function KpiCards({ view }: { view: AggregatedView }) {
         <CardContent>
           <p className="text-2xl font-semibold">{statementCount}</p>
           <p className="mt-1 text-xs text-muted-foreground">in this period</p>
-        </CardContent>
-      </Card>
-
-      {/* 6. Software & Subscriptions spend for the period. */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            Software &amp; Subscriptions
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-2xl font-semibold">{formatVND(software)}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Subscriptions this period</p>
         </CardContent>
       </Card>
     </div>
