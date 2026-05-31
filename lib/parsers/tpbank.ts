@@ -190,14 +190,36 @@ function buildForeignFeeMerchants(rows: ParsedRow[]): string[] {
   return merchants;
 }
 
-export async function parseTPBankStatement(buffer: Buffer): Promise<Statement> {
-  const parser = new PDFParse({ data: new Uint8Array(buffer) });
-  let text: string;
+/**
+ * Extract raw text from a PDF, optionally supplying a decryption password.
+ * Destroys the pdf.js parser in all cases (success or error) to avoid leaking
+ * workers — every PDFParse instance created must be destroyed.
+ *
+ * A fresh Uint8Array is allocated per call on purpose: pdf.js TRANSFERS the
+ * typed array to its worker and detaches it, so a single array cannot be reused
+ * across two PDFParse instances (the unprotected attempt + the password retry).
+ * Reusing one throws "DataCloneError: Cannot transfer object of unsupported type".
+ */
+async function extractText(buffer: Buffer, password?: string): Promise<string> {
+  const data = new Uint8Array(buffer);
+  const parser = new PDFParse(password ? { data, password } : { data });
   try {
-    const result = await parser.getText();
-    text = result.text;
+    return (await parser.getText()).text;
   } finally {
     await parser.destroy();
+  }
+}
+
+export async function parseTPBankStatement(buffer: Buffer, password?: string): Promise<Statement> {
+  let text: string;
+  try {
+    text = await extractText(buffer);
+  } catch (err) {
+    if (password && err instanceof Error && err.name === 'PasswordException') {
+      text = await extractText(buffer, password);
+    } else {
+      throw err;
+    }
   }
 
   // --- PCI: mask the PAN immediately, derive cardLast4, then drop the rest. ---
