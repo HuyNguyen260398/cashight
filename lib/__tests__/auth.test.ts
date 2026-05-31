@@ -79,3 +79,35 @@ describe('isAllowedProfile', () => {
     expect(isAllowedProfile(undefined, ALLOWED)).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Cognito claim shapes
+//
+// Cognito's ID token may carry email_verified as the STRING "true"/"false"
+// rather than a boolean. The helper must treat string "true" as verified and
+// string "false" as NOT verified (the previous Boolean(...) coercion wrongly
+// accepted any non-empty string, including "false").
+// ---------------------------------------------------------------------------
+
+describe('isAllowedProfile — Cognito claim shapes', () => {
+  // String "true" + matching email → true
+  it('returns true when email_verified is the string "true" and email matches', () => {
+    expect(
+      isAllowedProfile({ email: ALLOWED, email_verified: 'true' }, ALLOWED),
+    ).toBe(true);
+  });
+
+  // String "false" + matching email → false (the bug being fixed)
+  it('returns false when email_verified is the string "false" even if email matches', () => {
+    expect(
+      isAllowedProfile({ email: ALLOWED, email_verified: 'false' }, ALLOWED),
+    ).toBe(false);
+  });
+
+  // Boolean true (Google shape) still → true (regression guard)
+  it('returns true when email_verified is boolean true and email matches', () => {
+    expect(
+      isAllowedProfile({ email: ALLOWED, email_verified: true }, ALLOWED),
+    ).toBe(true);
+  });
+});

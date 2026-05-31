@@ -1,5 +1,5 @@
 /**
- * Pure allowlist decision for Google sign-in.
+ * Pure allowlist decision for Google or Cognito sign-in.
  *
  * Returns true only when the OAuth profile carries a verified email that
  * exactly matches the single allowed address. Kept free of NextAuth runtime
@@ -7,7 +7,12 @@
  */
 export interface AllowlistProfile {
   email?: string | null;
-  email_verified?: boolean | null;
+  // Google: boolean. Cognito: boolean or the string "true"/"false".
+  email_verified?: boolean | string | null;
+}
+
+function isEmailVerified(value: AllowlistProfile['email_verified']): boolean {
+  return value === true || value === 'true';
 }
 
 export function isAllowedProfile(
@@ -15,7 +20,8 @@ export function isAllowedProfile(
   allowedEmail: string | undefined,
 ): boolean {
   return Boolean(
-    profile?.email_verified &&
+    profile &&
+      isEmailVerified(profile.email_verified) &&
       allowedEmail &&
       profile.email === allowedEmail,
   );
