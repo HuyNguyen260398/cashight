@@ -13,12 +13,12 @@ export default auth((req) => {
   // Unauthenticated. API routes get a 401 so fetch callers see a clean status
   // instead of an HTML redirect; everything else is a page, so redirect to sign-in.
   if (req.nextUrl.pathname.startsWith('/api')) {
-    return new NextResponse(null, { status: 401 });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   return NextResponse.redirect(new URL('/signin', req.nextUrl));
 });
 
 export const config = {
-  matcher: ['/((?!api/auth|signin|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!api/auth|signin|_next/static|_next/image|favicon\\.ico).*)'],
 };
