@@ -11,6 +11,9 @@ export interface AllowlistProfile {
   email_verified?: boolean | string | null;
 }
 
+// Strict, fail-closed: only the canonical boolean `true` or string "true" count
+// as verified. Anything else (the string "false", numbers, objects, null) is
+// treated as unverified — never coerced via truthiness.
 function isEmailVerified(value: AllowlistProfile['email_verified']): boolean {
   return value === true || value === 'true';
 }
