@@ -31,6 +31,17 @@ export default async function SignInPage({
         >
           <Button type="submit" className="w-full">Sign in with Google</Button>
         </form>
+        <form
+          className="mt-3"
+          action={async () => {
+            "use server";
+            await signIn("cognito", { redirectTo: "/" });
+          }}
+        >
+          <Button type="submit" variant="outline" className="w-full">
+            Sign in with Cognito
+          </Button>
+        </form>
       </div>
     </main>
   );
