@@ -14,7 +14,7 @@ import {
   TableCell,
 } from '@/components/ui/table';
 
-type SortKey = 'date' | 'amount';
+type SortKey = 'date' | 'amount' | 'category';
 type SortDir = 'asc' | 'desc';
 
 interface SortState {
@@ -54,6 +54,8 @@ export function TransactionsTable({
     let cmp: number;
     if (sort.key === 'date') {
       cmp = a.date.localeCompare(b.date);
+    } else if (sort.key === 'category') {
+      cmp = a.category.localeCompare(b.category);
     } else {
       cmp = a.amountVnd - b.amountVnd;
     }
@@ -75,7 +77,17 @@ export function TransactionsTable({
                 <SortIndicator sortKey="date" active={sort.key} dir={sort.dir} />
               </TableHead>
               <TableHead>Description</TableHead>
-              <TableHead>Category</TableHead>
+              <TableHead
+                className="cursor-pointer select-none"
+                onClick={() => toggleSort('category')}
+              >
+                Category
+                <SortIndicator
+                  sortKey="category"
+                  active={sort.key}
+                  dir={sort.dir}
+                />
+              </TableHead>
               <TableHead
                 className="cursor-pointer select-none text-right"
                 onClick={() => toggleSort('amount')}
