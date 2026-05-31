@@ -15,9 +15,11 @@ export default async function SignInPage({
         <p className="mt-2 text-sm text-muted-foreground">
           Sign in to track your spending.
         </p>
-        {error === "AccessDenied" ? (
+        {error ? (
           <p className="mt-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            That account isn&apos;t allowed to access this app.
+            {error === "AccessDenied"
+              ? "That account isn't allowed to access this app."
+              : "Couldn't sign you in. Please try again."}
           </p>
         ) : null}
         <form
