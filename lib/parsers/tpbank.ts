@@ -190,14 +190,31 @@ function buildForeignFeeMerchants(rows: ParsedRow[]): string[] {
   return merchants;
 }
 
-export async function parseTPBankStatement(buffer: Buffer): Promise<Statement> {
-  const parser = new PDFParse({ data: new Uint8Array(buffer) });
-  let text: string;
+/**
+ * Extract raw text from a PDF, optionally supplying a decryption password.
+ * Destroys the pdf.js parser in all cases (success or error) to avoid leaking
+ * workers — every PDFParse instance created must be destroyed.
+ */
+async function extractText(data: Uint8Array, password?: string): Promise<string> {
+  const parser = new PDFParse(password ? { data, password } : { data });
   try {
-    const result = await parser.getText();
-    text = result.text;
+    return (await parser.getText()).text;
   } finally {
     await parser.destroy();
+  }
+}
+
+export async function parseTPBankStatement(buffer: Buffer, password?: string): Promise<Statement> {
+  const data = new Uint8Array(buffer);
+  let text: string;
+  try {
+    text = await extractText(data);
+  } catch (err) {
+    if (password && err instanceof Error && err.name === 'PasswordException') {
+      text = await extractText(data, password);
+    } else {
+      throw err;
+    }
   }
 
   // --- PCI: mask the PAN immediately, derive cardLast4, then drop the rest. ---

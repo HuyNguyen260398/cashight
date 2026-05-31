@@ -35,10 +35,22 @@ export async function POST(request: Request) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
 
+  const pdfPassword = process.env.PDF_PASSWORD;
+
   let statement: Awaited<ReturnType<typeof parseTPBankStatement>>;
   try {
-    statement = await parseTPBankStatement(buffer);
+    statement = await parseTPBankStatement(buffer, pdfPassword);
   } catch (err) {
+    if (err instanceof Error && err.name === 'PasswordException') {
+      // Log only whether a password was configured — never the password itself
+      // nor the raw exception message (which can echo the attempted input).
+      const reason = pdfPassword ? 'wrong password' : 'no PDF_PASSWORD configured';
+      console.error(`Parse failed: PasswordException — ${reason}`);
+      return Response.json(
+        { error: 'This PDF is password-protected and the stored password did not unlock it.' },
+        { status: 422 },
+      );
+    }
     console.error('Parse failed:', err instanceof Error ? err.message : err);
     return Response.json(
       { error: 'Could not parse PDF. Make sure it is a TPBank statement.' },
