@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
 import { parseTPBankStatement } from '@/lib/parsers/tpbank';
-import { saveStatement } from '@/lib/storage';
+import { saveStatement, statementExists, statementKey } from '@/lib/storage';
 
 export async function POST(request: Request) {
   let formData: FormData;
@@ -40,8 +40,27 @@ export async function POST(request: Request) {
     );
   }
 
+  const force = new URL(request.url).searchParams.get('force') === 'true';
+  const [year, month] = statement.statementDate.split('-').map(Number);
+  const key = statementKey(statement.cardLast4, year, month);
+
+  if (!force) {
+    try {
+      if (await statementExists(key)) {
+        return Response.json(
+          { error: 'conflict', cardLast4: statement.cardLast4, year, month, key },
+          { status: 409 },
+        );
+      }
+    } catch (err) {
+      // A flaky existence check should not block the upload; the save below has
+      // its own error handling for real storage failures.
+      console.error('statementExists check failed:', err instanceof Error ? err.message : err);
+    }
+  }
+
   try {
-    const key = await saveStatement(statement);
+    await saveStatement(statement);
     return Response.json({ ...statement, _storageKey: key });
   } catch (err) {
     const e = err as { name?: string; message?: string };

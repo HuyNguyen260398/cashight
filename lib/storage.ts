@@ -4,6 +4,7 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
   ListObjectsV2Command,
+  HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { StatementSchema } from '@/lib/schemas';
 import type { Statement } from '@/lib/schemas';
@@ -53,6 +54,18 @@ export async function saveStatement(s: Statement): Promise<string> {
     }),
   );
   return key;
+}
+
+export async function statementExists(key: string): Promise<boolean> {
+  const { s3, bucket } = getS3();
+  try {
+    await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    return true;
+  } catch (err) {
+    const name = (err as { name?: string }).name;
+    if (name === 'NotFound' || name === 'NoSuchKey' || name === 'NotFoundException') return false;
+    throw err; // real error (perms, network) — propagate
+  }
 }
 
 export async function getStatement(key: string): Promise<Statement> {

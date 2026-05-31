@@ -2,36 +2,78 @@
 
 import { useDropzone } from 'react-dropzone';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import type { Statement } from '@/lib/schemas';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { buttonVariants } from '@/components/ui/button';
+
+type PendingConflict = {
+  file: File;
+  cardLast4: string;
+  year: number;
+  month: number;
+};
 
 export function UploadDropzone({ onParsed }: { onParsed: (s: Statement) => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingConflict, setPendingConflict] = useState<PendingConflict | null>(null);
+
+  async function uploadFile(file: File, force: boolean) {
+    setLoading(true);
+    setError(null);
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const res = await fetch('/api/parse' + (force ? '?force=true' : ''), {
+        method: 'POST',
+        body: fd,
+      });
+      if (res.ok) {
+        const statement = (await res.json()) as Statement;
+        toast.success('Statement saved');
+        setPendingConflict(null);
+        onParsed(statement);
+      } else if (res.status === 409) {
+        const body = (await res.json()) as {
+          cardLast4: string;
+          year: number;
+          month: number;
+        };
+        setPendingConflict({
+          file,
+          cardLast4: body.cardLast4,
+          year: body.year,
+          month: body.month,
+        });
+      } else {
+        const body = (await res.json()) as { error?: string };
+        setError(body.error ?? 'Upload failed');
+      }
+    } catch {
+      setError('Network error — please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     disabled: loading,
     accept: { 'application/pdf': ['.pdf'] },
     maxFiles: 1,
     maxSize: 5 * 1024 * 1024,
-    onDrop: async (acceptedFiles) => {
+    onDrop: (acceptedFiles) => {
       if (acceptedFiles.length === 0) return;
-      setLoading(true);
-      setError(null);
-      const fd = new FormData();
-      fd.append('file', acceptedFiles[0]);
-      try {
-        const res = await fetch('/api/parse', { method: 'POST', body: fd });
-        if (!res.ok) {
-          const body = await res.json();
-          setError((body as { error?: string }).error ?? 'Upload failed');
-        } else {
-          onParsed(await res.json() as Statement);
-        }
-      } catch {
-        setError('Network error — please try again.');
-      } finally {
-        setLoading(false);
-      }
+      void uploadFile(acceptedFiles[0], false);
     },
     onDropRejected: (fileRejections) => {
       const firstError = fileRejections[0]?.errors[0];
@@ -52,6 +94,12 @@ export function UploadDropzone({ onParsed }: { onParsed: (s: Statement) => void 
     },
   });
 
+  const monthYearLabel = pendingConflict
+    ? new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(
+        new Date(pendingConflict.year, pendingConflict.month - 1),
+      )
+    : '';
+
   return (
     <div>
       <div
@@ -70,6 +118,36 @@ export function UploadDropzone({ onParsed }: { onParsed: (s: Statement) => void 
         )}
       </div>
       {error && <p className="text-destructive text-sm mt-2">{error}</p>}
+
+      <AlertDialog
+        open={pendingConflict !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingConflict(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Replace existing statement?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A statement for {monthYearLabel} (****{pendingConflict?.cardLast4}) already
+              exists. Replacing it keeps the previous version for 90 days.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className={buttonVariants({ variant: 'destructive' })}
+              disabled={loading}
+              onClick={(e) => {
+                e.preventDefault();
+                if (pendingConflict) void uploadFile(pendingConflict.file, true);
+              }}
+            >
+              {loading ? 'Replacing…' : 'Replace'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
