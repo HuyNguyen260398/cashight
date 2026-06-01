@@ -22,7 +22,7 @@ variable "region" {
 
 variable "project_name" {
   type    = string
-  default = "expense-tracker"
+  default = "cashight"
 }
 
 variable "bucket_suffix" {
