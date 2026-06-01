@@ -1,5 +1,9 @@
 terraform {
-  # Partial backend configuration. Real values live in backend.hcl (gitignored).
-  # Initialize with: terraform init -backend-config=backend.hcl
-  backend "s3" {}
+  backend "s3" {
+    bucket       = "cashight-tfstate-cashight-2026"
+    key          = "cashight/terraform.tfstate"
+    region       = "ap-southeast-1"
+    encrypt      = true
+    use_lockfile = true
+  }
 }

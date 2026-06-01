@@ -72,6 +72,9 @@ Commit and push.
    - `AUTH_GOOGLE_ID` = `<Google OAuth client ID>`
    - `AUTH_GOOGLE_SECRET` = `<Google OAuth client secret>`
    - `ALLOWED_EMAIL` = `<the single allowed Google account email>`
+   - `AUTH_COGNITO_ID` = `<terraform output cognito_user_pool_client_id>`
+   - `AUTH_COGNITO_SECRET` = `<terraform output -raw cognito_user_pool_client_secret>`
+   - `AUTH_COGNITO_ISSUER` = `<terraform output cognito_issuer>`
 7. **Service role:** create a new one (or pick existing). Note the role name.
 8. Save and deploy.
 

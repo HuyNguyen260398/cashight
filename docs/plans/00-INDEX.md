@@ -37,7 +37,7 @@ Tick off as you complete each step.
 
 ### Phase 4 — Feature pass (before deployment)
 
-Self-contained enhancements requested before going live. Mostly independent — Steps 12–16 can be done in any order; do **Step 17 (auth) last** since it gates the now-complete app. All must land before Step 11.
+Self-contained enhancements requested before going live. Mostly independent — Steps 12–16 can be done in any order; do the **auth steps last** (Step 17 Google, then Step 18 Cognito, which builds on it) since they gate the now-complete app. All must land before Step 11.
 
 - [ ] **[Step 12](./12-rebrand-cashight.md)** — Rebrand "Expense tracker" → "Cashight" *(15m)*
 - [ ] **[Step 13](./13-dark-mode-toggle.md)** — Dark / light mode toggle *(30–45m)*
@@ -45,12 +45,13 @@ Self-contained enhancements requested before going live. Mostly independent — 
 - [ ] **[Step 15](./15-software-subscriptions-card.md)** — "Software & Subscriptions" KPI card *(15–20m)*
 - [ ] **[Step 16](./16-password-protected-pdf.md)** — Handle password-protected PDF statements *(45–60m)*
 - [ ] **[Step 17](./17-google-auth.md)** — Google authentication, single allowed user *(2–3h)*
+- [ ] **[Step 18](./18-cognito-authentication.md)** — AWS Cognito as a second login option *(2–3h)* — builds on Step 17
 
-> **Milestone:** Cashight is branded, themeable, filterable, and access-controlled.
+> **Milestone:** Cashight is branded, themeable, filterable, and access-controlled (Google + Cognito).
 
 ### Phase 5 — Deployment
 
-- [ ] **[Step 11](./11-amplify-deployment.md)** — Deploy to AWS Amplify *(1–2h)* — env-var checklist must include `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `ALLOWED_EMAIL`, `PDF_PASSWORD`
+- [ ] **[Step 11](./11-amplify-deployment.md)** — Deploy to AWS Amplify *(1–2h)* — env-var checklist must include `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `ALLOWED_EMAIL`, `PDF_PASSWORD`, `AUTH_COGNITO_ID`, `AUTH_COGNITO_SECRET`, `AUTH_COGNITO_ISSUER`
 
 > **Milestone:** Production deployment accessible via Amplify URL.
 
@@ -66,11 +67,11 @@ Self-contained enhancements requested before going live. Mostly independent — 
      │                │
      └────────────────┘
 
-10 ──▶ 12 ─ 13 ─ 14 ─ 15 ─ 16 ─ 17 ──▶ 11
-         (12–16 any order; 17 last)
+10 ──▶ 12 ─ 13 ─ 14 ─ 15 ─ 16 ─ 17 ──▶ 18 ──▶ 11
+         (12–16 any order; 17 then 18 last)
 ```
 
-Most steps are linear, but Step 04 (dashboard) and Step 05 (AI) could be parallelized once Step 03 is done if you want to context-switch. In Phase 4, Steps 12–16 are independent and can be tackled in any order (or parallel worktrees); Step 17 (auth) comes last because it gates the finished app, and Step 11 (deploy) comes after everything.
+Most steps are linear, but Step 04 (dashboard) and Step 05 (AI) could be parallelized once Step 03 is done if you want to context-switch. In Phase 4, Steps 12–16 are independent and can be tackled in any order (or parallel worktrees); the auth steps come last (Step 17 Google, then Step 18 Cognito which builds on it) because they gate the finished app, and Step 11 (deploy) comes after everything.
 
 ## How to use this plan
 

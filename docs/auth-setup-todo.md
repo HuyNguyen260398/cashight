@@ -1,8 +1,8 @@
 # Authentication — Remaining Setup TODO
 
-> Step 17 (Google auth) code is **done and merged via PR #22**. What remains is the
-> manual configuration the code can't do for you: Google Cloud OAuth, secrets, and
-> end-to-end verification. Work through these in order.
+> Step 17 (Google auth) and Step 18 (Cognito) code is **done and merged**. What remains is the
+> manual configuration the code can't do for you: Google Cloud OAuth, Cognito User Pool,
+> secrets, and end-to-end verification. Work through these in order.
 
 ## 1. Generate `AUTH_SECRET`
 
@@ -66,6 +66,31 @@ Set these in **Amplify Console → App settings → Environment variables** (nev
 - [ ] Signed-out → `/signin` on the live domain.
 - [ ] Allowed account signs in successfully; others rejected.
 - [ ] Sign out works.
+
+## Cognito (Step 18)
+
+- [ ] Apply the Cognito Terraform: `cd terraform && eval "$(aws configure export-credentials --format env)" && terraform apply` (creates the User Pool, app client, and Hosted-UI domain from `terraform/cognito.tf`).
+- [ ] Capture outputs into `.env.local`:
+  ```
+  AUTH_COGNITO_ID=<terraform output cognito_user_pool_client_id>
+  AUTH_COGNITO_SECRET=<terraform output -raw cognito_user_pool_client_secret>
+  AUTH_COGNITO_ISSUER=<terraform output cognito_issuer>
+  ```
+- [ ] If Cognito redirects back to `/signin?error=Configuration`, check the dev log for
+  `invalid_client_secret` and refresh `AUTH_COGNITO_SECRET` from the current app client:
+  `terraform output -raw cognito_user_pool_client_secret` or
+  `aws cognito-idp describe-user-pool-client --user-pool-id <pool_id> --client-id <client_id> --region ap-southeast-1 --query 'UserPoolClient.ClientSecret' --output text`.
+- [ ] Create the single Cognito user (so it resolves to `ALLOWED_EMAIL`, email verified):
+  ```bash
+  aws cognito-idp admin-create-user --user-pool-id <pool_id> --username <ALLOWED_EMAIL> \
+    --user-attributes Name=email,Value=<ALLOWED_EMAIL> Name=email_verified,Value=true \
+    --message-action SUPPRESS --region ap-southeast-1
+  aws cognito-idp admin-set-user-password --user-pool-id <pool_id> --username <ALLOWED_EMAIL> \
+    --password '<strong-password>' --permanent --region ap-southeast-1
+  ```
+  (`email_verified=true` is mandatory — the allowlist rejects unverified emails.)
+- [ ] Verify locally: `/signin` shows both buttons; Cognito login as `ALLOWED_EMAIL` reaches the dashboard; a different pool user is rejected to `/signin` with the access-denied hint.
+- [ ] For prod (Amplify): add the prod URLs to the Terraform `cognito_callback_urls` (`https://<amplify-domain>/api/auth/callback/cognito`) and `cognito_logout_urls` (`https://<amplify-domain>/signin`), run `terraform apply`, and set `AUTH_COGNITO_ID`/`AUTH_COGNITO_SECRET`/`AUTH_COGNITO_ISSUER` in the Amplify Console (Step 11). `AUTH_TRUST_HOST=true` (already set) covers Cognito callbacks too.
 
 ---
 

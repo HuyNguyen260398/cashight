@@ -1,4 +1,5 @@
 import NextAuth from 'next-auth';
+import Cognito from 'next-auth/providers/cognito';
 import Google from 'next-auth/providers/google';
 
 import { isAllowedProfile } from '@/lib/auth-allowlist';
@@ -11,6 +12,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // so a user rejected by the allowlist can retry with a different account
     // instead of silently re-submitting the same one.
     Google({ authorization: { params: { prompt: 'select_account' } } }),
+    // Reads AUTH_COGNITO_ID / AUTH_COGNITO_SECRET / AUTH_COGNITO_ISSUER from the
+    // environment (Auth.js v5 auto-inference). Cognito accepts client_secret_post
+    // reliably for confidential app clients, including secrets with special chars.
+    Cognito({ client: { token_endpoint_auth_method: 'client_secret_post' } }),
   ],
   callbacks: {
     // Reject any account whose verified email is not the single allowed one.
