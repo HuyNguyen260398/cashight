@@ -1,5 +1,5 @@
 resource "aws_s3_bucket" "statements" {
-  bucket = "${var.project_name}-statements-${var.bucket_suffix}"
+  bucket = var.statements_bucket_name
   tags = {
     Project = var.project_name
     Purpose = "Parsed credit card statements"

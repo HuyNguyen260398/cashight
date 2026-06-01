@@ -1,6 +1,6 @@
 # Optional override for the default backend in backend.tf.
 # Then: terraform init -backend-config=backend.hcl
-bucket       = "cashight-tfstate-cashight-2026"
+bucket       = "cashight-tfstate"
 key          = "cashight/terraform.tfstate"
 region       = "ap-southeast-1"
 encrypt      = true # encrypt state object at rest (SSE)

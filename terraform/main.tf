@@ -25,6 +25,12 @@ variable "project_name" {
   default = "cashight"
 }
 
+variable "statements_bucket_name" {
+  type        = string
+  description = "S3 bucket name for parsed statement JSON objects"
+  default     = "cashight-statements"
+}
+
 variable "bucket_suffix" {
   type        = string
   description = "Random suffix to ensure global uniqueness"

@@ -1,2 +1,3 @@
-project_name  = "cashight"
-bucket_suffix = "cashight-2026" # any short unique string; overrides the default in main.tf
+project_name           = "cashight"
+statements_bucket_name = "cashight-statements"
+bucket_suffix          = "cashight-2026" # Used by the Cognito Hosted UI domain; must be region-unique.

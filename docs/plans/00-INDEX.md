@@ -52,6 +52,7 @@ Self-contained enhancements requested before going live. Mostly independent — 
 ### Phase 5 — Deployment
 
 - [ ] **[Step 11](./11-amplify-deployment.md)** — Deploy to AWS Amplify *(1–2h)* — env-var checklist must include `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `ALLOWED_EMAIL`, `PDF_PASSWORD`, `AUTH_COGNITO_ID`, `AUTH_COGNITO_SECRET`, `AUTH_COGNITO_ISSUER`
+- [ ] **[Step 19](./19-s3-bucket-consolidation.md)** — Consolidate S3 buckets to `cashight-statements` and `cashight-tfstate` *(1–2h plus verification hold)*
 
 > **Milestone:** Production deployment accessible via Amplify URL.
 
