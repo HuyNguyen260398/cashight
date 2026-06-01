@@ -76,6 +76,10 @@ Set these in **Amplify Console → App settings → Environment variables** (nev
   AUTH_COGNITO_SECRET=<terraform output -raw cognito_user_pool_client_secret>
   AUTH_COGNITO_ISSUER=<terraform output cognito_issuer>
   ```
+- [ ] If Cognito redirects back to `/signin?error=Configuration`, check the dev log for
+  `invalid_client_secret` and refresh `AUTH_COGNITO_SECRET` from the current app client:
+  `terraform output -raw cognito_user_pool_client_secret` or
+  `aws cognito-idp describe-user-pool-client --user-pool-id <pool_id> --client-id <client_id> --region ap-southeast-1 --query 'UserPoolClient.ClientSecret' --output text`.
 - [ ] Create the single Cognito user (so it resolves to `ALLOWED_EMAIL`, email verified):
   ```bash
   aws cognito-idp admin-create-user --user-pool-id <pool_id> --username <ALLOWED_EMAIL> \

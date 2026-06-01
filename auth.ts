@@ -13,8 +13,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // instead of silently re-submitting the same one.
     Google({ authorization: { params: { prompt: 'select_account' } } }),
     // Reads AUTH_COGNITO_ID / AUTH_COGNITO_SECRET / AUTH_COGNITO_ISSUER from the
-    // environment (Auth.js v5 auto-inference). Gated by the same allowlist callback.
-    Cognito,
+    // environment (Auth.js v5 auto-inference). Cognito accepts client_secret_post
+    // reliably for confidential app clients, including secrets with special chars.
+    Cognito({ client: { token_endpoint_auth_method: 'client_secret_post' } }),
   ],
   callbacks: {
     // Reject any account whose verified email is not the single allowed one.

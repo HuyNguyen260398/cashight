@@ -173,9 +173,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Google({ authorization: { params: { prompt: 'select_account' } } }),
     // Reads AUTH_COGNITO_ID / AUTH_COGNITO_SECRET / AUTH_COGNITO_ISSUER from
-    // the environment (Auth.js v5 auto-inference). The same allowlist callback
-    // gates this provider — Cognito is a second login method for the single user.
-    Cognito,
+    // the environment (Auth.js v5 auto-inference). Cognito accepts
+    // client_secret_post reliably for confidential app clients, including
+    // secrets with special chars. The same allowlist callback gates this provider.
+    Cognito({ client: { token_endpoint_auth_method: 'client_secret_post' } }),
   ],
   callbacks: {
     signIn({ profile }) {
