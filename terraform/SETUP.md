@@ -8,7 +8,7 @@ Run this once from any directory with AWS credentials configured:
 
 ```bash
 aws s3api create-bucket \
-  --bucket cashight-tfstate-cashight-2026 \
+  --bucket cashight-tfstate \
   --region ap-southeast-1 \
   --create-bucket-configuration LocationConstraint=ap-southeast-1
 ```
@@ -17,7 +17,7 @@ Enable versioning so state history is retained:
 
 ```bash
 aws s3api put-bucket-versioning \
-  --bucket cashight-tfstate-cashight-2026 \
+  --bucket cashight-tfstate \
   --versioning-configuration Status=Enabled
 ```
 
@@ -25,8 +25,16 @@ Enable server-side encryption:
 
 ```bash
 aws s3api put-bucket-encryption \
-  --bucket cashight-tfstate-cashight-2026 \
+  --bucket cashight-tfstate \
   --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+```
+
+Block all public access:
+
+```bash
+aws s3api put-public-access-block \
+  --bucket cashight-tfstate \
+  --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
 ```
 
 ## 2. Initialize Terraform
