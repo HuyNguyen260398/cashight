@@ -4,11 +4,6 @@ variable "github_repository" {
   default     = "HuyNguyen260398/cashight"
 }
 
-variable "amplify_app_id" {
-  type        = string
-  description = "Amplify app id from the console (App settings → General)."
-}
-
 data "aws_caller_identity" "current" {}
 
 # GitHub's OIDC provider is account-global. If one already exists in the
@@ -58,7 +53,7 @@ data "aws_iam_policy_document" "amplify_release" {
       "amplify:ListJobs",
     ]
     resources = [
-      "arn:aws:amplify:${var.region}:${data.aws_caller_identity.current.account_id}:apps/${var.amplify_app_id}/branches/*/jobs/*",
+      "arn:aws:amplify:${var.region}:${data.aws_caller_identity.current.account_id}:apps/${aws_amplify_app.cashight.id}/branches/*/jobs/*",
     ]
   }
 }

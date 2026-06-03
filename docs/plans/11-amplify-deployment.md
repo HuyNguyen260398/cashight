@@ -8,6 +8,15 @@
 
 ---
 
+> **⚠️ Superseded by a Terraform flow (2026-06).** Amplify is now provisioned in
+> `terraform/amplify.tf` (app + `main` branch + service role + S3 attachment), so several
+> manual steps below no longer apply: the console "New app" wizard (Task 3), the S3-policy
+> attachment (Task 4 / "A2 S3"), disabling native auto-build (A1 — now `enable_auto_build = false`),
+> and `terraform apply -var amplify_app_id=…` (the app-id is a Terraform output that
+> `github-oidc.tf` references directly). **Follow [`docs/DEPLOYMENT.md`](../DEPLOYMENT.md) as the
+> authoritative runbook.** The tasks below are kept for design rationale and the env-var /
+> CloudWatch / verification details, which still hold.
+
 ## Goal
 
 The app is live at a public URL (an `amplifyapp.com` subdomain or your own domain). Pushes to `main` auto-deploy. Environment variables are configured. The Amplify service role has S3 permissions.
