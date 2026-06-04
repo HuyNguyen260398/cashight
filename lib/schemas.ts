@@ -81,4 +81,10 @@ export const AggregatedViewSchema = z.object({
       value: z.number(),
     }),
   ),
+  installmentSubPeriods: z.array(
+    z.object({
+      label: z.string(),
+      value: z.number(),
+    }),
+  ),
 }) satisfies z.ZodType<AggregatedView>;

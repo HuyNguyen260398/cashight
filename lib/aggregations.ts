@@ -38,6 +38,15 @@ export interface AggregatedView {
    * totals.totalSpend (statement billing period can include cross-month txns).
    */
   subPeriods: Array<{ label: string; value: number }>;
+  /**
+   * Same bucket structure as `subPeriods`, but values are installments rather
+   * than spend.
+   * Year/quarter views: monthly buckets from s.totals.totalInstallments —
+   * bars sum to totals.totalInstallments.
+   * Month view: daily buckets from transactions (isInstallment, amountVnd > 0),
+   * filtered to dates within the spec month.
+   */
+  installmentSubPeriods: Array<{ label: string; value: number }>;
 }
 
 /** Month abbreviations used for year/quarter subPeriod labels. */
@@ -68,53 +77,68 @@ export function filterStatements(
   });
 }
 
-/** Build the zero-filled subPeriods array for a period spec + filtered statements. */
+/**
+ * Build the zero-filled subPeriods array for a period spec + filtered
+ * statements, for one of two metrics:
+ *  - 'spend':        statement-level totalSpend / transaction-derived spend
+ *  - 'installments': statement-level totalInstallments / installment txns
+ *
+ * Both metrics share the same bucket structure so their charts line up.
+ */
 function buildSubPeriods(
   filtered: Statement[],
   spec: PeriodSpec,
+  metric: 'spend' | 'installments' = 'spend',
 ): Array<{ label: string; value: number }> {
+  // Statement-level total for year/quarter monthly buckets.
+  const statementTotal = (s: Statement) =>
+    metric === 'spend' ? s.totals.totalSpend : s.totals.totalInstallments;
+  // Transaction filter for the month view's daily buckets.
+  const includeTxn = (t: Transaction) =>
+    metric === 'spend'
+      ? !NON_SPEND.has(t.category) && t.amountVnd > 0
+      : t.isInstallment && t.amountVnd > 0;
+
   if (spec.type === 'year') {
     // 12 monthly buckets: Jan..Dec — each bucket value is the statement-level
-    // s.totals.totalSpend so the 12 bars sum to AggregatedView.totals.totalSpend.
+    // total so the 12 bars sum to the matching AggregatedView total.
     return MONTH_ABBR.map((label, idx) => {
       const m = idx + 1; // 1-based month
       const value = filtered
         .filter((s) => periodFrom(s.statementDate).month === m)
-        .reduce((sum, s) => sum + s.totals.totalSpend, 0);
+        .reduce((sum, s) => sum + statementTotal(s), 0);
       return { label, value };
     });
   }
 
   if (spec.type === 'quarter') {
     // 3 monthly buckets for the quarter's months — each bucket value is the
-    // statement-level s.totals.totalSpend so the 3 bars sum to
-    // AggregatedView.totals.totalSpend.
+    // statement-level total so the 3 bars sum to the matching total.
     const startMonth = (spec.quarter - 1) * 3 + 1; // Q1→1, Q2→4, Q3→7, Q4→10
     return [0, 1, 2].map((offset) => {
       const m = startMonth + offset;
       const label = MONTH_ABBR[m - 1];
       const value = filtered
         .filter((s) => periodFrom(s.statementDate).month === m)
-        .reduce((sum, s) => sum + s.totals.totalSpend, 0);
+        .reduce((sum, s) => sum + statementTotal(s), 0);
       return { label, value };
     });
   }
 
-  // month: daily buckets 1..N — values are transaction-derived spend
-  // (category ∉ NON_SPEND, amountVnd > 0) filtered to dates within the spec
-  // month.  These daily buckets may NOT sum to totals.totalSpend because the
-  // statement-level billing period can include cross-month transactions that
-  // are counted in totals.totalSpend but land outside this month's date prefix.
+  // month: daily buckets 1..N — values are transaction-derived, filtered to
+  // dates within the spec month.  These daily buckets may NOT sum to the
+  // statement-level total because the billing period can include cross-month
+  // transactions that land outside this month's date prefix.
   const { year, month } = spec;
   const daysInMonth = getDaysInMonth(new Date(year, month - 1));
   const mm = String(month).padStart(2, '0');
   const prefix = `${year}-${mm}-`;
 
-  // Build a map of day → spend total
+  // Build a map of day → metric total
   const dayMap = new Map<number, number>();
   for (const s of filtered) {
     for (const t of s.transactions) {
-      if (NON_SPEND.has(t.category) || t.amountVnd <= 0) continue;
+      if (!includeTxn(t)) continue;
       if (!t.date.startsWith(prefix)) continue;
       const day = parseInt(t.date.slice(8, 10), 10);
       dayMap.set(day, (dayMap.get(day) ?? 0) + t.amountVnd);
@@ -198,5 +222,6 @@ export function aggregate(
     byCategory: mergeByCategory(filtered),
     topMerchants: mergeTopMerchants(filtered),
     subPeriods: buildSubPeriods(filtered, spec),
+    installmentSubPeriods: buildSubPeriods(filtered, spec, 'installments'),
   };
 }

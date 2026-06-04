@@ -302,6 +302,17 @@ describe('aggregate with hand-built Q2 statements — quarterly', () => {
     expect(view.subPeriods.map((p) => p.label)).toEqual(['Apr', 'May', 'Jun']);
   });
 
+  it('installmentSubPeriods carry per-month totalInstallments', () => {
+    expect(view.installmentSubPeriods.map((p) => p.label)).toEqual([
+      'Apr',
+      'May',
+      'Jun',
+    ]);
+    expect(view.installmentSubPeriods.map((p) => p.value)).toEqual([
+      1_000_000, 2_000_000, 3_000_000,
+    ]);
+  });
+
   it('excludes statements outside Q2 (e.g. March)', () => {
     const mar = makeStatement(2026, 3, { totalSpend: 9_999_999 });
     const filtered = filterStatements([mar, apr, may, jun], spec);
@@ -405,17 +416,23 @@ describe('aggregate with empty input', () => {
     // May has 31 days, all zero
     expect(view.subPeriods.length).toBe(31);
     expect(view.subPeriods.every((p) => p.value === 0)).toBe(true);
+    expect(view.installmentSubPeriods.length).toBe(31);
+    expect(view.installmentSubPeriods.every((p) => p.value === 0)).toBe(true);
   });
 
   it('yearly: subPeriods length 12, all zero', () => {
     const view = aggregate([], { type: 'year', year: 2026 });
     expect(view.subPeriods.length).toBe(12);
     expect(view.subPeriods.every((p) => p.value === 0)).toBe(true);
+    expect(view.installmentSubPeriods.length).toBe(12);
+    expect(view.installmentSubPeriods.every((p) => p.value === 0)).toBe(true);
   });
 
   it('quarterly: subPeriods length 3, all zero', () => {
     const view = aggregate([], { type: 'quarter', year: 2026, quarter: 2 });
     expect(view.subPeriods.length).toBe(3);
     expect(view.subPeriods.every((p) => p.value === 0)).toBe(true);
+    expect(view.installmentSubPeriods.length).toBe(3);
+    expect(view.installmentSubPeriods.every((p) => p.value === 0)).toBe(true);
   });
 });
