@@ -6,6 +6,7 @@ import { TransactionsTable } from '@/app/components/transactions-table';
 import { CategoryPie } from '@/app/components/category-pie';
 import { MerchantBar } from '@/app/components/merchant-bar';
 import { TrendChart } from '@/app/components/trend-chart';
+import { InstallmentAreaChart } from '@/app/components/installment-area-chart';
 
 export function Dashboard({ view }: { view: AggregatedView }) {
   return (
@@ -26,7 +27,17 @@ export function Dashboard({ view }: { view: AggregatedView }) {
         </CardContent>
       </Card>
 
-      {/* Row 4: Category pie + Top merchants bar */}
+      {/* Row 4: Installments per sub-period as an area chart */}
+      <Card className="min-w-0 overflow-hidden">
+        <CardHeader>
+          <CardTitle>Total installments</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <InstallmentAreaChart view={view} />
+        </CardContent>
+      </Card>
+
+      {/* Row 5: Category pie + Top merchants bar */}
       <div className="grid gap-6 md:grid-cols-2">
         <Card className="min-w-0 overflow-hidden">
           <CardHeader>
@@ -47,7 +58,7 @@ export function Dashboard({ view }: { view: AggregatedView }) {
         </Card>
       </div>
 
-      {/* Row 5: Transactions table */}
+      {/* Row 6: Transactions table */}
       <Card className="min-w-0 overflow-hidden">
         <CardHeader>
           <CardTitle>Transactions</CardTitle>
