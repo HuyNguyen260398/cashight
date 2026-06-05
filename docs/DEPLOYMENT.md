@@ -49,13 +49,12 @@ terraform apply
 This creates the Amplify app, the `main` branch (auto-build off), the service role +
 S3 attachment, and the OIDC deploy role — all in one apply.
 
-⚠️ The GitHub OIDC provider is **account-global**. If apply errors that the provider
-already exists, import it then re-apply:
-
-```bash
-terraform import aws_iam_openid_connect_provider.github \
-  arn:aws:iam::010382427026:oidc-provider/token.actions.githubusercontent.com
-```
+ℹ️ The GitHub OIDC provider is **account-global** (one per account) and is owned by
+another Terraform config in this account, so `github-oidc.tf` **references it via a
+data source** rather than creating it — no import needed, and the two configs won't
+fight over its tags/thumbprint. If you run this in a *fresh* account with no provider,
+create one first (e.g. a one-line `aws_iam_openid_connect_provider` resource, applied
+once) before this apply.
 
 **Connecting the repo** — two options:
 
@@ -77,8 +76,10 @@ terraform output amplify_app_url           # production URL once deployed
 
 ## Step 2 — Set the secret env vars in the Amplify Console
 
-Terraform set the **non-secret** env vars (`AWS_REGION`, `STATEMENTS_BUCKET`,
-`AUTH_COGNITO_ID`, `AUTH_COGNITO_ISSUER`). Add the **secrets** in the console
+Terraform set the **non-secret** env vars (`STATEMENTS_BUCKET`, `AUTH_COGNITO_ID`,
+`AUTH_COGNITO_ISSUER`). `AWS_REGION` is **not** set here — Amplify forbids the
+reserved `AWS` prefix, and the SSR runtime injects `AWS_REGION` automatically.
+Add the **secrets** in the console
 (App settings → Environment variables) so they stay out of Terraform state:
 
 - `GEMINI_API_KEY` — from Google AI Studio

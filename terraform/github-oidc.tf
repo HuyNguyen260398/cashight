@@ -6,16 +6,12 @@ variable "github_repository" {
 
 data "aws_caller_identity" "current" {}
 
-# GitHub's OIDC provider is account-global. If one already exists in the
-# account, import it instead of creating a duplicate:
-#   terraform import aws_iam_openid_connect_provider.github \
-#     arn:aws:iam::<ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com
-resource "aws_iam_openid_connect_provider" "github" {
-  url            = "https://token.actions.githubusercontent.com"
-  client_id_list = ["sts.amazonaws.com"]
-  # AWS validates the OIDC cert chain against its trusted CAs; the thumbprint
-  # is no longer security-critical but the argument is still required.
-  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+# GitHub's OIDC provider is account-global — one per AWS account. It already
+# exists in this account (created/owned by another Terraform config), so we
+# *reference* it via a data source rather than manage it here. This avoids two
+# configs fighting over the shared resource's tags/thumbprint on every apply.
+data "aws_iam_openid_connect_provider" "github" {
+  url = "https://token.actions.githubusercontent.com"
 }
 
 data "aws_iam_policy_document" "github_deploy_trust" {
@@ -24,7 +20,7 @@ data "aws_iam_policy_document" "github_deploy_trust" {
     actions = ["sts:AssumeRoleWithWebIdentity"]
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github.arn]
+      identifiers = [data.aws_iam_openid_connect_provider.github.arn]
     }
     condition {
       test     = "StringEquals"

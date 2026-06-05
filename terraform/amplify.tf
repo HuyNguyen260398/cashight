@@ -54,8 +54,11 @@ resource "aws_amplify_app" "cashight" {
 
   # Non-secret, structural env vars only. Secrets are added in the console and
   # merged at runtime; `ignore_changes` below keeps Terraform from deleting them.
+  #
+  # NOTE: AWS_REGION is intentionally NOT set here — Amplify rejects env vars with
+  # the reserved "AWS" prefix, and the WEB_COMPUTE (Lambda) runtime already injects
+  # AWS_REGION automatically, set to this app's region (ap-southeast-1).
   environment_variables = {
-    AWS_REGION          = var.region
     STATEMENTS_BUCKET   = aws_s3_bucket.statements.bucket
     AUTH_COGNITO_ID     = aws_cognito_user_pool_client.web.id
     AUTH_COGNITO_ISSUER = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.users.id}"
@@ -69,7 +72,7 @@ resource "aws_amplify_app" "cashight" {
 
   tags = {
     Project = var.project_name
-    Purpose = "Amplify Hosting (SSR) for Cashight"
+    Purpose = "Amplify Hosting SSR for Cashight"
   }
 }
 
