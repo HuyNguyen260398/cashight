@@ -1,3 +1,5 @@
+# The statements-bucket RW policy. Attached to the Amplify service role in
+# amplify.tf (`aws_iam_role_policy_attachment.amplify_service_s3`).
 data "aws_iam_policy_document" "statements_rw" {
   statement {
     sid    = "ReadWriteStatements"

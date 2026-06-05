@@ -1,0 +1,69 @@
+name: Deploy to Amplify
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never cancel an in-flight production deploy.
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+permissions:
+  id-token: write   # required for OIDC
+  contents: read
+
+env:
+  AWS_REGION: ap-southeast-1
+  AMPLIFY_BRANCH: main
+
+jobs:
+  verify:
+    name: Lint, Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6        # reads pnpm 11.2.2 from packageManager
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm build
+      - run: pnpm run --if-present test
+
+  deploy:
+    name: Trigger Amplify Release
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Start Amplify release and wait
+        env:
+          APP_ID: ${{ vars.AMPLIFY_APP_ID }}
+        run: |
+          set -euo pipefail
+          JOB_ID=$(aws amplify start-job \
+            --app-id "$APP_ID" --branch-name "$AMPLIFY_BRANCH" \
+            --job-type RELEASE \
+            --query 'jobSummary.jobId' --output text)
+          echo "Started Amplify job $JOB_ID"
+          while true; do
+            STATUS=$(aws amplify get-job \
+              --app-id "$APP_ID" --branch-name "$AMPLIFY_BRANCH" \
+              --job-id "$JOB_ID" \
+              --query 'job.summary.status' --output text)
+            echo "status=$STATUS"
+            case "$STATUS" in
+              SUCCEED)          echo "✅ deploy succeeded"; exit 0 ;;
+              FAILED|CANCELLED) echo "❌ deploy $STATUS"; exit 1 ;;
+              *)                sleep 15 ;;
+            esac
+          done
