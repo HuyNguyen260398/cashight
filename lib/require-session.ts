@@ -13,10 +13,15 @@ import { auth } from '@/auth';
  * environments that do run it.
  */
 
+// Gate on a real authenticated user, not just a truthy `auth()` result: a
+// misconfiguration (e.g. UntrustedHost) makes Auth.js v5 return a truthy error
+// object rather than null, and `if (!session)` would let it through (fail-open).
+// Requiring `session.user` fails closed instead.
+
 /** Page guard: redirect unauthenticated requests to /signin. Returns the session. */
 export async function requireSession() {
   const session = await auth();
-  if (!session) redirect('/signin');
+  if (!session?.user) redirect('/signin');
   return session;
 }
 
@@ -27,7 +32,7 @@ export async function requireSession() {
  */
 export async function requireApiSession(): Promise<Response | null> {
   const session = await auth();
-  if (!session) {
+  if (!session?.user) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
   return null;

@@ -7,6 +7,12 @@ import { isAllowedProfile } from '@/lib/auth-allowlist';
 const ALLOWED_EMAIL = process.env.ALLOWED_EMAIL;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  // Auth.js refuses to operate on a host it doesn't trust and (in v5) `auth()`
+  // then returns a truthy error object instead of null — which silently defeats
+  // `if (!session)` guards (fail-open). On Amplify the runtime sits behind
+  // CloudFront, so the host is never auto-trusted; trust it explicitly. Without
+  // this, every auth() call logs `UntrustedHost` and the app has no auth gate.
+  trustHost: true,
   providers: [
     // prompt=select_account forces Google's account chooser on every sign-in,
     // so a user rejected by the allowlist can retry with a different account
