@@ -72,10 +72,18 @@ resource "aws_amplify_app" "cashight" {
   # NOTE: AWS_REGION is intentionally NOT set here — Amplify rejects env vars with
   # the reserved "AWS" prefix, and the WEB_COMPUTE (Lambda) runtime already injects
   # AWS_REGION automatically, set to this app's region (ap-southeast-1).
+  # NOTE: environment_variables is ignore_changed (below), so edits here do NOT
+  # apply to an existing app — they only seed a from-scratch create. AUTH_URL was
+  # also set live via `aws amplify update-app`; it's recorded here for parity.
   environment_variables = {
     STATEMENTS_BUCKET   = aws_s3_bucket.statements.bucket
     AUTH_COGNITO_ID     = aws_cognito_user_pool_client.web.id
     AUTH_COGNITO_ISSUER = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.users.id}"
+    # Auth.js can't derive the public URL behind Amplify's proxy (the SSR runtime
+    # sees Host: localhost:3000 with no trusted X-Forwarded-Host), so it must be
+    # pinned or OAuth redirect_uri becomes https://localhost:3000/... → mismatch.
+    # Hardcoded (not aws_amplify_app.cashight.default_domain) to avoid a self-cycle.
+    AUTH_URL = "https://main.d256g033y75nc0.amplifyapp.com"
   }
 
   lifecycle {
