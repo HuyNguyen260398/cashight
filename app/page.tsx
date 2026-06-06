@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { requireSession } from '@/lib/require-session';
 import { getAllStatements, isAuthError, STORAGE_AUTH_HINT } from '@/lib/storage';
 import { aggregate } from '@/lib/aggregations';
 import { parsePeriodFromSearch } from '@/lib/period';
@@ -16,6 +17,8 @@ export default async function HomePage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireSession();
+
   const resolved = await searchParams;
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(resolved)) {

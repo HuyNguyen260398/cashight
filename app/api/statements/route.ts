@@ -1,9 +1,13 @@
+import { requireApiSession } from '@/lib/require-session';
 import { listStatements } from '@/lib/storage';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
+
   try {
     const items = await listStatements();
     return Response.json(items);

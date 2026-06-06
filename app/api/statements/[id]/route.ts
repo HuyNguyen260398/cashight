@@ -1,9 +1,13 @@
+import { requireApiSession } from '@/lib/require-session';
 import { getStatement, deleteStatement } from '@/lib/storage';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
+
   const { id } = await params;
   let key: string;
   try {
@@ -26,6 +30,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
+
   const { id } = await params;
   let key: string;
   try {

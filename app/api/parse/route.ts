@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
 import { parseTPBankStatement } from '@/lib/parsers/tpbank';
+import { requireApiSession } from '@/lib/require-session';
 import {
   saveStatement,
   statementExists,
@@ -12,6 +13,9 @@ import {
 } from '@/lib/storage';
 
 export async function POST(request: Request) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
+
   let formData: FormData;
   try {
     formData = await request.formData();

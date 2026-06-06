@@ -20,7 +20,8 @@ variable "github_access_token" {
   EOT
 }
 
-# --- Service role: used by the Amplify build and the SSR compute runtime. ---
+# Both the build "service role" and the SSR "compute role" are assumed by the
+# Amplify service principal — they differ only in the permissions attached.
 data "aws_iam_policy_document" "amplify_service_trust" {
   statement {
     effect  = "Allow"
@@ -32,14 +33,26 @@ data "aws_iam_policy_document" "amplify_service_trust" {
   }
 }
 
+# --- Service role: used by Amplify for the build/deploy phase only. ---
+# It does NOT need the statements bucket: nothing in the build touches S3.
 resource "aws_iam_role" "amplify_service" {
   name               = "${var.project_name}-amplify-service"
   assume_role_policy = data.aws_iam_policy_document.amplify_service_trust.json
 }
 
+# --- Compute role: assumed by the SSR runtime (Lambda) at REQUEST time. ---
+# This — not the service role — is the identity our server code (lib/storage.ts)
+# runs as, so the statements-bucket policy must live here. Without a compute role
+# the SSR runtime has no S3 credentials and every storage call fails with the
+# "credentials are missing" hint. Wired to the app via `compute_role_arn` below.
+resource "aws_iam_role" "amplify_compute" {
+  name               = "${var.project_name}-amplify-compute"
+  assume_role_policy = data.aws_iam_policy_document.amplify_service_trust.json
+}
+
 # Grant the SSR runtime read/write to the statements bucket (policy from iam.tf).
-resource "aws_iam_role_policy_attachment" "amplify_service_s3" {
-  role       = aws_iam_role.amplify_service.name
+resource "aws_iam_role_policy_attachment" "amplify_compute_s3" {
+  role       = aws_iam_role.amplify_compute.name
   policy_arn = aws_iam_policy.statements_rw.arn
 }
 
@@ -49,6 +62,7 @@ resource "aws_amplify_app" "cashight" {
   repository           = "https://github.com/${var.github_repository}"
   platform             = "WEB_COMPUTE" # required for Next.js 15 SSR
   iam_service_role_arn = aws_iam_role.amplify_service.arn
+  compute_role_arn     = aws_iam_role.amplify_compute.arn # SSR runtime identity (S3 access)
   build_spec           = file("${path.module}/../amplify.yml")
   access_token         = var.github_access_token != "" ? var.github_access_token : null
 
