@@ -40,6 +40,11 @@ resource "aws_iam_role" "amplify_service" {
   assume_role_policy = data.aws_iam_policy_document.amplify_service_trust.json
 }
 
+resource "aws_iam_role_policy_attachment" "amplify_service_logs" {
+  role       = aws_iam_role.amplify_service.name
+  policy_arn = aws_iam_policy.amplify_service_logs.arn
+}
+
 # --- Compute role: assumed by the SSR runtime (Lambda) at REQUEST time. ---
 # This — not the service role — is the identity our server code (lib/storage.ts)
 # runs as, so the statements-bucket policy must live here. Without a compute role
@@ -70,12 +75,12 @@ resource "aws_amplify_app" "cashight" {
   # merged at runtime; `ignore_changes` below keeps Terraform from deleting them.
   #
   # NOTE: AWS_REGION is intentionally NOT set here — Amplify rejects env vars with
-  # the reserved "AWS" prefix, and the WEB_COMPUTE (Lambda) runtime already injects
-  # AWS_REGION automatically, set to this app's region (ap-southeast-1).
+  # the reserved "AWS" prefix. Use STORAGE_REGION for server-side S3 clients.
   # NOTE: environment_variables is ignore_changed (below), so edits here do NOT
   # apply to an existing app — they only seed a from-scratch create. AUTH_URL was
   # also set live via `aws amplify update-app`; it's recorded here for parity.
   environment_variables = {
+    STORAGE_REGION      = var.region
     STATEMENTS_BUCKET   = aws_s3_bucket.statements.bucket
     AUTH_COGNITO_ID     = aws_cognito_user_pool_client.web.id
     AUTH_COGNITO_ISSUER = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.users.id}"

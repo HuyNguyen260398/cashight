@@ -51,15 +51,22 @@ function requireEnv(name: string): string {
   return value;
 }
 
+type StorageEnv = Record<string, string | undefined>;
+const DEFAULT_STORAGE_REGION = 'ap-southeast-1';
+
+export function getStorageRegion(env: StorageEnv = process.env): string {
+  return env.STORAGE_REGION ?? env.AWS_REGION ?? DEFAULT_STORAGE_REGION;
+}
+
 // Resolve the client and bucket lazily on first use. Validating at module load
 // would break `next build` (it imports route modules with no env present);
 // validating on first S3 call still fails fast with a clear message at runtime
-// instead of a cryptic AWS error. A missing AWS_REGION otherwise silently falls
-// back to the SDK's resolved region and yields a confusing PermanentRedirect.
+// instead of a cryptic AWS error. Amplify does not allow user-defined `AWS_*`
+// env vars, so production uses STORAGE_REGION while local dev can keep AWS_REGION.
 let cached: { s3: S3Client; bucket: string } | undefined;
 function getS3(): { s3: S3Client; bucket: string } {
   if (!cached) {
-    const region = requireEnv('AWS_REGION');
+    const region = getStorageRegion();
     const bucket = requireEnv('STATEMENTS_BUCKET');
     cached = { s3: new S3Client({ region }), bucket };
   }
