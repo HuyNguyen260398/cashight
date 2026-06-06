@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
+import { requireSession } from '@/lib/require-session';
 import { listStatements, getStatement } from '@/lib/storage';
 import {
   StatementsTable,
@@ -11,6 +12,8 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export default async function StatementsPage() {
+  await requireSession();
+
   let rows: StatementRow[] = [];
   let error: string | null = null;
 

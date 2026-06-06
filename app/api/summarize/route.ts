@@ -3,6 +3,7 @@ export const maxDuration = 30;
 
 import { AggregatedViewSchema } from '@/lib/schemas';
 import type { AggregatedView } from '@/lib/aggregations';
+import { requireApiSession } from '@/lib/require-session';
 import { buildSummaryPayload, type SummaryPayload } from '@/lib/summary-payload';
 import { streamSummary } from '@/lib/gemini';
 
@@ -49,6 +50,9 @@ Give a year-in-review. Use the ${subPeriods.length} sub-periods (months) to iden
 }
 
 export async function POST(request: Request) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
+
   let body: unknown;
   try {
     body = await request.json();

@@ -15,8 +15,12 @@ an output instead of a console lookup, and several previously-manual steps are d
   **non-secret** env vars, and a Terraform-managed service role.
 - `aws_amplify_branch.main` — production branch with **native auto-build OFF** (so GitHub
   Actions is the only deploy trigger — the old manual "A1" step is now declarative).
-- `aws_iam_role.amplify_service` + `aws_iam_role_policy_attachment.amplify_service_s3` —
-  the SSR runtime's role, already granted statements-bucket access (old manual "A2 S3" step).
+- `aws_iam_role.amplify_service` — the build/deploy role (no S3; the build never
+  touches the bucket).
+- `aws_iam_role.amplify_compute` + `aws_iam_role_policy_attachment.amplify_compute_s3`,
+  wired to the app via `compute_role_arn` — the **SSR runtime's** role, granted
+  statements-bucket access. This is the identity `lib/storage.ts` runs as at request
+  time; the build service role is *not*. (Old manual "A2 S3" step.)
 - `terraform/github-oidc.tf` — GitHub OIDC provider + `cashight-github-deploy` role,
   now scoped to the app-id Terraform created (no manual `-var amplify_app_id`).
 - `.github/workflows/deploy.yaml` — `verify` (lint/build/test) gates a `deploy` job that
