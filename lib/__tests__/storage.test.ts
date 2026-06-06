@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { isAuthError } from '@/lib/storage';
+import { isAuthError, getStorageRegion } from '@/lib/storage';
 
 describe('isAuthError', () => {
   it.each([
@@ -38,5 +38,21 @@ describe('isAuthError', () => {
     expect(isAuthError(null)).toBe(false);
     expect(isAuthError('string')).toBe(false);
     expect(isAuthError({})).toBe(false);
+  });
+});
+
+describe('getStorageRegion', () => {
+  it('prefers STORAGE_REGION over AWS_REGION because Amplify reserves AWS_* env names', () => {
+    expect(getStorageRegion({ STORAGE_REGION: 'ap-southeast-1', AWS_REGION: 'us-east-1' })).toBe(
+      'ap-southeast-1',
+    );
+  });
+
+  it('falls back to AWS_REGION for local development', () => {
+    expect(getStorageRegion({ AWS_REGION: 'ap-southeast-1' })).toBe('ap-southeast-1');
+  });
+
+  it('uses the deployed app region when no region env var is available', () => {
+    expect(getStorageRegion({})).toBe('ap-southeast-1');
   });
 });

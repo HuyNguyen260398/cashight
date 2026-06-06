@@ -80,9 +80,10 @@ terraform output amplify_app_url           # production URL once deployed
 
 ## Step 2 — Set the secret env vars in the Amplify Console
 
-Terraform set the **non-secret** env vars (`STATEMENTS_BUCKET`, `AUTH_COGNITO_ID`,
-`AUTH_COGNITO_ISSUER`, `AUTH_URL`). `AWS_REGION` is **not** set here — Amplify forbids
-the reserved `AWS` prefix, and the SSR runtime injects `AWS_REGION` automatically.
+Terraform set the **non-secret** env vars (`STORAGE_REGION`, `STATEMENTS_BUCKET`,
+`AUTH_COGNITO_ID`, `AUTH_COGNITO_ISSUER`, `AUTH_URL`). `AWS_REGION` is **not** set
+here — Amplify forbids the reserved `AWS` prefix, so server-side S3 code reads
+`STORAGE_REGION=ap-southeast-1` instead.
 
 > ⚠️ **`AUTH_URL` is required.** Behind Amplify's CloudFront proxy the SSR runtime
 > sees `Host: localhost:3000` with no trusted `X-Forwarded-Host`, so Auth.js builds

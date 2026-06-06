@@ -12,8 +12,7 @@ frontend:
         # container only — they are NOT forwarded to the Next.js SSR runtime (Lambda).
         # Persist the ones our server code reads into .env.production so Next.js bundles
         # them into the compute output and they exist in process.env at request time.
-        # (AWS_REGION is intentionally excluded: it's reserved and the runtime injects it.)
-        - env | grep -E '^(STATEMENTS_BUCKET|GEMINI_API_KEY|PDF_PASSWORD|ALLOWED_EMAIL|AUTH_)' >> .env.production
+        - env | grep -E '^(STORAGE_REGION|STATEMENTS_BUCKET|GEMINI_API_KEY|PDF_PASSWORD|ALLOWED_EMAIL|AUTH_)' >> .env.production
         - pnpm run build
   artifacts:
     baseDirectory: .next

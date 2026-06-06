@@ -4,6 +4,7 @@ import { useDropzone } from 'react-dropzone';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import type { Statement } from '@/lib/schemas';
+import { getUploadErrorMessage } from '@/lib/upload-error';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -56,8 +57,7 @@ export function UploadDropzone({ onParsed }: { onParsed: (s: Statement) => void 
           month: body.month,
         });
       } else {
-        const body = (await res.json()) as { error?: string };
-        setError(body.error ?? 'Upload failed');
+        setError(await getUploadErrorMessage(res));
       }
     } catch {
       setError('Network error — please try again.');

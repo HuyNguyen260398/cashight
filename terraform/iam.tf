@@ -27,6 +27,26 @@ resource "aws_iam_policy" "statements_rw" {
   policy      = data.aws_iam_policy_document.statements_rw.json
 }
 
+data "aws_iam_policy_document" "amplify_service_logs" {
+  statement {
+    sid    = "AllowAmplifySSRCloudWatchLogs"
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogGroup",
+      "logs:CreateLogStream",
+      "logs:DescribeLogGroups",
+      "logs:PutLogEvents",
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_policy" "amplify_service_logs" {
+  name        = "${var.project_name}-amplify-service-logs"
+  description = "Allow Amplify SSR hosting to publish runtime logs to CloudWatch"
+  policy      = data.aws_iam_policy_document.amplify_service_logs.json
+}
+
 output "statements_bucket_name" {
   value = aws_s3_bucket.statements.id
 }

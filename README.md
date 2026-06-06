@@ -69,7 +69,7 @@ pnpm install
 
 # 2. Configure environment
 cp .env.example .env.local
-# Fill in GEMINI_API_KEY, STATEMENTS_BUCKET, AWS_REGION
+# Fill in GEMINI_API_KEY, STATEMENTS_BUCKET, STORAGE_REGION
 
 # 3. Start the dev server
 pnpm dev
@@ -94,6 +94,7 @@ Visit http://localhost:3000 and drop a TPBank statement PDF on the upload page.
 | ------------------- | ------------------------------------------------------------ |
 | `GEMINI_API_KEY`    | Google AI Studio key for the summary endpoint                |
 | `STATEMENTS_BUCKET` | S3 bucket name (from `terraform output statements_bucket_name`) |
+| `STORAGE_REGION`    | S3 client region; use `ap-southeast-1` in Amplify because `AWS_*` env names are reserved |
 | `AWS_REGION`        | `ap-southeast-1`                                             |
 
 > [!WARNING]
