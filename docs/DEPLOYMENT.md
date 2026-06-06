@@ -81,15 +81,26 @@ terraform output amplify_app_url           # production URL once deployed
 ## Step 2 — Set the secret env vars in the Amplify Console
 
 Terraform set the **non-secret** env vars (`STATEMENTS_BUCKET`, `AUTH_COGNITO_ID`,
-`AUTH_COGNITO_ISSUER`). `AWS_REGION` is **not** set here — Amplify forbids the
-reserved `AWS` prefix, and the SSR runtime injects `AWS_REGION` automatically.
+`AUTH_COGNITO_ISSUER`, `AUTH_URL`). `AWS_REGION` is **not** set here — Amplify forbids
+the reserved `AWS` prefix, and the SSR runtime injects `AWS_REGION` automatically.
+
+> ⚠️ **`AUTH_URL` is required.** Behind Amplify's CloudFront proxy the SSR runtime
+> sees `Host: localhost:3000` with no trusted `X-Forwarded-Host`, so Auth.js builds
+> OAuth `redirect_uri`s as `https://localhost:3000/...` → Google/Cognito reject with
+> `redirect_uri_mismatch`. Set `AUTH_URL=https://main.<APP_ID>.amplifyapp.com`.
+
 Add the **secrets** in the console
 (App settings → Environment variables) so they stay out of Terraform state:
 
 - `GEMINI_API_KEY` — from Google AI Studio
 - `PDF_PASSWORD` — password for the protected TPBank PDFs
 - `AUTH_SECRET` — `openssl rand -base64 32`
-- `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` — Google OAuth client
+- `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` — Google OAuth client. In the Google
+  Cloud Console for this client, the **Authorized redirect URIs** must include
+  `https://main.<APP_ID>.amplifyapp.com/api/auth/callback/google` (plus
+  `http://localhost:3000/api/auth/callback/google` for dev), or Google returns
+  `Error 400: redirect_uri_mismatch`. Cognito's callback URLs are managed in
+  `terraform/cognito.tf` (`cognito_callback_urls`).
 - `ALLOWED_EMAIL` — the single allowed account
 - `AUTH_COGNITO_SECRET` — `terraform output -raw cognito_user_pool_client_secret`
 

@@ -1,13 +1,23 @@
+# The prod URL is the fixed Amplify branch domain. It can't be derived from
+# aws_amplify_app here without a dependency cycle (amplify.tf already consumes
+# this client's id/issuer), so it's hardcoded; override via tfvars if the domain
+# changes (e.g. a custom domain).
 variable "cognito_callback_urls" {
   type        = list(string)
   description = "OAuth redirect URIs for the Cognito app client (dev + prod)."
-  default     = ["http://localhost:3000/api/auth/callback/cognito"]
+  default = [
+    "http://localhost:3000/api/auth/callback/cognito",
+    "https://main.d256g033y75nc0.amplifyapp.com/api/auth/callback/cognito",
+  ]
 }
 
 variable "cognito_logout_urls" {
   type        = list(string)
   description = "Post-logout redirect URIs for the Cognito Hosted UI (dev + prod)."
-  default     = ["http://localhost:3000/signin"]
+  default = [
+    "http://localhost:3000/signin",
+    "https://main.d256g033y75nc0.amplifyapp.com/signin",
+  ]
 }
 
 resource "aws_cognito_user_pool" "users" {
