@@ -56,6 +56,12 @@ Self-contained enhancements requested before going live. Mostly independent — 
 
 > **Milestone:** Production deployment accessible via Amplify URL.
 
+### Phase 6 — Security hardening
+
+- [ ] **[Step 20](./20-security-hardening.md)** — Harden Next.js, Amplify Hosting, AWS storage, CI, secrets, and privacy controls *(6–10h plus deployment verification)*
+
+> **Milestone:** Production has current dependency remediation, browser security headers, upload/request hardening, WAF, stronger S3/IAM controls, safer runtime secret handling, and repeatable security verification.
+
 ---
 
 ## Step dependencies
@@ -68,7 +74,7 @@ Self-contained enhancements requested before going live. Mostly independent — 
      │                │
      └────────────────┘
 
-10 ──▶ 12 ─ 13 ─ 14 ─ 15 ─ 16 ─ 17 ──▶ 18 ──▶ 11
+10 ──▶ 12 ─ 13 ─ 14 ─ 15 ─ 16 ─ 17 ──▶ 18 ──▶ 11 ──▶ 19 ──▶ 20
          (12–16 any order; 17 then 18 last)
 ```
 
