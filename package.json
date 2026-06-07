@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "NODE_OPTIONS=--disable-warning=DEP0205 next dev",
-    "build": "NODE_OPTIONS=--disable-warning=DEP0205 next build",
+    "build": "NODE_OPTIONS=--disable-warning=DEP0205 next build && node scripts/copy-pdf-worker.mjs",
     "start": "next start",
     "lint": "eslint",
     "cleanup:legacy-buckets": "tsx scripts/delete-legacy-s3-buckets.ts --confirm-delete-legacy-buckets",
