@@ -4,12 +4,25 @@ interface Bucket {
 }
 
 const buckets = new Map<string, Bucket>();
+let nextCleanupAt = 0;
+
+function cleanupExpiredBuckets(now: number) {
+  if (now < nextCleanupAt) return;
+
+  for (const [key, bucket] of buckets) {
+    if (bucket.expiresAt <= now) buckets.delete(key);
+  }
+
+  nextCleanupAt = now + 60_000;
+}
 
 export function checkRateLimit(
   key: string,
   options: { limit: number; windowMs: number },
 ): Response | null {
   const now = Date.now();
+  cleanupExpiredBuckets(now);
+
   const existing = buckets.get(key);
 
   if (!existing || existing.expiresAt <= now) {
@@ -33,4 +46,9 @@ export function checkRateLimit(
 
   existing.count += 1;
   return null;
+}
+
+export function resetRateLimitForTests() {
+  buckets.clear();
+  nextCleanupAt = 0;
 }

@@ -3,7 +3,7 @@ import 'server-only';
 import { GetParameterCommand, SSMClient } from '@aws-sdk/client-ssm';
 
 const DEFAULT_REGION = 'ap-southeast-1';
-const cache = new Map<string, string | undefined>();
+const cache = new Map<string, Promise<string | undefined>>();
 
 let ssmClient: SSMClient | undefined;
 
@@ -25,17 +25,24 @@ async function getSecureString(
   const parameterName = process.env[parameterEnvName];
   if (!parameterName) return process.env[fallbackEnvName];
 
-  if (cache.has(parameterName)) return cache.get(parameterName);
+  const cached = cache.get(parameterName);
+  if (cached) return cached;
 
-  const response = await getSsmClient().send(
-    new GetParameterCommand({
-      Name: parameterName,
-      WithDecryption: true,
-    }),
-  );
-  const value = response.Parameter?.Value;
-  cache.set(parameterName, value);
-  return value;
+  const request = getSsmClient()
+    .send(
+      new GetParameterCommand({
+        Name: parameterName,
+        WithDecryption: true,
+      }),
+    )
+    .then((response) => response.Parameter?.Value)
+    .catch((err) => {
+      cache.delete(parameterName);
+      throw err;
+    });
+
+  cache.set(parameterName, request);
+  return request;
 }
 
 export function getGeminiApiKey(): Promise<string | undefined> {
