@@ -1,4 +1,5 @@
 import { requireApiSession } from '@/lib/require-session';
+import { redactForLog } from '@/lib/security/logging';
 import { listStatements } from '@/lib/storage';
 
 export const runtime = 'nodejs';
@@ -12,7 +13,7 @@ export async function GET() {
     const items = await listStatements();
     return Response.json(items);
   } catch (err) {
-    console.error('List failed:', err instanceof Error ? err.message : err);
+    console.error('List failed:', redactForLog(err instanceof Error ? err.message : err));
     return Response.json({ error: 'Failed to list statements' }, { status: 500 });
   }
 }

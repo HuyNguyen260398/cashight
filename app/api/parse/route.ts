@@ -3,7 +3,12 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
 import { parseTPBankStatement } from '@/lib/parsers/tpbank';
-import { requireApiSession } from '@/lib/require-session';
+import { requireApiSessionWithUser } from '@/lib/require-session';
+import { getPdfPassword } from '@/lib/server-secrets';
+import { redactForLog } from '@/lib/security/logging';
+import { assertSameOrigin } from '@/lib/security/origin';
+import { checkRateLimit } from '@/lib/security/rate-limit';
+import { validatePdfUpload } from '@/lib/security/upload';
 import {
   saveStatement,
   statementExists,
@@ -19,7 +24,7 @@ import {
  * totals, storage keys. Never raw descriptions, names, the full PAN, or the file.
  */
 function logStage(reqId: string, stage: string, extra?: Record<string, unknown>) {
-  const suffix = extra ? ` ${JSON.stringify(extra)}` : '';
+  const suffix = extra ? ` ${JSON.stringify(redactForLog(extra))}` : '';
   console.info(`[parse ${reqId}] ${stage}${suffix}`);
 }
 
@@ -45,6 +50,7 @@ export async function POST(request: Request) {
       STORAGE_REGION: Boolean(process.env.STORAGE_REGION),
       AWS_REGION: Boolean(process.env.AWS_REGION),
       PDF_PASSWORD: Boolean(process.env.PDF_PASSWORD),
+      PDF_PASSWORD_PARAMETER: Boolean(process.env.PDF_PASSWORD_PARAMETER),
     },
   });
 
@@ -55,11 +61,22 @@ export async function POST(request: Request) {
   // Catch it, log the full error, and return JSON so the cause is visible both
   // in CloudWatch and to the client.
   try {
-    const unauthorized = await requireApiSession();
-    if (unauthorized) {
+    const authResult = await requireApiSessionWithUser();
+    if ('response' in authResult) {
       logStage(reqId, 'unauthorized', { elapsed: elapsed() });
-      return unauthorized;
+      return authResult.response;
     }
+    const { session } = authResult;
+
+    const invalidOrigin = assertSameOrigin(request);
+    if (invalidOrigin) return invalidOrigin;
+
+    const rateLimitKey = session.user.email ?? session.user.name ?? 'unknown-user';
+    const rateLimited = checkRateLimit(`parse:${rateLimitKey}`, {
+      limit: 5,
+      windowMs: 10 * 60 * 1000,
+    });
+    if (rateLimited) return rateLimited;
 
     let formData: FormData;
     try {
@@ -78,18 +95,13 @@ export async function POST(request: Request) {
 
     logStage(reqId, 'file received', { type: file.type, size: file.size });
 
-    if (file.type !== 'application/pdf') {
-      return Response.json({ error: 'Only PDF files are accepted.' }, { status: 415 });
-    }
+    const upload = await validatePdfUpload(file);
+    if ('response' in upload) return upload.response;
 
-    if (file.size > 5 * 1024 * 1024) {
-      return Response.json({ error: 'File is too large (max 5 MB).' }, { status: 413 });
-    }
-
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const { buffer } = upload;
     logStage(reqId, 'buffer ready', { bytes: buffer.length, elapsed: elapsed() });
 
-    const pdfPassword = process.env.PDF_PASSWORD;
+    const pdfPassword = await getPdfPassword();
 
     let statement: Awaited<ReturnType<typeof parseTPBankStatement>>;
     try {
@@ -109,10 +121,10 @@ export async function POST(request: Request) {
         console.error(`[parse ${reqId}] parse failed: PasswordException — ${reason}`);
         return Response.json(
           { error: 'This PDF is password-protected and the stored password did not unlock it.' },
-          { status: 422 },
-        );
-      }
-      console.error(`[parse ${reqId}] parse failed`, describeError(err));
+        { status: 422 },
+      );
+    }
+      console.error(`[parse ${reqId}] parse failed`, redactForLog(describeError(err)));
       return Response.json(
         { error: 'Could not parse PDF. Make sure it is a TPBank statement.' },
         { status: 422 },
@@ -136,7 +148,10 @@ export async function POST(request: Request) {
       } catch (err) {
         // A flaky existence check should not block the upload; the save below has
         // its own error handling for real storage failures.
-        console.error(`[parse ${reqId}] statementExists check failed`, describeError(err));
+        console.error(
+          `[parse ${reqId}] statementExists check failed`,
+          redactForLog(describeError(err)),
+        );
       }
     }
 
@@ -146,7 +161,7 @@ export async function POST(request: Request) {
       logStage(reqId, 'save ok', { key, elapsed: elapsed() });
       return Response.json({ ...statement, _storageKey: key });
     } catch (err) {
-      console.error(`[parse ${reqId}] save failed`, describeError(err));
+      console.error(`[parse ${reqId}] save failed`, redactForLog(describeError(err)));
       const e = err as { name?: string; message?: string };
       // A credentials/auth failure is environmental, not a bug — return an
       // actionable message and 503 (storage dependency unavailable) instead of a
@@ -167,10 +182,10 @@ export async function POST(request: Request) {
     // The opaque-500 catch-all. Reaching here means an error escaped every inner
     // handler — log it loudly and still answer with JSON so the client shows a
     // real message instead of the bare "Upload failed (500)".
-    console.error(`[parse ${reqId}] UNCAUGHT in upload handler`, {
+    console.error(`[parse ${reqId}] UNCAUGHT in upload handler`, redactForLog({
       elapsed: elapsed(),
       ...describeError(err),
-    });
+    }));
     const e = err as { name?: string };
     return Response.json(
       { error: 'Unexpected server error while processing the upload.', detail: e.name ?? 'UnknownError' },

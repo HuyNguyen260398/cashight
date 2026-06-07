@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * Thin streaming wrapper around the Gemini API.
  *
@@ -11,8 +13,8 @@ import { GoogleGenAI } from '@google/genai';
 
 export async function* streamSummary(
   prompt: string,
+  apiKey: string | undefined,
 ): AsyncGenerator<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error('GEMINI_API_KEY is not set');
   }

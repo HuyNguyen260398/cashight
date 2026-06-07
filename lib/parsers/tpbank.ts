@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * Deterministic parser for TPBank Vietnamese credit-card PDF statements.
  *

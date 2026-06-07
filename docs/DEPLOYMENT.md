@@ -30,7 +30,9 @@ an output instead of a console lookup, and several previously-manual steps are d
 
 1. **Authorizing the Amplify GitHub App** on the repo — a one-time browser OAuth step.
    (Skip it only if you pass `github_access_token`; see Step 1.)
-2. **Secret env vars** — set in the console so they never land in Terraform state.
+2. **Auth.js secret env vars** — set in the console so they never land in Terraform state.
+   Gemini and PDF secrets are stored as SSM SecureString parameters and fetched at
+   request time.
 
 ## Context values
 
@@ -81,8 +83,9 @@ terraform output amplify_app_url           # production URL once deployed
 ## Step 2 — Set the secret env vars in the Amplify Console
 
 Terraform set the **non-secret** env vars (`STORAGE_REGION`, `STATEMENTS_BUCKET`,
-`AUTH_COGNITO_ID`, `AUTH_COGNITO_ISSUER`, `AUTH_URL`). `AWS_REGION` is **not** set
-here — Amplify forbids the reserved `AWS` prefix, so server-side S3 code reads
+`GEMINI_API_KEY_PARAMETER`, `PDF_PASSWORD_PARAMETER`, `AUTH_COGNITO_ID`,
+`AUTH_COGNITO_ISSUER`, `AUTH_URL`). `AWS_REGION` is **not** set here — Amplify
+forbids the reserved `AWS` prefix, so server-side AWS clients read
 `STORAGE_REGION=ap-southeast-1` instead.
 
 > ⚠️ **`AUTH_URL` is required.** Behind Amplify's CloudFront proxy the SSR runtime
@@ -90,11 +93,28 @@ here — Amplify forbids the reserved `AWS` prefix, so server-side S3 code reads
 > OAuth `redirect_uri`s as `https://localhost:3000/...` → Google/Cognito reject with
 > `redirect_uri_mismatch`. Set `AUTH_URL=https://main.<APP_ID>.amplifyapp.com`.
 
-Add the **secrets** in the console
+Create or update the runtime SecureString parameters before deploying:
+
+```bash
+aws ssm put-parameter \
+  --type SecureString \
+  --name /cashight/prod/GEMINI_API_KEY \
+  --value '<value>' \
+  --overwrite
+
+aws ssm put-parameter \
+  --type SecureString \
+  --name /cashight/prod/PDF_PASSWORD \
+  --value '<value>' \
+  --overwrite
+```
+
+Do not commit or paste real secret values into Terraform files. Terraform manages
+only the parameter names and IAM read permissions.
+
+Add the remaining **Auth.js secrets** in the console
 (App settings → Environment variables) so they stay out of Terraform state:
 
-- `GEMINI_API_KEY` — from Google AI Studio
-- `PDF_PASSWORD` — password for the protected TPBank PDFs
 - `AUTH_SECRET` — `openssl rand -base64 32`
 - `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` — Google OAuth client. In the Google
   Cloud Console for this client, the **Authorized redirect URIs** must include
@@ -107,6 +127,12 @@ Add the **secrets** in the console
 
 > These coexist with the Terraform-set vars; `aws_amplify_app.cashight` has
 > `ignore_changes = [environment_variables]` so a later `terraform apply` won't delete them.
+
+Residual risk: `AUTH_SECRET`, OAuth provider secrets, and the Cognito client secret
+still have to exist in the Amplify/Auth.js runtime environment because Auth.js
+providers and session encryption read them during process startup. Move them to
+a runtime-secret bootstrap only after that flow is designed and smoke-tested, or
+remove providers that require process-start secrets.
 
 ## Step 3 — Set GitHub Actions repository variables
 
@@ -134,6 +160,14 @@ At `terraform output -raw amplify_app_url` (`https://main.<APP_ID>.amplifyapp.co
 - [ ] Dashboard renders (KPIs, charts, table)
 - [ ] AI summary streams
 - [ ] Works on a real mobile device
+- [ ] Response headers include `Strict-Transport-Security`,
+      `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, and
+      `Permissions-Policy`
+- [ ] CSP is still report-only unless local and production console checks show
+      no blocking violations
+- [ ] AWS WAF web ACL is associated with the Amplify app and WAF metrics emit
+      after normal traffic
+- [ ] CloudWatch alarms exist for Amplify `5xxErrors`, `4xxErrors`, and `Latency`
 
 ## Step 6 — CloudWatch logs (PII gate)
 
@@ -141,6 +175,12 @@ CloudWatch → the Amplify SSR log group:
 
 - [ ] No error patterns in the first invocations
 - [ ] **No PII** — no full card numbers, no raw statement contents
+- [ ] Export a recent log sample and run:
+
+```bash
+pnpm security:scan-logs <exported-log-file>
+```
+
 - [ ] If anything sensitive appears, fix logging and redeploy before going further
 
 ---

@@ -11,7 +11,6 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  id-token: write   # required for OIDC
   contents: read
 
 env:
@@ -23,13 +22,15 @@ jobs:
     name: Lint, Build & Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v6        # reads pnpm 11.2.2 from packageManager
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@ac6db6d3c1f721f886538a378a2d73e85697340a # v6, reads pnpm 11.2.2 from packageManager
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level moderate
+      - run: pnpm tsc --noEmit
       - run: pnpm lint
       - run: pnpm build
       - run: pnpm run --if-present test
@@ -38,9 +39,12 @@ jobs:
     name: Trigger Amplify Release
     needs: verify
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v5  # v5 runs on Node.js 24 (v4 bundled the now-deprecated Node 20)
+        uses: aws-actions/configure-aws-credentials@cabfdba3510de1431bac9dba27511d97497fc100 # v5
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}

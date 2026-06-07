@@ -15,6 +15,43 @@ resource "aws_s3_bucket_public_access_block" "statements" {
   restrict_public_buckets = true
 }
 
+resource "aws_s3_bucket_ownership_controls" "statements" {
+  bucket = aws_s3_bucket.statements.id
+
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
+
+data "aws_iam_policy_document" "statements_deny_insecure_transport" {
+  statement {
+    sid    = "DenyInsecureTransport"
+    effect = "Deny"
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    actions = ["s3:*"]
+    resources = [
+      aws_s3_bucket.statements.arn,
+      "${aws_s3_bucket.statements.arn}/*",
+    ]
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "statements" {
+  bucket = aws_s3_bucket.statements.id
+  policy = data.aws_iam_policy_document.statements_deny_insecure_transport.json
+}
+
 resource "aws_s3_bucket_versioning" "statements" {
   bucket = aws_s3_bucket.statements.id
   versioning_configuration {

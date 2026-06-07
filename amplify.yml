@@ -10,9 +10,11 @@ frontend:
       commands:
         # Amplify's WEB_COMPUTE platform injects app/branch env vars into the BUILD
         # container only — they are NOT forwarded to the Next.js SSR runtime (Lambda).
-        # Persist the ones our server code reads into .env.production so Next.js bundles
-        # them into the compute output and they exist in process.env at request time.
-        - env | grep -E '^(STORAGE_REGION|STATEMENTS_BUCKET|GEMINI_API_KEY|PDF_PASSWORD|ALLOWED_EMAIL|AUTH_)' >> .env.production
+        # Persist only runtime env vars still required at process start. Auth.js
+        # provider/session secrets remain here as residual build-artifact risk
+        # until a tested runtime-secret bootstrap replaces process-start reads.
+        # GEMINI_API_KEY and PDF_PASSWORD are fetched from SSM at request time.
+        - env | grep -E '^(STORAGE_REGION|STATEMENTS_BUCKET|GEMINI_API_KEY_PARAMETER|PDF_PASSWORD_PARAMETER|ALLOWED_EMAIL|AUTH_)' >> .env.production
         - pnpm run build
   artifacts:
     baseDirectory: .next

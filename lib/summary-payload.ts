@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * Anonymized payload builder for the AI spending summary.
  *
@@ -40,6 +42,10 @@ function round1(x: number): number {
   return Math.round(x * 10) / 10;
 }
 
+export function sanitizeSummaryLabel(label: string): string {
+  return label.replace(/[\x00-\x1F\x7F]/g, '').slice(0, 120);
+}
+
 export function buildSummaryPayload(view: AggregatedView): SummaryPayload {
   // --- period ---
   const period: { year: number; month?: number } = { year: view.spec.year };
@@ -57,14 +63,14 @@ export function buildSummaryPayload(view: AggregatedView): SummaryPayload {
 
   // --- topCategories --- (reuse the view's pct, a fraction 0..1 → percentage)
   const topCategories = view.byCategory.slice(0, 5).map((c) => ({
-    category: c.category,
+    category: sanitizeSummaryLabel(c.category),
     amount: c.value,
     pct: round1(c.pct * 100),
   }));
 
   // --- topMerchants ---
   const topMerchants = view.topMerchants.slice(0, 5).map((m) => ({
-    merchant: m.merchant,
+    merchant: sanitizeSummaryLabel(m.merchant),
     amount: m.value,
   }));
 
@@ -88,7 +94,10 @@ export function buildSummaryPayload(view: AggregatedView): SummaryPayload {
     totals,
     topCategories,
     topMerchants,
-    subPeriods: view.subPeriods,
+    subPeriods: view.subPeriods.map((subPeriod) => ({
+      label: sanitizeSummaryLabel(subPeriod.label),
+      value: subPeriod.value,
+    })),
     internationalSpendPct,
   };
 }
