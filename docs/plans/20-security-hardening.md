@@ -23,7 +23,7 @@ This plan hardens Cashight after completion of the original product plans. It co
 Current repository findings:
 
 - `next.config.ts` is empty, so the app does not set first-party security headers or disable the `X-Powered-By` header.
-- `pnpm audit --audit-level moderate` on 2026-06-07 reports one moderate advisory: `postcss < 8.5.10`, currently resolved through `postcss@8.4.31` under `next` and `next-auth`.
+- `pnpm audit --audit-level moderate` on 2026-06-07 reports one moderate advisory: `postcss < 8.5.10`; `postcss@8.4.31` is currently selected transitively under `next` and `next-auth`, so it remains vulnerable until overridden or upgraded.
 - `/api/parse` checks `file.type === 'application/pdf'` and `file.size <= 5 MB`, but does not check PDF magic bytes. OWASP recommends not trusting the `Content-Type` header for uploaded files.
 - API route handlers require an authenticated session, but they do not enforce same-origin checks for unsafe methods and do not apply app-level throttling.
 - S3 has public access block, versioning, SSE-S3, and lifecycle controls, but lacks explicit object ownership controls, deny-insecure-transport bucket policy, and narrower ListBucket prefix conditions.
@@ -37,7 +37,7 @@ Current repository findings:
 - **REQ-003**: Keep AI summaries privacy-preserving. Gemini must receive only anonymized aggregates and sanitized aggregate labels, never raw transaction descriptions, cardholder names, PAN values, PDF contents, or storage objects.
 - **REQ-004**: Keep the S3 object layout unchanged: `statements/{cardLast4}/{year}/{year}-{mm}.json`.
 - **REQ-005**: Keep re-upload overwrite behavior unchanged. S3 versioning must continue preserving prior versions.
-- **SEC-001**: Add browser security headers through Next.js and Amplify-hosted response configuration. Next.js supports custom headers in `next.config.js`, and Amplify supports repository-root `customHttp.yml`.
+- **SEC-001**: Add browser security headers through Next.js and Amplify-hosted response configuration. Next.js supports custom headers in this repo's `next.config.ts`, and Amplify supports repository-root `customHttp.yml`.
 - **SEC-002**: Add a CSP rollout in report-only mode first. Enforce CSP only after local and production verification show no broken Next.js, Auth.js, theme, or chart behavior.
 - **SEC-003**: Treat Next.js route handlers and any future Server Actions as public-facing API endpoints. Validate authentication and authorization at the route/action body, not only in `proxy.ts`.
 - **SEC-004**: Do not rely on `proxy.ts` for authoritative authorization because the current codebase documents Amplify adapter behavior that may not execute Next 16 Proxy in production.
@@ -50,7 +50,7 @@ Current repository findings:
 - **SEC-011**: Harden S3 with explicit bucket-owner-enforced object ownership, deny-insecure-transport policy, and IAM permissions scoped to the `statements/` prefix.
 - **SEC-012**: Add CI controls for dependency audit, full TypeScript checking, workflow least privilege, and action pinning.
 - **CON-001**: `pnpm` is pinned to `11.2.2`; all dependency remediation must preserve `packageManager`.
-- **CON-002**: AWS resources target `ap-southeast-1`, except AWS WAF web ACLs for Amplify must be created in the Global (CloudFront) Region compatible with Amplify.
+- **CON-002**: AWS resources target `ap-southeast-1`, except AWS WAFv2 web ACLs with `scope = "CLOUDFRONT"` for Amplify must be created in `us-east-1`.
 - **CON-003**: Terraform must not manage secret values. Terraform may manage non-secret secret names, parameter ARNs, IAM read permissions, and documentation.
 - **CON-004**: Avoid adding external databases or Redis solely for rate limiting. Use AWS WAF for production edge enforcement and a small in-process limiter as a defense-in-depth guard.
 - **PAT-001**: Keep route handlers thin. Put reusable security helpers in `lib/security/`.
