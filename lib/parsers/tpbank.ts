@@ -9,6 +9,11 @@
  * logged. Only `cardLast4` survives into the output.
  */
 
+// MUST precede the `pdf-parse` import: pdfjs-dist (its engine) references
+// `DOMMatrix` while its module body evaluates. On the Amplify Lambda the native
+// `@napi-rs/canvas` that would supply it cannot load, so we install the globals
+// ourselves first. See lib/pdf-dom-polyfill.ts for the full story.
+import '@/lib/pdf-dom-polyfill';
 import { PDFParse } from 'pdf-parse';
 import { categorize, normalizeMerchant } from '@/lib/categorize';
 import {
