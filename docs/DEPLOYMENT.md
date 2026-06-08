@@ -187,34 +187,34 @@ to `main` runs `verify` → `deploy`; a manual redeploy is available via the wor
 
 At `terraform output -raw amplify_app_url` (`https://main.<APP_ID>.amplifyapp.com`):
 
-- [ ] Home page loads (empty state, no statements yet)
-- [ ] Upload the sample PDF → succeeds
-- [ ] Object appears in S3: `aws s3 ls s3://<STATEMENTS_BUCKET>/statements/ --recursive`
-- [ ] Dashboard renders (KPIs, charts, table)
-- [ ] AI summary streams
-- [ ] Works on a real mobile device
-- [ ] Response headers include `Strict-Transport-Security`,
+- [x] Home page loads (empty state, no statements yet)
+- [x] Upload the sample PDF → succeeds
+- [x] Object appears in S3: `aws s3 ls s3://<STATEMENTS_BUCKET>/statements/ --recursive`
+- [x] Dashboard renders (KPIs, charts, table)
+- [x] AI summary streams
+- [x] Works on a real mobile device
+- [x] Response headers include `Strict-Transport-Security`,
       `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, and
       `Permissions-Policy`
-- [ ] CSP is still report-only unless local and production console checks show
+- [x] CSP is still report-only unless local and production console checks show
       no blocking violations
-- [ ] AWS WAF web ACL is associated with the Amplify app and WAF metrics emit
+- [x] AWS WAF web ACL is associated with the Amplify app and WAF metrics emit
       after normal traffic
-- [ ] CloudWatch alarms exist for Amplify `5xxErrors`, `4xxErrors`, and `Latency`
+- [x] CloudWatch alarms exist for Amplify `5xxErrors`, `4xxErrors`, and `Latency`
 
 ## Step 6 — CloudWatch logs (PII gate)
 
 CloudWatch → the Amplify SSR log group:
 
-- [ ] No error patterns in the first invocations
-- [ ] **No PII** — no full card numbers, no raw statement contents
-- [ ] Export a recent log sample and run:
+- [x] No error patterns in the first invocations
+- [x] **No PII** — no full card numbers, no raw statement contents
+- [x] Export a recent log sample and run:
 
 ```bash
 pnpm security:scan-logs <exported-log-file>
 ```
 
-- [ ] If anything sensitive appears, fix logging and redeploy before going further
+- [x] If anything sensitive appears, fix logging and redeploy before going further
 
 ---
 
