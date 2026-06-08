@@ -1,3 +1,5 @@
+import 'server-only';
+
 /**
  * Minimal DOM globals required by `pdfjs-dist` (the engine behind `pdf-parse`)
  * when it runs under Node.

@@ -10,7 +10,7 @@ data "aws_iam_policy_document" "statements_rw" {
       "s3:PutObject",
       "s3:DeleteObject",
     ]
-    resources = ["${aws_s3_bucket.statements.arn}/*"]
+    resources = ["${aws_s3_bucket.statements.arn}/statements/*"]
   }
 
   statement {
@@ -18,6 +18,23 @@ data "aws_iam_policy_document" "statements_rw" {
     effect    = "Allow"
     actions   = ["s3:ListBucket"]
     resources = [aws_s3_bucket.statements.arn]
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["statements/*", "statements/"]
+    }
+  }
+
+  statement {
+    sid    = "ReadRuntimeSecureParameters"
+    effect = "Allow"
+    actions = [
+      "ssm:GetParameter",
+    ]
+    resources = [
+      "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter/cashight/prod/GEMINI_API_KEY",
+      "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter/cashight/prod/PDF_PASSWORD",
+    ]
   }
 }
 

@@ -1,17 +1,31 @@
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import nextConfig from '@/next.config';
 import packageJson from '@/package.json';
 
 describe('deployment dependencies', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
   it('declares pdfjs-dist directly so parser packaging remains explicit', () => {
     expect(packageJson.dependencies).toHaveProperty('pdfjs-dist');
   });
 
-  it('does not externalize pdf-parse because Amplify SSR cannot resolve its pdfjs-dist import', () => {
+  it('does not externalize pdf-parse in production because Amplify SSR cannot resolve its pdfjs-dist import', () => {
+    // The top-level import evaluates under vitest's NODE_ENV ('test'), i.e. the
+    // non-development branch — the same config the production build emits.
     expect(nextConfig.serverExternalPackages ?? []).not.toContain('pdf-parse');
+  });
+
+  it('externalizes pdf-parse in development so Turbopack dev can resolve the pdfjs worker', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    vi.resetModules();
+    const devConfig = (await import('@/next.config')).default;
+    expect(devConfig.serverExternalPackages ?? []).toContain('pdf-parse');
   });
 
   // When Turbopack bundles pdf-parse into a route chunk, pdfjs's fake worker tries

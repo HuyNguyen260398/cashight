@@ -5,9 +5,9 @@
 # stay manual on purpose:
 #   1. Authorizing the Amplify GitHub App on the repo (a one-time browser OAuth
 #      step Terraform can't click) — unless you supply `github_access_token`.
-#   2. The *secret* env vars (GEMINI_API_KEY, PDF_PASSWORD, AUTH_SECRET,
-#      AUTH_GOOGLE_*, AUTH_COGNITO_SECRET) — set in the console so they never
-#      land in Terraform state.
+#   2. The Auth.js *secret* env vars (AUTH_SECRET, AUTH_GOOGLE_*,
+#      AUTH_COGNITO_SECRET) — set in the console so they never land in
+#      Terraform state. GEMINI_API_KEY and PDF_PASSWORD live in SSM.
 
 variable "github_access_token" {
   type        = string
@@ -80,10 +80,12 @@ resource "aws_amplify_app" "cashight" {
   # apply to an existing app — they only seed a from-scratch create. AUTH_URL was
   # also set live via `aws amplify update-app`; it's recorded here for parity.
   environment_variables = {
-    STORAGE_REGION      = var.region
-    STATEMENTS_BUCKET   = aws_s3_bucket.statements.bucket
-    AUTH_COGNITO_ID     = aws_cognito_user_pool_client.web.id
-    AUTH_COGNITO_ISSUER = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.users.id}"
+    STORAGE_REGION           = var.region
+    STATEMENTS_BUCKET        = aws_s3_bucket.statements.bucket
+    GEMINI_API_KEY_PARAMETER = "/cashight/prod/GEMINI_API_KEY"
+    PDF_PASSWORD_PARAMETER   = "/cashight/prod/PDF_PASSWORD"
+    AUTH_COGNITO_ID          = aws_cognito_user_pool_client.web.id
+    AUTH_COGNITO_ISSUER      = "https://cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.users.id}"
     # Auth.js can't derive the public URL behind Amplify's proxy (the SSR runtime
     # sees Host: localhost:3000 with no trusted X-Forwarded-Host), so it must be
     # pinned or OAuth redirect_uri becomes https://localhost:3000/... → mismatch.

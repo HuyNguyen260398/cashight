@@ -1,3 +1,6 @@
+import 'server-only';
+
+import type { Session } from 'next-auth';
 import { redirect } from 'next/navigation';
 
 import { auth } from '@/auth';
@@ -12,6 +15,8 @@ import { auth } from '@/auth';
  * recommends regardless. `proxy.ts` stays as a best-effort fast path for
  * environments that do run it.
  */
+
+type ApiSession = Session & { user: NonNullable<Session['user']> };
 
 // Gate on a real authenticated user, not just a truthy `auth()` result: a
 // misconfiguration (e.g. UntrustedHost) makes Auth.js v5 return a truthy error
@@ -31,9 +36,17 @@ export async function requireSession() {
  * API callers get a clean JSON 401 instead of an HTML redirect.
  */
 export async function requireApiSession(): Promise<Response | null> {
+  const result = await requireApiSessionWithUser();
+  return 'response' in result ? result.response : null;
+}
+
+export async function requireApiSessionWithUser(): Promise<
+  | { session: ApiSession }
+  | { response: Response }
+> {
   const session = await auth();
   if (!session?.user) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    return { response: Response.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
-  return null;
+  return { session: session as ApiSession };
 }
