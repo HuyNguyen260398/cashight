@@ -28,6 +28,26 @@ const cspReportOnly = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // pdf-parse / pdfjs-dist runtime packaging is environment-split on purpose:
+  //
+  //  - Production (`next build`, Amplify SSR): pdf-parse MUST stay bundled.
+  //    Externalizing it breaks Amplify because the SSR runtime cannot resolve
+  //    pdf-parse's transitive `pdfjs-dist` import from node_modules. Production
+  //    instead relies on bundling + scripts/copy-pdf-worker.mjs, which ships the
+  //    pdfjs worker to `.next/server/chunks/pdf.worker.mjs` so the fake worker
+  //    resolves at runtime. See lib/__tests__/deployment-dependencies.test.ts.
+  //
+  //  - Development (`next dev`, Turbopack): the bundled fake worker tries to
+  //    import `.next/dev/server/chunks/pdf.worker.mjs`, which Turbopack never
+  //    emits (and copying it there does not help — Turbopack resolves the
+  //    dynamic import through its module graph, not the filesystem). The upload
+  //    then fails with "Setting up fake worker failed: Cannot find module
+  //    .../pdf.worker.mjs". Externalizing ONLY in dev loads pdf-parse natively
+  //    from node_modules, where the worker sits beside the package and resolves.
+  //
+  // The production artifact is therefore unchanged; this only affects dev.
+  serverExternalPackages:
+    process.env.NODE_ENV === 'development' ? ['pdf-parse'] : [],
   experimental: {
     taint: true,
   },
