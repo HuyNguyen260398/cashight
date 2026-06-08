@@ -110,7 +110,40 @@ aws ssm put-parameter \
 ```
 
 Do not commit or paste real secret values into Terraform files. Terraform manages
-only the parameter names and IAM read permissions.
+only the IAM read permissions for these parameters (`aws_iam_policy.statements_rw`,
+attached to the **compute** role) — not the parameters themselves. Create them with
+the commands above **before the first request**, or the SSR runtime gets `undefined`
+and `/api/parse` fails with *"This PDF is password-protected and the stored password
+did not unlock it."* (and `/api/summarize` fails identically).
+
+> ⚠️ **The `*_PARAMETER` env vars are NOT auto-applied to an existing app.**
+> `aws_amplify_app.cashight` has `ignore_changes = [environment_variables]`, so the
+> `GEMINI_API_KEY_PARAMETER` / `PDF_PASSWORD_PARAMETER` values in `amplify.tf` only
+> seed a *from-scratch* create — a later `terraform apply` will **not** push them to a
+> live app. On an existing app set them manually:
+>
+> ```bash
+> aws amplify update-app --app-id <APP_ID> --region ap-southeast-1 \
+>   --environment-variables \
+>     PDF_PASSWORD_PARAMETER=/cashight/prod/PDF_PASSWORD,\
+> GEMINI_API_KEY_PARAMETER=/cashight/prod/GEMINI_API_KEY,<...all other vars...>
+> ```
+>
+> `--environment-variables` **replaces the whole map** — include every existing var
+> (`aws amplify get-app --query app.environmentVariables`) or you will drop the
+> `AUTH_*` secrets. Do **not** keep plain `PDF_PASSWORD` / `GEMINI_API_KEY` vars: they
+> are deliberately excluded from the `amplify.yml` runtime allowlist (below), so they
+> are dead weight that only widens the build-container secret surface.
+
+> ℹ️ **Runtime env vars must be in the `amplify.yml` allowlist.** Amplify's
+> `WEB_COMPUTE` platform injects app/branch env vars into the **build** container only
+> — they are *not* forwarded to the Next.js SSR Lambda. `amplify.yml`'s build phase
+> persists a curated set into `.env.production`:
+> ```
+> env | grep -E '^(STORAGE_REGION|STATEMENTS_BUCKET|GEMINI_API_KEY_PARAMETER|PDF_PASSWORD_PARAMETER|ALLOWED_EMAIL|AUTH_)' >> .env.production
+> ```
+> Any **new** runtime env var must be added to that grep, and a **redeploy** is
+> required after changing app env vars so the value is re-baked into `.env.production`.
 
 Add the remaining **Auth.js secrets** in the console
 (App settings → Environment variables) so they stay out of Terraform state:
@@ -182,6 +215,34 @@ pnpm security:scan-logs <exported-log-file>
 ```
 
 - [ ] If anything sensitive appears, fix logging and redeploy before going further
+
+---
+
+## Troubleshooting
+
+### Upload → *"This PDF is password-protected and the stored password did not unlock it."* (HTTP 422)
+
+The SSR runtime received **no** PDF password (not a *wrong* one). `getPdfPassword()`
+(`lib/server-secrets.ts`) reads `PDF_PASSWORD_PARAMETER` → SSM, else falls back to a
+plain `PDF_PASSWORD` env var; here it returned `undefined`. Check, in order:
+
+1. **SSM parameter exists** —
+   `aws ssm get-parameter --name /cashight/prod/PDF_PASSWORD --with-decryption --region ap-southeast-1`.
+   `ParameterNotFound` → create it (Step 2).
+2. **`PDF_PASSWORD_PARAMETER` is set on the live app** —
+   `aws amplify get-app --app-id <APP_ID> --query app.environmentVariables` — and is in
+   the `amplify.yml` allowlist. If you just added/changed it, **redeploy** (env vars are
+   baked into `.env.production` at build time, not read live).
+3. **Compute role can read SSM** — the `ReadRuntimeSecureParameters` statement must be on
+   `cashight-statements-rw` (attached to the **compute** role). Sync with
+   `terraform apply -target=aws_iam_policy.statements_rw`. If the permission is missing,
+   the symptom is instead a **500** (SSM `AccessDenied` throws before the password check),
+   not this 422.
+
+**Diagnosis tell:** the Amplify SSR log group prints an env-boolean snapshot at
+`[parse …] request received` and, on failure, `PasswordException — no PDF_PASSWORD
+configured` (absent at runtime) vs `wrong password` (present but incorrect). The Gemini
+summary path breaks the same way via `GEMINI_API_KEY_PARAMETER`.
 
 ---
 
