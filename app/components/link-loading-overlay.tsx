@@ -7,8 +7,9 @@ import { Loader2 } from 'lucide-react';
 // pending. Must be a descendant of a Next.js <Link>; `useLinkStatus` reads that
 // link's in-flight navigation state and stays pending for the entire navigation
 // (including the destination's server render), so the overlay covers the whole
-// page transition. The `fixed` overlay escapes the inline link in the layout.
-export function NavLinkStatus() {
+// page transition. The `fixed` overlay escapes the inline link in the layout,
+// so it works inside nav links and `<Button asChild>` links alike.
+export function LinkLoadingOverlay() {
   const { pending } = useLinkStatus();
 
   if (!pending) return null;

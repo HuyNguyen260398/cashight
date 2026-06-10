@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
 import { Button } from "@/components/ui/button";
-import { NavLinkStatus } from "./nav-link-status";
+import { LinkLoadingOverlay } from "./link-loading-overlay";
 import { ThemeToggle } from "./theme-toggle";
 
 export async function Nav() {
@@ -13,15 +13,15 @@ export async function Nav() {
       <nav className="container mx-auto flex flex-wrap items-center gap-4 px-4 py-3 text-sm md:px-6">
         <Link href="/" className="font-medium hover:underline">
           Dashboard
-          <NavLinkStatus />
+          <LinkLoadingOverlay />
         </Link>
         <Link href="/upload" className="hover:underline">
           Upload
-          <NavLinkStatus />
+          <LinkLoadingOverlay />
         </Link>
         <Link href="/statements" className="hover:underline">
           Statements
-          <NavLinkStatus />
+          <LinkLoadingOverlay />
         </Link>
         <div className="ml-auto flex items-center gap-3">
           {email ? (
