@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { LinkLoadingOverlay } from './link-loading-overlay';
 
 const LINKS = [
   { href: '/', label: 'Dashboard' },
@@ -43,7 +42,6 @@ export function NavLinks({
             )}
           >
             {link.label}
-            <LinkLoadingOverlay />
           </Link>
         );
       })}

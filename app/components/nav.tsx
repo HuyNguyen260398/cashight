@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
 import { Button } from "@/components/ui/button";
-import { LinkLoadingOverlay } from "./link-loading-overlay";
 import { MobileNav } from "./mobile-nav";
 import { NavLinks } from "./nav-links";
 import { ThemeToggle } from "./theme-toggle";
@@ -20,7 +19,6 @@ export async function Nav() {
       <nav className="container mx-auto flex items-center gap-2 px-4 py-3 text-sm md:gap-4 md:px-6">
         <Link href="/" className="font-semibold tracking-tight">
           Cashight
-          <LinkLoadingOverlay />
         </Link>
 
         {/* Desktop links */}
