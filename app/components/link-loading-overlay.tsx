@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useLinkStatus } from 'next/link';
-import { Loader2 } from 'lucide-react';
+import { LoadingSpinner } from './loading-spinner';
 
 // Minimum time the overlay stays on screen once a navigation begins, so fast
 // transitions don't flash the spinner away before the destination has rendered.
@@ -45,14 +45,5 @@ export function LinkLoadingOverlay() {
 
   if (!visible) return null;
 
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm"
-    >
-      <Loader2 className="h-12 w-12 animate-spin text-primary" />
-      <span className="sr-only">Loading…</span>
-    </div>
-  );
+  return <LoadingSpinner />;
 }

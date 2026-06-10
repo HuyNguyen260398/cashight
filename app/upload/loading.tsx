@@ -1,10 +1,10 @@
-import { Skeleton } from '@/components/ui/skeleton';
+import { LoadingSpinner } from '@/app/components/loading-spinner';
 
+// Route-level loading boundary for /upload. Using the shared spinner (instead of
+// a skeleton) keeps the loading effect identical whether the route is reached
+// from the nav, the "Upload another" button, or a direct load. Next renders this
+// immediately on navigation, so the page-scoped <LinkLoadingOverlay> on those
+// buttons would otherwise be unmounted before it could show.
 export default function Loading() {
-  return (
-    <main className="container mx-auto p-6 max-w-4xl">
-      <Skeleton className="h-8 w-56 mb-6" />
-      <Skeleton className="h-48 w-full rounded-lg" />
-    </main>
-  );
+  return <LoadingSpinner />;
 }
