@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { Pagination } from '@/components/ui/pagination';
 import {
   Table,
   TableHeader,
@@ -37,10 +38,61 @@ export type StatementRow = {
   uploadedAt: string | null;
 };
 
+type SortKey = 'period' | 'totalSpend';
+type SortDir = 'asc' | 'desc';
+
+interface SortState {
+  key: SortKey;
+  dir: SortDir;
+}
+
+function SortIndicator({
+  sortKey,
+  active,
+  dir,
+}: {
+  sortKey: SortKey;
+  active: SortKey;
+  dir: SortDir;
+}) {
+  if (sortKey !== active) return <span className="ml-1 opacity-30">↕</span>;
+  return <span className="ml-1">{dir === 'asc' ? '▲' : '▼'}</span>;
+}
+
 export function StatementsTable({ rows }: { rows: StatementRow[] }) {
   const router = useRouter();
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [sort, setSort] = useState<SortState>({ key: 'period', dir: 'desc' });
+  const PAGE_SIZE = 12;
+  const [page, setPage] = useState(1);
+
+  function toggleSort(key: SortKey) {
+    setSort((prev) =>
+      prev.key === key
+        ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: 'desc' },
+    );
+    setPage(1);
+  }
+
+  const sorted = [...rows].sort((a, b) => {
+    const cmp =
+      sort.key === 'period'
+        ? a.year - b.year || a.month - b.month
+        : a.totalSpend - b.totalSpend;
+    return sort.dir === 'asc' ? cmp : -cmp;
+  });
+
+  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  // Derive the clamped page rather than storing an out-of-range value, so a
+  // delete that shrinks the data (via router.refresh()) never strands an
+  // empty page.
+  const currentPage = Math.min(page, pageCount);
+  const paged = sorted.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
 
   async function handleDelete(row: StatementRow) {
     setDeletingKey(row.key);
@@ -77,14 +129,34 @@ export function StatementsTable({ rows }: { rows: StatementRow[] }) {
         <TableHeader>
           <TableRow>
             <TableHead>Card</TableHead>
-            <TableHead>Period</TableHead>
-            <TableHead className="text-right">Total spend</TableHead>
+            <TableHead
+              className="cursor-pointer select-none"
+              onClick={() => toggleSort('period')}
+            >
+              Period
+              <SortIndicator
+                sortKey="period"
+                active={sort.key}
+                dir={sort.dir}
+              />
+            </TableHead>
+            <TableHead
+              className="cursor-pointer select-none text-right"
+              onClick={() => toggleSort('totalSpend')}
+            >
+              Total spend
+              <SortIndicator
+                sortKey="totalSpend"
+                active={sort.key}
+                dir={sort.dir}
+              />
+            </TableHead>
             <TableHead>Uploaded</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => {
+          {paged.map((row) => {
             const mm = String(row.month).padStart(2, '0');
             const isDeleting = deletingKey === row.key;
             return (
@@ -154,6 +226,11 @@ export function StatementsTable({ rows }: { rows: StatementRow[] }) {
           })}
         </TableBody>
       </Table>
+      <Pagination
+        page={currentPage}
+        pageCount={pageCount}
+        onPageChange={setPage}
+      />
     </div>
   );
 }
