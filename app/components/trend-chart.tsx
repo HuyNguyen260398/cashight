@@ -35,7 +35,13 @@ export function TrendChart({ view }: { view: AggregatedView }) {
           tickFormatter={(v) => formatVNDCompact(Number(v))}
         />
         <Tooltip formatter={(v) => formatVND(Number(v))} />
-        <Bar dataKey="value" fill="var(--primary)" radius={[4, 4, 0, 0]} />
+        <defs>
+          <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#6366f1" />
+            <stop offset="100%" stopColor="#8b5cf6" />
+          </linearGradient>
+        </defs>
+        <Bar dataKey="value" fill="url(#trendGradient)" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

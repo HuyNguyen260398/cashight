@@ -38,12 +38,17 @@ export function InstallmentAreaChart({ view }: { view: AggregatedView }) {
           tickFormatter={(v) => formatVNDCompact(Number(v))}
         />
         <Tooltip formatter={(v) => formatVND(Number(v))} />
+        <defs>
+          <linearGradient id="installmentGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#14b8a6" stopOpacity={0.6} />
+            <stop offset="100%" stopColor="#14b8a6" stopOpacity={0.05} />
+          </linearGradient>
+        </defs>
         <Area
           type="monotone"
           dataKey="value"
-          stroke="var(--primary)"
-          fill="var(--primary)"
-          fillOpacity={0.2}
+          stroke="#14b8a6"
+          fill="url(#installmentGradient)"
         />
       </AreaChart>
     </ResponsiveContainer>
