@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { Pagination } from '@/components/ui/pagination';
 import {
   Table,
   TableHeader,
@@ -63,6 +64,8 @@ export function StatementsTable({ rows }: { rows: StatementRow[] }) {
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [sort, setSort] = useState<SortState>({ key: 'period', dir: 'desc' });
+  const PAGE_SIZE = 12;
+  const [page, setPage] = useState(1);
 
   function toggleSort(key: SortKey) {
     setSort((prev) =>
@@ -70,6 +73,7 @@ export function StatementsTable({ rows }: { rows: StatementRow[] }) {
         ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
         : { key, dir: 'desc' },
     );
+    setPage(1);
   }
 
   const sorted = [...rows].sort((a, b) => {
@@ -79,6 +83,16 @@ export function StatementsTable({ rows }: { rows: StatementRow[] }) {
         : a.totalSpend - b.totalSpend;
     return sort.dir === 'asc' ? cmp : -cmp;
   });
+
+  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  // Derive the clamped page rather than storing an out-of-range value, so a
+  // delete that shrinks the data (via router.refresh()) never strands an
+  // empty page.
+  const currentPage = Math.min(page, pageCount);
+  const paged = sorted.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
 
   async function handleDelete(row: StatementRow) {
     setDeletingKey(row.key);
@@ -142,7 +156,7 @@ export function StatementsTable({ rows }: { rows: StatementRow[] }) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sorted.map((row) => {
+          {paged.map((row) => {
             const mm = String(row.month).padStart(2, '0');
             const isDeleting = deletingKey === row.key;
             return (
@@ -212,6 +226,11 @@ export function StatementsTable({ rows }: { rows: StatementRow[] }) {
           })}
         </TableBody>
       </Table>
+      <Pagination
+        page={currentPage}
+        pageCount={pageCount}
+        onPageChange={setPage}
+      />
     </div>
   );
 }
