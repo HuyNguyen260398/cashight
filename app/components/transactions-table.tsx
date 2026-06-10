@@ -5,6 +5,7 @@ import type { Transaction } from '@/lib/schemas';
 import { categoryColor } from '@/lib/category-colors';
 import { formatVND } from '@/lib/format';
 import { Badge } from '@/components/ui/badge';
+import { Pagination } from '@/components/ui/pagination';
 import {
   Table,
   TableHeader,
@@ -40,7 +41,9 @@ export function TransactionsTable({
 }: {
   transactions: Transaction[];
 }) {
+  const PAGE_SIZE = 10;
   const [sort, setSort] = useState<SortState>({ key: 'date', dir: 'desc' });
+  const [page, setPage] = useState(1);
 
   function toggleSort(key: SortKey) {
     setSort((prev) =>
@@ -48,6 +51,7 @@ export function TransactionsTable({
         ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
         : { key, dir: 'desc' },
     );
+    setPage(1);
   }
 
   const sorted = [...transactions].sort((a, b) => {
@@ -62,8 +66,17 @@ export function TransactionsTable({
     return sort.dir === 'asc' ? cmp : -cmp;
   });
 
+  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  // Derive the clamped page rather than storing an out-of-range value, so a
+  // delete/period switch that shrinks the data never strands an empty page.
+  const currentPage = Math.min(page, pageCount);
+  const paged = sorted.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+
   return (
-    <>
+    <div>
       {/* Desktop table — hidden on mobile */}
       <div className="hidden md:block">
         <Table>
@@ -102,7 +115,7 @@ export function TransactionsTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sorted.map((t, i) => (
+            {paged.map((t, i) => (
               <TableRow key={`${t.date}-${t.description}-${i}`}>
                 <TableCell className="text-muted-foreground">
                   {t.date}
@@ -135,7 +148,7 @@ export function TransactionsTable({
 
       {/* Mobile card list — hidden on md+ */}
       <div className="flex flex-col gap-3 md:hidden">
-        {sorted.map((t, i) => (
+        {paged.map((t, i) => (
           <div
             key={`${t.date}-${t.description}-${i}`}
             className="rounded-lg border bg-card p-4 text-card-foreground shadow-sm"
@@ -166,6 +179,12 @@ export function TransactionsTable({
           </div>
         ))}
       </div>
-    </>
+
+      <Pagination
+        page={currentPage}
+        pageCount={pageCount}
+        onPageChange={setPage}
+      />
+    </div>
   );
 }
