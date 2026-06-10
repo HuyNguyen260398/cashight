@@ -72,8 +72,9 @@ Self-contained presentation-layer improvements (no parser, storage, aggregation,
 - [ ] **[Step 24](./24-chart-vibrancy-and-axis.md)** — Vibrant trend/installment/merchant charts + straight x-axis labels *(45–60m)*
 - [ ] **[Step 25](./25-scroll-to-top-button.md)** — Floating scroll-to-top button *(20–30m)*
 - [ ] **[Step 26](./26-per-page-loading-skeletons.md)** — Per-page loading skeletons for Statements & Upload *(25–35m)*
+- [ ] **[Step 27](./27-mobile-kpi-and-chart-layout-fixes.md)** — Mobile single-column KPI panels + Spending-by-category and Top-merchants layout fixes *(30–45m)*
 
-> **Milestone:** Dashboard panels have icons, both tables paginate and sort, charts are vibrant with straight axis labels, every page has a loading effect, and a scroll-to-top button is available app-wide.
+> **Milestone:** Dashboard panels have icons, both tables paginate and sort, charts are vibrant with straight axis labels, every page has a loading effect, a scroll-to-top button is available app-wide, KPI panels stack to one column on mobile, and the category/merchant charts no longer overlap.
 
 ---
 
@@ -90,8 +91,8 @@ Self-contained presentation-layer improvements (no parser, storage, aggregation,
 10 ──▶ 12 ─ 13 ─ 14 ─ 15 ─ 16 ─ 17 ──▶ 18 ──▶ 11 ──▶ 19 ──▶ 20
          (12–16 any order; 17 then 18 last)
 
-20 ──▶ 21 · 24 · 25 · 26   (independent, any order/parallel)
-        22 ──▶ 23          (23 reuses 22's pagination control)
+20 ──▶ 21 · 24 · 25 · 26 · 27   (independent, any order/parallel)
+        22 ──▶ 23               (23 reuses 22's pagination control)
 ```
 
 Most steps are linear, but Step 04 (dashboard) and Step 05 (AI) could be parallelized once Step 03 is done if you want to context-switch. In Phase 4, Steps 12–16 are independent and can be tackled in any order (or parallel worktrees); the auth steps come last (Step 17 Google, then Step 18 Cognito which builds on it) because they gate the finished app, and Step 11 (deploy) comes after everything.
