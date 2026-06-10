@@ -28,9 +28,10 @@ export function MerchantBar({
           width={160}
           interval={0}
           tick={{ fontSize: 11 }}
-          tickFormatter={(v: string) =>
-            v.length > 18 ? `${v.slice(0, 17)}…` : v
-          }
+          tickFormatter={(v) => {
+            const label = String(v);
+            return label.length > 18 ? `${label.slice(0, 17)}…` : label;
+          }}
         />
         <Tooltip formatter={(v) => formatVND(Number(v))} />
         <defs>
