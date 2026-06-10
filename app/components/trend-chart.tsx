@@ -20,15 +20,14 @@ export function TrendChart({ view }: { view: AggregatedView }) {
     <ResponsiveContainer width="100%" height={280}>
       <BarChart
         data={view.subPeriods}
-        margin={{ top: 8, right: 8, left: 0, bottom: 24 }}
+        margin={{ top: 8, right: 8, left: 0, bottom: 8 }}
       >
         <XAxis
           dataKey="label"
-          tick={{ fontSize: 12 }}
-          interval={0}
-          angle={-45}
-          textAnchor="end"
-          height={48}
+          tick={{ fontSize: 11 }}
+          interval="preserveStartEnd"
+          textAnchor="middle"
+          height={28}
         />
         <YAxis
           tick={{ fontSize: 12 }}
