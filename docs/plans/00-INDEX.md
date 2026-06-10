@@ -64,7 +64,7 @@ Self-contained enhancements requested before going live. Mostly independent — 
 
 ### Phase 7 — Dashboard UX refinements
 
-Self-contained presentation-layer improvements (no parser, storage, aggregation, schema, or auth changes). Steps 21, 24, 25, and 26 are independent and can be done in any order or in parallel worktrees; **Step 23 depends on Step 22** because it reuses the `components/ui/pagination.tsx` control introduced there.
+Self-contained presentation-layer improvements (no parser, storage, aggregation, schema, or auth changes). Steps 21, 24, 25, 26, and 27 are independent and can be done in any order or in parallel worktrees; **Step 23 depends on Step 22** because it reuses the `components/ui/pagination.tsx` control introduced there.
 
 - [ ] **[Step 21](./21-kpi-panel-icons.md)** — Add an icon to each KPI panel *(20–30m)*
 - [ ] **[Step 22](./22-transactions-table-pagination.md)** — Transactions table pagination (max 10/page) + reusable pagination control *(45–60m)*
