@@ -29,7 +29,13 @@ export function MerchantBar({
           tick={{ fontSize: 12 }}
         />
         <Tooltip formatter={(v) => formatVND(Number(v))} />
-        <Bar dataKey="value" fill="var(--primary)" radius={[0, 4, 4, 0]} />
+        <defs>
+          <linearGradient id="merchantGradient" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#f97316" />
+            <stop offset="100%" stopColor="#ec4899" />
+          </linearGradient>
+        </defs>
+        <Bar dataKey="value" fill="url(#merchantGradient)" radius={[0, 4, 4, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );
