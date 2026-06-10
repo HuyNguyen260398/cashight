@@ -25,8 +25,12 @@ export function MerchantBar({
         <YAxis
           type="category"
           dataKey="merchant"
-          width={140}
-          tick={{ fontSize: 12 }}
+          width={160}
+          interval={0}
+          tick={{ fontSize: 11 }}
+          tickFormatter={(v: string) =>
+            v.length > 18 ? `${v.slice(0, 17)}…` : v
+          }
         />
         <Tooltip formatter={(v) => formatVND(Number(v))} />
         <defs>
