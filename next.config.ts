@@ -23,7 +23,10 @@ const cspReportOnly = [
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'unsafe-inline'",
   "connect-src 'self'",
-  'upgrade-insecure-requests',
+  // NOTE: 'upgrade-insecure-requests' is intentionally omitted — it is ignored
+  // in a report-only policy (browsers warn about it). HTTPS is enforced in
+  // production via Amplify Hosting + HSTS (customHttp.yml). If this CSP is ever
+  // switched to the enforcing 'Content-Security-Policy' header, add it back there.
 ].join('; ');
 
 const nextConfig: NextConfig = {

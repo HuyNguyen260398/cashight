@@ -1,7 +1,6 @@
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
-import { LinkLoadingOverlay } from '@/app/components/link-loading-overlay';
 import { requireSession } from '@/lib/require-session';
 import { listStatements, getStatement } from '@/lib/storage';
 import {
@@ -42,10 +41,7 @@ export default async function StatementsPage() {
       <div className="flex items-center justify-between gap-4 mb-6">
         <h1 className="text-2xl font-semibold">Statements</h1>
         <Button asChild>
-          <Link href="/upload">
-            Upload another
-            <LinkLoadingOverlay />
-          </Link>
+          <Link href="/upload">Upload another</Link>
         </Button>
       </div>
 
@@ -61,10 +57,7 @@ export default async function StatementsPage() {
             Upload a statement to get started.
           </p>
           <Button asChild>
-            <Link href="/upload">
-              Upload statement
-              <LinkLoadingOverlay />
-            </Link>
+            <Link href="/upload">Upload statement</Link>
           </Button>
         </div>
       ) : (
