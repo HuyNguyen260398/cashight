@@ -2,6 +2,7 @@
 
 import { useDropzone } from 'react-dropzone';
 import { useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Statement } from '@/lib/schemas';
 import { getUploadErrorMessage } from '@/lib/upload-error';
@@ -108,7 +109,10 @@ export function UploadDropzone({ onParsed }: { onParsed: (s: Statement) => void 
       >
         <input {...getInputProps()} />
         {loading ? (
-          <p className="text-muted-foreground">Parsing…</p>
+          <div className="flex flex-col items-center gap-3 text-muted-foreground">
+            <Loader2 className="h-8 w-8 animate-spin" />
+            <p>Parsing and saving to S3…</p>
+          </div>
         ) : isDragActive ? (
           <p className="text-muted-foreground">Drop the PDF here</p>
         ) : (
@@ -143,7 +147,14 @@ export function UploadDropzone({ onParsed }: { onParsed: (s: Statement) => void 
                 if (pendingConflict) void uploadFile(pendingConflict.file, true);
               }}
             >
-              {loading ? 'Replacing…' : 'Replace'}
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Replacing…
+                </>
+              ) : (
+                'Replace'
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
