@@ -6,7 +6,7 @@ import { Loader2 } from 'lucide-react';
 
 // Minimum time the overlay stays on screen once a navigation begins, so fast
 // transitions don't flash the spinner away before the destination has rendered.
-const MIN_VISIBLE_MS = 2000;
+const MIN_VISIBLE_MS = 1000;
 
 // Full-screen centered spinner shown while its parent <Link> navigation is
 // pending. Must be a descendant of a Next.js <Link>; `useLinkStatus` reads that
