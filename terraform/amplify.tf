@@ -90,7 +90,7 @@ resource "aws_amplify_app" "cashight" {
     # sees Host: localhost:3000 with no trusted X-Forwarded-Host), so it must be
     # pinned or OAuth redirect_uri becomes https://localhost:3000/... → mismatch.
     # Hardcoded (not aws_amplify_app.cashight.default_domain) to avoid a self-cycle.
-    AUTH_URL = "https://main.d256g033y75nc0.amplifyapp.com"
+    AUTH_URL = "https://cashight.nghuy.link"
   }
 
   lifecycle {
@@ -116,6 +116,28 @@ resource "aws_amplify_branch" "main" {
   # Option A. Native auto-build stays off so tests always gate prod.
   enable_auto_build           = false
   enable_pull_request_preview = false
+}
+
+# --- Custom domain: cashight.nghuy.link ---
+# The nghuy.link hosted zone is in this same AWS account, so Amplify auto-
+# provisions the ACM cert and writes both the _acm validation record and the
+# `cashight` CNAME into Route53 — no aws_route53_record resources needed.
+# First apply can take 5–30 min while the cert validates; wait_for_verification
+# blocks the apply until it's done.
+resource "aws_amplify_domain_association" "cashight" {
+  app_id                = aws_amplify_app.cashight.id
+  domain_name           = "nghuy.link"
+  wait_for_verification = true
+
+  sub_domain {
+    branch_name = aws_amplify_branch.main.branch_name
+    prefix      = "cashight" # → cashight.nghuy.link
+  }
+}
+
+output "custom_domain_url" {
+  value       = "https://cashight.nghuy.link"
+  description = "Production URL on the custom domain (after cert validation)."
 }
 
 output "amplify_app_id" {

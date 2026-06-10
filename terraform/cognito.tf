@@ -7,6 +7,8 @@ variable "cognito_callback_urls" {
   description = "OAuth redirect URIs for the Cognito app client (dev + prod)."
   default = [
     "http://localhost:3000/api/auth/callback/cognito",
+    "https://cashight.nghuy.link/api/auth/callback/cognito",
+    # Kept as fallback during the custom-domain cutover.
     "https://main.d256g033y75nc0.amplifyapp.com/api/auth/callback/cognito",
   ]
 }
@@ -16,6 +18,8 @@ variable "cognito_logout_urls" {
   description = "Post-logout redirect URIs for the Cognito Hosted UI (dev + prod)."
   default = [
     "http://localhost:3000/signin",
+    "https://cashight.nghuy.link/signin",
+    # Kept as fallback during the custom-domain cutover.
     "https://main.d256g033y75nc0.amplifyapp.com/signin",
   ]
 }
