@@ -21,7 +21,7 @@ export function KpiCards({ view }: { view: AggregatedView }) {
     byCategory.find((c) => c.category === 'Software & Subscriptions')?.value ?? 0;
 
   return (
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
       {/* 1. Total spend across the period — new card purchases. */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
