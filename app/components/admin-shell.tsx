@@ -360,7 +360,7 @@ export function AdminShell({
         )}
       >
         <header className="sticky top-0 z-50 border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-          <div className="flex min-h-[73px] flex-col lg:flex-row">
+          <div className="flex flex-col lg:min-h-[73px] lg:flex-row">
             <div className="flex h-16 items-center justify-between gap-3 border-b border-gray-200 px-3 dark:border-gray-800 sm:gap-4 sm:px-4 lg:h-[73px] lg:border-b-0 lg:px-6">
               <div className="flex items-center gap-3">
                 <Button
@@ -408,19 +408,38 @@ export function AdminShell({
               <Button
                 variant="ghost"
                 size="icon-lg"
-                className="rounded-full text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 lg:hidden"
+                className="relative rounded-full text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 lg:hidden"
                 aria-label={mobileMenuOpen ? 'Close app menu' : 'Open app menu'}
                 aria-expanded={mobileMenuOpen}
                 onClick={() => setMobileMenuOpen((value) => !value)}
               >
-                <MoreHorizontal className="size-5" aria-hidden />
+                <MoreHorizontal
+                  className={cn(
+                    'absolute size-5 transition-all duration-200 ease-out',
+                    mobileMenuOpen
+                      ? 'rotate-90 scale-75 opacity-0'
+                      : 'rotate-0 scale-100 opacity-100',
+                  )}
+                  aria-hidden
+                />
+                <X
+                  className={cn(
+                    'absolute size-5 transition-all duration-200 ease-out',
+                    mobileMenuOpen
+                      ? 'rotate-0 scale-100 opacity-100'
+                      : '-rotate-90 scale-75 opacity-0',
+                  )}
+                  aria-hidden
+                />
               </Button>
             </div>
 
             <div
               className={cn(
-                'items-center justify-between gap-3 px-5 py-4 shadow-theme-md lg:flex lg:flex-1 lg:justify-end lg:px-6 lg:py-3 lg:shadow-none',
-                mobileMenuOpen ? 'flex' : 'hidden',
+                'flex items-center justify-between gap-3 overflow-hidden px-5 shadow-theme-md transition-[max-height,opacity,transform,padding] duration-300 ease-out lg:max-h-none lg:flex-1 lg:translate-y-0 lg:justify-end lg:px-6 lg:py-3 lg:opacity-100 lg:shadow-none',
+                mobileMenuOpen
+                  ? 'max-h-20 translate-y-0 py-4 opacity-100'
+                  : 'max-h-0 -translate-y-2 py-0 opacity-0 lg:max-h-none',
               )}
             >
               <ThemeToggle className="size-10 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-100 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-white/5 lg:hidden" />
