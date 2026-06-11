@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react';
 import type { Transaction } from '@/lib/schemas';
 import { categoryColor } from '@/lib/category-colors';
 import { formatVND } from '@/lib/format';
@@ -32,8 +33,18 @@ function SortIndicator({
   active: SortKey;
   dir: SortDir;
 }) {
-  if (sortKey !== active) return <span className="ml-1 opacity-30">↕</span>;
-  return <span className="ml-1">{dir === 'asc' ? '▲' : '▼'}</span>;
+  if (sortKey !== active) {
+    return <ChevronsUpDown className="ml-1 size-3 opacity-30" aria-hidden />;
+  }
+  return (
+    <span className="ml-1 inline-flex">
+      {dir === 'asc' ? (
+        <ArrowUp className="size-3" aria-hidden />
+      ) : (
+        <ArrowDown className="size-3" aria-hidden />
+      )}
+    </span>
+  );
 }
 
 export function TransactionsTable({
@@ -86,41 +97,59 @@ export function TransactionsTable({
                 className="cursor-pointer select-none"
                 onClick={() => toggleSort('date')}
               >
-                Date
-                <SortIndicator sortKey="date" active={sort.key} dir={sort.dir} />
+                <span className="inline-flex items-center">
+                  Date
+                  {sort.key === 'date' ? (
+                    <SortIndicator sortKey="date" active={sort.key} dir={sort.dir} />
+                  ) : (
+                    <ChevronsUpDown className="ml-1 size-3 opacity-30" aria-hidden />
+                  )}
+                </span>
               </TableHead>
               <TableHead>Description</TableHead>
               <TableHead
                 className="cursor-pointer select-none"
                 onClick={() => toggleSort('category')}
               >
-                Category
-                <SortIndicator
-                  sortKey="category"
-                  active={sort.key}
-                  dir={sort.dir}
-                />
+                <span className="inline-flex items-center">
+                  Category
+                  {sort.key === 'category' ? (
+                    <SortIndicator
+                      sortKey="category"
+                      active={sort.key}
+                      dir={sort.dir}
+                    />
+                  ) : (
+                    <ChevronsUpDown className="ml-1 size-3 opacity-30" aria-hidden />
+                  )}
+                </span>
               </TableHead>
               <TableHead
                 className="cursor-pointer select-none text-right"
                 onClick={() => toggleSort('amount')}
               >
-                Amount
-                <SortIndicator
-                  sortKey="amount"
-                  active={sort.key}
-                  dir={sort.dir}
-                />
+                <span className="inline-flex items-center justify-end">
+                  Amount
+                  {sort.key === 'amount' ? (
+                    <SortIndicator
+                      sortKey="amount"
+                      active={sort.key}
+                      dir={sort.dir}
+                    />
+                  ) : (
+                    <ChevronsUpDown className="ml-1 size-3 opacity-30" aria-hidden />
+                  )}
+                </span>
               </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {paged.map((t, i) => (
               <TableRow key={`${t.date}-${t.description}-${i}`}>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="text-gray-500 dark:text-gray-400">
                   {t.date}
                 </TableCell>
-                <TableCell className="max-w-xs truncate">
+                <TableCell className="max-w-xs truncate font-medium text-gray-800 dark:text-white/90">
                   {t.description}
                 </TableCell>
                 <TableCell>
@@ -134,8 +163,10 @@ export function TransactionsTable({
                   </Badge>
                 </TableCell>
                 <TableCell
-                  className={`text-right font-medium tabular-nums ${
-                    t.amountVnd < 0 ? 'text-emerald-600' : ''
+                  className={`text-right font-semibold tabular-nums ${
+                    t.amountVnd < 0
+                      ? 'text-success-700 dark:text-success-500'
+                      : 'text-gray-900 dark:text-white/90'
                   }`}
                 >
                   {formatVND(t.amountVnd)}
@@ -147,20 +178,24 @@ export function TransactionsTable({
       </div>
 
       {/* Mobile card list — hidden on md+ */}
-      <div className="flex flex-col gap-3 md:hidden">
+      <div className="flex flex-col gap-3 p-4 md:hidden">
         {paged.map((t, i) => (
           <div
             key={`${t.date}-${t.description}-${i}`}
-            className="rounded-lg border bg-card p-4 text-card-foreground shadow-sm"
+            className="rounded-2xl border border-gray-200 bg-white p-4 shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03]"
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{t.description}</p>
-                <p className="text-xs text-muted-foreground">{t.date}</p>
+                <p className="truncate font-medium text-gray-900 dark:text-white/90">
+                  {t.description}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{t.date}</p>
               </div>
               <p
                 className={`shrink-0 font-semibold tabular-nums ${
-                  t.amountVnd < 0 ? 'text-emerald-600' : ''
+                  t.amountVnd < 0
+                    ? 'text-success-700 dark:text-success-500'
+                    : 'text-gray-900 dark:text-white/90'
                 }`}
               >
                 {formatVND(t.amountVnd)}

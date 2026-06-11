@@ -76,6 +76,14 @@ Self-contained presentation-layer improvements (no parser, storage, aggregation,
 
 > **Milestone:** Dashboard panels have icons, both tables paginate and sort, charts are vibrant with straight axis labels, every page has a loading effect, a scroll-to-top button is available app-wide, KPI panels stack to one column on mobile, and the category/merchant charts no longer overlap.
 
+### Phase 8 — Admin template UX/UI rebuild
+
+Apply the design language from `/Users/huyng/ws/free-nextjs-admin-dashboard-main/` to the shipped Cashight app. This is a presentation-layer rebuild around the existing product behavior.
+
+- [x] **[Step 28](./28-admin-template-ux-ui-rebuild.md)** — Apply TailAdmin-style admin shell, dashboard surfaces, tables, upload, statements, and auth UI *(4–7h)*
+
+> **Milestone:** Cashight uses the sample admin template's sidebar/header/dashboard design while preserving parser, S3, aggregation, auth, AI privacy, and route behavior.
+
 ---
 
 ## Step dependencies
@@ -93,6 +101,8 @@ Self-contained presentation-layer improvements (no parser, storage, aggregation,
 
 20 ──▶ 21 · 24 · 25 · 26 · 27   (independent, any order/parallel)
         22 ──▶ 23               (23 reuses 22's pagination control)
+
+21–27 ──▶ 28                    (28 assumes the shipped app UX exists)
 ```
 
 Most steps are linear, but Step 04 (dashboard) and Step 05 (AI) could be parallelized once Step 03 is done if you want to context-switch. In Phase 4, Steps 12–16 are independent and can be tackled in any order (or parallel worktrees); the auth steps come last (Step 17 Google, then Step 18 Cognito which builds on it) because they gate the finished app, and Step 11 (deploy) comes after everything.

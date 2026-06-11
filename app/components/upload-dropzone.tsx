@@ -2,7 +2,7 @@
 
 import { useDropzone } from 'react-dropzone';
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { FileUp, Loader2, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Statement } from '@/lib/schemas';
 import { getUploadErrorMessage } from '@/lib/upload-error';
@@ -102,26 +102,47 @@ export function UploadDropzone({ onParsed }: { onParsed: (s: Statement) => void 
     : '';
 
   return (
-    <div>
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
       <div
         {...getRootProps()}
-        className="border-2 border-dashed rounded-lg p-12 text-center cursor-pointer hover:bg-muted/50 transition"
+        className="cursor-pointer rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 p-8 text-center transition hover:border-brand-300 hover:bg-brand-25 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:border-brand-800 dark:hover:bg-brand-500/10 md:p-12"
       >
         <input {...getInputProps()} />
         {loading ? (
-          <div className="flex flex-col items-center gap-3 text-muted-foreground">
-            <Loader2 className="h-8 w-8 animate-spin" />
-            <p>Parsing and saving to S3…</p>
+          <div className="flex flex-col items-center gap-3 text-gray-500 dark:text-gray-400">
+            <Loader2 className="size-9 animate-spin text-brand-500" />
+            <p className="text-sm font-medium">Parsing and saving to S3...</p>
           </div>
         ) : isDragActive ? (
-          <p className="text-muted-foreground">Drop the PDF here</p>
+          <div className="flex flex-col items-center gap-3">
+            <FileUp className="size-10 text-brand-500" aria-hidden />
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Drop the PDF here
+            </p>
+          </div>
         ) : (
-          <p className="text-muted-foreground">
-            Drag a TPBank statement PDF here, or click to select
-          </p>
+          <div className="flex flex-col items-center">
+            <div className="mb-5 flex size-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400">
+              <FileUp className="size-7" aria-hidden />
+            </div>
+            <p className="text-base font-semibold text-gray-900 dark:text-white/90">
+              Drag a TPBank statement PDF here
+            </p>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              or click to select a PDF file up to 5 MB
+            </p>
+            <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-success-50 px-3 py-1 text-xs font-medium text-success-700 dark:bg-success-500/10 dark:text-success-500">
+              <ShieldCheck className="size-3.5" aria-hidden />
+              Card data is masked before storage
+            </div>
+          </div>
         )}
       </div>
-      {error && <p className="text-destructive text-sm mt-2">{error}</p>}
+      {error && (
+        <p className="mt-3 rounded-lg bg-error-50 px-3 py-2 text-sm text-error-700 dark:bg-error-500/10 dark:text-error-500">
+          {error}
+        </p>
+      )}
 
       <AlertDialog
         open={pendingConflict !== null}

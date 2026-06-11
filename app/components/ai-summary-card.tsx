@@ -157,18 +157,21 @@ export function AiSummaryCard({ view }: { view: AggregatedView }) {
   }, []);
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="h-full min-h-0 gap-0">
+      <CardHeader className="shrink-0 border-b border-gray-100 dark:border-gray-800">
         <CardTitle>AI summary</CardTitle>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Privacy-preserving aggregate insight.
+        </p>
       </CardHeader>
-      <CardContent>
+      <CardContent className="min-h-0 flex-1 overflow-y-auto pt-5">
         {isEmpty ? (
           <p className="text-muted-foreground text-sm">
             No spending data to summarize for this period.
           </p>
         ) : state.phase === 'idle' ? (
           <div className="flex flex-col items-start gap-3">
-            <p className="text-muted-foreground text-sm">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               Generate an AI overview of {view.label} spending.
             </p>
             <Button onClick={() => void runSummary()}>

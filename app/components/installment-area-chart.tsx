@@ -9,6 +9,7 @@ import {
   Tooltip,
 } from 'recharts';
 import type { AggregatedView } from '@/lib/aggregations';
+import { CHART_AXIS_COLOR, CHART_COLORS } from '@/lib/chart-colors';
 import { formatVND, formatVNDCompact } from '@/lib/format';
 
 export function InstallmentAreaChart({ view }: { view: AggregatedView }) {
@@ -27,26 +28,26 @@ export function InstallmentAreaChart({ view }: { view: AggregatedView }) {
       >
         <XAxis
           dataKey="label"
-          tick={{ fontSize: 11 }}
+          tick={{ fontSize: 11, fill: CHART_AXIS_COLOR }}
           interval="preserveStartEnd"
           textAnchor="middle"
           height={28}
         />
         <YAxis
-          tick={{ fontSize: 12 }}
+          tick={{ fontSize: 12, fill: CHART_AXIS_COLOR }}
           tickFormatter={(v) => formatVNDCompact(Number(v))}
         />
         <Tooltip formatter={(v) => formatVND(Number(v))} />
         <defs>
           <linearGradient id="installmentGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#14b8a6" stopOpacity={0.6} />
-            <stop offset="100%" stopColor="#14b8a6" stopOpacity={0.05} />
+            <stop offset="0%" stopColor={CHART_COLORS.brand} stopOpacity={0.55} />
+            <stop offset="100%" stopColor={CHART_COLORS.brandLight} stopOpacity={0.05} />
           </linearGradient>
         </defs>
         <Area
           type="monotone"
           dataKey="value"
-          stroke="#14b8a6"
+          stroke={CHART_COLORS.brand}
           fill="url(#installmentGradient)"
         />
       </AreaChart>

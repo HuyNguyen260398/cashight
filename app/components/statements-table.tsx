@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { ArrowDown, ArrowUp, ChevronsUpDown, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -55,8 +56,14 @@ function SortIndicator({
   active: SortKey;
   dir: SortDir;
 }) {
-  if (sortKey !== active) return <span className="ml-1 opacity-30">↕</span>;
-  return <span className="ml-1">{dir === 'asc' ? '▲' : '▼'}</span>;
+  if (sortKey !== active) {
+    return <ChevronsUpDown className="ml-1 size-3 opacity-30" aria-hidden />;
+  }
+  return dir === 'asc' ? (
+    <ArrowUp className="ml-1 size-3" aria-hidden />
+  ) : (
+    <ArrowDown className="ml-1 size-3" aria-hidden />
+  );
 }
 
 export function StatementsTable({ rows }: { rows: StatementRow[] }) {
@@ -124,7 +131,7 @@ export function StatementsTable({ rows }: { rows: StatementRow[] }) {
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03]">
       <Table>
         <TableHeader>
           <TableRow>
@@ -133,23 +140,27 @@ export function StatementsTable({ rows }: { rows: StatementRow[] }) {
               className="cursor-pointer select-none"
               onClick={() => toggleSort('period')}
             >
-              Period
-              <SortIndicator
-                sortKey="period"
-                active={sort.key}
-                dir={sort.dir}
-              />
+              <span className="inline-flex items-center">
+                Period
+                <SortIndicator
+                  sortKey="period"
+                  active={sort.key}
+                  dir={sort.dir}
+                />
+              </span>
             </TableHead>
             <TableHead
               className="cursor-pointer select-none text-right"
               onClick={() => toggleSort('totalSpend')}
             >
-              Total spend
-              <SortIndicator
-                sortKey="totalSpend"
-                active={sort.key}
-                dir={sort.dir}
-              />
+              <span className="inline-flex items-center justify-end">
+                Total spend
+                <SortIndicator
+                  sortKey="totalSpend"
+                  active={sort.key}
+                  dir={sort.dir}
+                />
+              </span>
             </TableHead>
             <TableHead>Uploaded</TableHead>
             <TableHead className="text-right">Actions</TableHead>
@@ -167,15 +178,15 @@ export function StatementsTable({ rows }: { rows: StatementRow[] }) {
                 <TableCell>
                   <Link
                     href={`/?period=month&year=${row.year}&month=${row.month}`}
-                    className="text-primary underline-offset-4 hover:underline"
+                    className="font-medium text-brand-500 underline-offset-4 hover:underline dark:text-brand-400"
                   >
                     {row.year}-{mm}
                   </Link>
                 </TableCell>
-                <TableCell className="text-right tabular-nums">
+                <TableCell className="text-right font-semibold tabular-nums text-gray-900 dark:text-white/90">
                   {formatVND(row.totalSpend)}
                 </TableCell>
-                <TableCell>
+                <TableCell className="text-gray-500 dark:text-gray-400">
                   {row.uploadedAt ? formatDate(row.uploadedAt) : '—'}
                 </TableCell>
                 <TableCell className="text-right">
@@ -189,6 +200,7 @@ export function StatementsTable({ rows }: { rows: StatementRow[] }) {
                         size="sm"
                         disabled={isDeleting}
                       >
+                        <Trash2 className="size-4" aria-hidden />
                         Delete
                       </Button>
                     </AlertDialogTrigger>

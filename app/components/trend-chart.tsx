@@ -9,6 +9,7 @@ import {
   Tooltip,
 } from 'recharts';
 import type { AggregatedView } from '@/lib/aggregations';
+import { CHART_AXIS_COLOR, CHART_COLORS } from '@/lib/chart-colors';
 import { formatVND, formatVNDCompact } from '@/lib/format';
 
 export function TrendChart({ view }: { view: AggregatedView }) {
@@ -24,20 +25,20 @@ export function TrendChart({ view }: { view: AggregatedView }) {
       >
         <XAxis
           dataKey="label"
-          tick={{ fontSize: 11 }}
+          tick={{ fontSize: 11, fill: CHART_AXIS_COLOR }}
           interval="preserveStartEnd"
           textAnchor="middle"
           height={28}
         />
         <YAxis
-          tick={{ fontSize: 12 }}
+          tick={{ fontSize: 12, fill: CHART_AXIS_COLOR }}
           tickFormatter={(v) => formatVNDCompact(Number(v))}
         />
         <Tooltip formatter={(v) => formatVND(Number(v))} />
         <defs>
           <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#6366f1" />
-            <stop offset="100%" stopColor="#8b5cf6" />
+            <stop offset="0%" stopColor={CHART_COLORS.brand} />
+            <stop offset="100%" stopColor={CHART_COLORS.brandLight} />
           </linearGradient>
         </defs>
         <Bar dataKey="value" fill="url(#trendGradient)" radius={[4, 4, 0, 0]} />
