@@ -220,11 +220,17 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html,
+  body {
+    min-height: 100%;
+    background-color: var(--background);
+  }
   html {
-    @apply bg-gray-50 dark:bg-gray-950;
+    @apply bg-background;
   }
   body {
-    @apply bg-gray-50 text-foreground dark:bg-gray-950;
+    min-height: 100dvh;
+    @apply bg-background text-foreground;
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {

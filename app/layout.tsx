@@ -32,7 +32,7 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full">
+      <body className="min-h-dvh bg-background text-foreground">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <Nav>{children}</Nav>
           <Toaster />
