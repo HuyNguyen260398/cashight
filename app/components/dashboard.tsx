@@ -48,8 +48,8 @@ export function Dashboard({ view }: { view: AggregatedView }) {
         </Card>
       </RevealPanel>
 
-      <RevealPanel delayIndex={4} className="col-span-12 xl:col-span-6">
-        <Card className="min-w-0 overflow-hidden">
+      <RevealPanel delayIndex={4} className="col-span-12 h-full xl:col-span-6">
+        <Card className="h-full min-w-0 overflow-hidden">
           <CardHeader className="border-b border-gray-100 dark:border-gray-800">
             <CardTitle>Spending by category</CardTitle>
           </CardHeader>
@@ -59,8 +59,8 @@ export function Dashboard({ view }: { view: AggregatedView }) {
         </Card>
       </RevealPanel>
 
-      <RevealPanel delayIndex={5} className="col-span-12 xl:col-span-6">
-        <Card className="min-w-0 overflow-hidden">
+      <RevealPanel delayIndex={5} className="col-span-12 h-full xl:col-span-6">
+        <Card className="h-full min-w-0 overflow-hidden">
           <CardHeader className="border-b border-gray-100 dark:border-gray-800">
             <CardTitle>Top merchants</CardTitle>
           </CardHeader>
