@@ -56,33 +56,35 @@ export function PeriodSelector({ current }: { current: PeriodSpec }) {
   }
 
   return (
-    <div className="flex flex-col sm:flex-row items-center gap-3">
+    <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
       <Tabs
         value={current.type}
         onValueChange={(t) => setPeriod(toType(t as PeriodType))}
       >
-        <TabsList>
+        <TabsList className="h-10 rounded-lg bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">
           <TabsTrigger value="month">Month</TabsTrigger>
           <TabsTrigger value="quarter">Quarter</TabsTrigger>
           <TabsTrigger value="year">Year</TabsTrigger>
         </TabsList>
       </Tabs>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center justify-center gap-1 rounded-lg border border-gray-200 bg-white p-1 shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03]">
         <Button
           variant="ghost"
           size="icon"
+          className="size-8 rounded-md text-gray-500"
           aria-label="Previous period"
           onClick={() => setPeriod(previousPeriod(current))}
         >
           <ChevronLeft />
         </Button>
-        <span className="min-w-[120px] text-center text-sm font-medium">
+        <span className="min-w-[120px] text-center text-sm font-medium text-gray-700 dark:text-gray-300">
           {periodLabel(current)}
         </span>
         <Button
           variant="ghost"
           size="icon"
+          className="size-8 rounded-md text-gray-500"
           aria-label="Next period"
           onClick={() => setPeriod(nextPeriod(current))}
         >

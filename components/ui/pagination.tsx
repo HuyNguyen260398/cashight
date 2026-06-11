@@ -14,7 +14,7 @@ export function Pagination({
 }) {
   if (pageCount <= 1) return null;
   return (
-    <div className="mt-4 flex items-center justify-between gap-2">
+    <div className="flex items-center justify-between gap-2 border-t border-gray-100 px-4 py-4 dark:border-gray-800">
       <Button
         variant="outline"
         size="sm"
@@ -23,7 +23,7 @@ export function Pagination({
       >
         <ChevronLeft className="h-4 w-4" /> Prev
       </Button>
-      <span className="text-sm text-muted-foreground tabular-nums">
+      <span className="text-sm text-gray-500 tabular-nums dark:text-gray-400">
         Page {page} of {pageCount}
       </span>
       <Button

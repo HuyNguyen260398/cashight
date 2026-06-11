@@ -52,15 +52,27 @@ export default async function HomePage({
   const view = error ? null : aggregate(statements, spec);
 
   return (
-    <main className="container mx-auto p-4 md:p-6 max-w-7xl">
-      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-medium">Cashight</h1>
+    <main className="space-y-6">
+      <header className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03] lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-sm font-medium text-brand-500 dark:text-brand-400">
+            Spending overview
+          </p>
+          <h2 className="mt-1 text-2xl font-semibold text-gray-900 dark:text-white/90">
+            Cashight dashboard
+          </h2>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Track statement totals, category mix, installments, and merchant spend.
+          </p>
+        </div>
         <PeriodSelector current={spec} />
       </header>
       {error ? (
-        <div className="py-16 text-center">
-          <h2 className="mb-2 text-xl">Couldn&apos;t load your statements</h2>
-          <p className="text-muted-foreground">{error}</p>
+        <div className="rounded-2xl border border-error-500/20 bg-error-50 p-6 text-center dark:border-error-500/30 dark:bg-error-500/10">
+          <h2 className="mb-2 text-xl font-semibold text-gray-900 dark:text-white/90">
+            Couldn&apos;t load your statements
+          </h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400">{error}</p>
         </div>
       ) : statements.length === 0 ? (
         <EmptyState />

@@ -7,6 +7,7 @@ import {
   StatementsTable,
   type StatementRow,
 } from '@/app/components/statements-table';
+import { FileText, UploadCloud } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -37,23 +38,41 @@ export default async function StatementsPage() {
   }
 
   return (
-    <main className="container mx-auto p-4 md:p-6 max-w-5xl">
-      <div className="flex items-center justify-between gap-4 mb-6">
-        <h1 className="text-2xl font-semibold">Statements</h1>
-        <Button asChild>
-          <Link href="/upload">Upload another</Link>
+    <main className="space-y-6">
+      <header className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03] sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-medium text-brand-500 dark:text-brand-400">
+            Statement library
+          </p>
+          <h2 className="mt-1 text-2xl font-semibold text-gray-900 dark:text-white/90">
+            Statements
+          </h2>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Browse saved monthly statements and jump back into period views.
+          </p>
+        </div>
+        <Button asChild className="sm:self-start">
+          <Link href="/upload">
+            <UploadCloud className="size-4" aria-hidden />
+            Upload another
+          </Link>
         </Button>
-      </div>
+      </header>
 
       {error ? (
-        <div className="rounded-md border border-destructive/50 bg-destructive/5 p-4 text-sm text-destructive">
+        <div className="rounded-2xl border border-error-500/20 bg-error-50 p-5 text-sm text-error-700 dark:border-error-500/30 dark:bg-error-500/10 dark:text-error-500">
           <p className="font-medium">Could not load statements.</p>
-          <p className="text-muted-foreground">{error}</p>
+          <p className="mt-1 text-gray-600 dark:text-gray-400">{error}</p>
         </div>
       ) : rows.length === 0 ? (
-        <div className="text-center py-16">
-          <h2 className="text-xl mb-2">No statements yet</h2>
-          <p className="text-muted-foreground mb-6">
+        <div className="rounded-2xl border border-gray-200 bg-white px-6 py-16 text-center shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03]">
+          <div className="mx-auto mb-5 flex size-14 items-center justify-center rounded-2xl bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">
+            <FileText className="size-7" aria-hidden />
+          </div>
+          <h2 className="mb-2 text-xl font-semibold text-gray-900 dark:text-white/90">
+            No statements yet
+          </h2>
+          <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">
             Upload a statement to get started.
           </p>
           <Button asChild>

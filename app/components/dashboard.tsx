@@ -10,60 +10,65 @@ import { InstallmentAreaChart } from '@/app/components/installment-area-chart';
 
 export function Dashboard({ view }: { view: AggregatedView }) {
   return (
-    <div className="space-y-6">
-      {/* Row 1: AI summary */}
-      <AiSummaryCard view={view} />
+    <div className="grid grid-cols-12 gap-4 md:gap-6">
+      <div className="col-span-12 xl:col-span-7 xl:h-[636px]">
+        <KpiCards view={view} />
+      </div>
 
-      {/* Row 2: KPI cards */}
-      <KpiCards view={view} />
+      <div className="col-span-12 xl:col-span-5 xl:h-[636px]">
+        <AiSummaryCard view={view} />
+      </div>
 
-      {/* Row 3: Spending trend across sub-periods (the headline multi-period chart) */}
-      <Card className="min-w-0 overflow-hidden">
-        <CardHeader>
+      <Card className="col-span-12 min-w-0 overflow-hidden">
+        <CardHeader className="border-b border-gray-100 dark:border-gray-800">
           <CardTitle>Spending trend</CardTitle>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            New card purchases across the selected period.
+          </p>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-5">
           <TrendChart view={view} />
         </CardContent>
       </Card>
 
-      {/* Row 4: Installments per sub-period as an area chart */}
-      <Card className="min-w-0 overflow-hidden">
-        <CardHeader>
+      <Card className="col-span-12 min-w-0 overflow-hidden">
+        <CardHeader className="border-b border-gray-100 dark:border-gray-800">
           <CardTitle>Total installments</CardTitle>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Installment billings separated from new purchases.
+          </p>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-5">
           <InstallmentAreaChart view={view} />
         </CardContent>
       </Card>
 
-      {/* Row 5: Category pie + Top merchants bar */}
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="min-w-0 overflow-hidden">
-          <CardHeader>
-            <CardTitle>Spending by category</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CategoryPie data={view.byCategory} />
-          </CardContent>
-        </Card>
-
-        <Card className="min-w-0 overflow-hidden">
-          <CardHeader>
-            <CardTitle>Top merchants</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <MerchantBar data={view.topMerchants} />
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Row 6: Transactions table */}
-      <Card className="min-w-0 overflow-hidden">
-        <CardHeader>
-          <CardTitle>Transactions</CardTitle>
+      <Card className="col-span-12 min-w-0 overflow-hidden xl:col-span-6">
+        <CardHeader className="border-b border-gray-100 dark:border-gray-800">
+          <CardTitle>Spending by category</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-5">
+          <CategoryPie data={view.byCategory} />
+        </CardContent>
+      </Card>
+
+      <Card className="col-span-12 min-w-0 overflow-hidden xl:col-span-6">
+        <CardHeader className="border-b border-gray-100 dark:border-gray-800">
+          <CardTitle>Top merchants</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-5">
+          <MerchantBar data={view.topMerchants} />
+        </CardContent>
+      </Card>
+
+      <Card className="col-span-12 min-w-0 overflow-hidden">
+        <CardHeader className="border-b border-gray-100 dark:border-gray-800">
+          <CardTitle>Transactions</CardTitle>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Recent statement lines for the selected period.
+          </p>
+        </CardHeader>
+        <CardContent className="p-0">
           <TransactionsTable transactions={view.transactions} />
         </CardContent>
       </Card>
