@@ -1,0 +1,11 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Cashight donut: spending-breakdown glyph using the dashboard chart palette.
+       A thick ring split into proportional segments (one dominant category). -->
+  <g transform="rotate(-90 16 16)" fill="none" stroke-width="6">
+    <!-- circumference of r=10 circle = 62.83; segments: 50% / 25% / 15% / 10% with ~1.6u gaps -->
+    <circle cx="16" cy="16" r="10" stroke="#465fff" stroke-dasharray="29.82 33.01" stroke-dashoffset="0"/>
+    <circle cx="16" cy="16" r="10" stroke="#0ba5ec" stroke-dasharray="14.11 48.72" stroke-dashoffset="-31.42"/>
+    <circle cx="16" cy="16" r="10" stroke="#12b76a" stroke-dasharray="7.82 55.01" stroke-dashoffset="-47.13"/>
+    <circle cx="16" cy="16" r="10" stroke="#fb6514" stroke-dasharray="4.68 58.15" stroke-dashoffset="-56.55"/>
+  </g>
+</svg>
