@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { aggregate } from '@/lib/aggregations';
-import { redactForLog } from '@/lib/security/logging';
-import { StatementSchema } from '@/lib/schemas';
-import { buildSummaryPayload } from '@/lib/summary-payload';
+import { aggregate } from '@cashight/domain/aggregations';
+import { redactForLog } from '@cashight/domain/security/logging';
+import { StatementSchema } from '@cashight/domain/schemas';
+import { buildSummaryPayload } from '@cashight/domain/summary-payload';
 
 const SENTINELS = [
   '4111111111111111',

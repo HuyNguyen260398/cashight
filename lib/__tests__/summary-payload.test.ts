@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { AggregatedView } from '@/lib/aggregations';
-import { buildSummaryPayload } from '@/lib/summary-payload';
+import type { AggregatedView } from '@cashight/domain/aggregations';
+import { buildSummaryPayload } from '@cashight/domain/summary-payload';
 
 function view(overrides: Partial<AggregatedView> = {}): AggregatedView {
   return {

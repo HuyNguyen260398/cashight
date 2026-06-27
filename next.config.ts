@@ -31,6 +31,7 @@ const cspReportOnly = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  transpilePackages: ['@cashight/domain'],
   // pdf-parse / pdfjs-dist runtime packaging is environment-split on purpose:
   //
   //  - Production (`next build`, Amplify SSR): pdf-parse MUST stay bundled.

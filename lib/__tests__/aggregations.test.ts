@@ -10,16 +10,16 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { describe, it, expect, beforeAll } from 'vitest';
 
-import { parseTPBankStatement } from '@/lib/parsers/tpbank';
-import type { Statement } from '@/lib/schemas';
-import { aggregate, filterStatements } from '@/lib/aggregations';
+import { aggregate, filterStatements } from '@cashight/domain/aggregations';
+import { parseTPBankStatement } from '@cashight/domain/parsers/tpbank';
+import type { Statement } from '@cashight/domain/schemas';
 import {
   periodLabel,
   previousPeriod,
   nextPeriod,
   quarterOf,
   type PeriodSpec,
-} from '@/lib/period';
+} from '@cashight/domain/period';
 
 // ---------------------------------------------------------------------------
 // Helpers

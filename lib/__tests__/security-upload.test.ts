@@ -4,7 +4,7 @@ import {
   MAX_UPLOAD_BYTES,
   isPdfMagicBytes,
   validatePdfUpload,
-} from '@/lib/security/upload';
+} from '@cashight/domain/security/upload';
 
 describe('PDF upload validation', () => {
   it('accepts PDF magic bytes', () => {

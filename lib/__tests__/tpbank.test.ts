@@ -1,5 +1,5 @@
 /**
- * Vitest suite for lib/parsers/tpbank.ts.
+ * Vitest suite for @cashight/domain/parsers/tpbank.
  *
  * Uses the gitignored May 2026 sample PDF as the real-fixture acceptance test.
  * CI skips the fixture-dependent suites because test-pdfs/ is gitignored.
@@ -8,8 +8,8 @@
 import fs from 'fs';
 import path from 'path';
 import { describe, it, expect, beforeAll } from 'vitest';
-import { parseTPBankStatement } from '../parsers/tpbank';
-import type { Statement } from '@/lib/schemas';
+import { parseTPBankStatement } from '@cashight/domain/parsers/tpbank';
+import type { Statement } from '@cashight/domain/schemas';
 
 const pdfPath = path.resolve(
   __dirname,
