@@ -13,6 +13,8 @@
 
 # testing
 /coverage
+/playwright-report/
+/test-results/
 
 # next.js
 /.next/
@@ -43,6 +45,9 @@ yarn-error.log*
 
 # local PDF fixtures (never commit real statements)
 /test-pdfs/
+
+# private migration snapshots (contain storage inventory metadata)
+/.migration-private/
 
 # typescript
 *.tsbuildinfo

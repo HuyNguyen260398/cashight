@@ -6,6 +6,8 @@ const SECRET_KEYS = new Set([
   'AUTH_COGNITO_SECRET',
 ]);
 
+const SENSITIVE_DATA_KEYS = new Set(['TRANSACTIONS']);
+
 const PAN_SEQUENCE_RE = /\b\d{13,19}\b/g;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -44,7 +46,10 @@ export function redactForLog(value: unknown): unknown {
 
   const redacted: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value)) {
-    if (SECRET_KEYS.has(key.toUpperCase())) continue;
+    const normalizedKey = key.toUpperCase();
+    if (SECRET_KEYS.has(normalizedKey) || SENSITIVE_DATA_KEYS.has(normalizedKey)) {
+      continue;
+    }
     redacted[key] = redactForLog(item);
   }
   return redacted;
