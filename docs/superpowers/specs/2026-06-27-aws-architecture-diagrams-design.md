@@ -17,8 +17,9 @@ inventing unprovisioned services.
 
 ## Deliverable
 
-Extend `docs/codebase/DIAGRAMS.md` with three independently renderable Mermaid
-diagrams while preserving the existing application-level diagrams.
+Create `docs/AWS_ARCHITECTURE_DIAGRAMS.md` with three independently renderable
+Mermaid diagrams. Keep the existing application-level diagrams in
+`docs/codebase/DIAGRAMS.md` unchanged.
 
 ### 1. AWS Deployment Topology
 
