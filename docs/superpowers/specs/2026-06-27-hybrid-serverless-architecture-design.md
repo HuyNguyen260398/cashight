@@ -75,7 +75,7 @@ Google remains available as a Cognito social identity provider. Users select Cog
 
 Tokens are stored in `sessionStorage`, not `localStorage`, and are attached only to the API origin as `Authorization: Bearer <access-token>`. This limits persistence across browser restarts but does not remove XSS risk; an enforcing content security policy remains required.
 
-A Cognito pre-sign-up Lambda handles `PreSignUp_ExternalProvider` and rejects federated profiles whose verified email does not equal `ALLOWED_EMAIL`. API Lambdas independently enforce the same allowlist and verify ownership from JWT claims. This is defense in depth; Cognito remains responsible for login and token issuance.
+A Cognito auth-guard Lambda handles `PreSignUp_ExternalProvider` and rejects federated profiles whose verified email does not equal `ALLOWED_EMAIL`. The same function handles pre-token-generation events, rechecks the verified email, and upserts an authorized-user record keyed by the stable Cognito `sub`. API Lambdas require an OAuth access token, load that authorization record by `sub`, and verify resource ownership. They do not depend on an email claim being present in the access token. This is defense in depth; Cognito remains responsible for login and token issuance.
 
 The Google client secret is required by `aws_cognito_identity_provider`. Terraform therefore receives it as a sensitive CI input and stores it in encrypted remote state. The state bucket must use a customer-managed KMS key, restrictive bucket policy, versioning, access logging, and least-privilege state access. The secret is never committed or emitted as an output.
 
@@ -91,7 +91,7 @@ Do not create one catch-all Lambda. Use the following bounded functions with ind
 
 | Function | Trigger | Responsibility |
 | --- | --- | --- |
-| `auth-guard` | Cognito pre-sign-up | Reject non-allowlisted federated users before account creation. |
+| `auth-guard` | Cognito pre-sign-up and pre-token generation | Reject non-allowlisted users and register the authorized Cognito `sub` before issuing tokens. |
 | `statements-api` | API Gateway | List metadata, return validated statement documents, and delete owned statements. |
 | `dashboard-api` | API Gateway | Read period-specific statements, aggregate them with existing pure helpers, and return `AggregatedView`. |
 | `uploads-api` | API Gateway | Validate an upload request, create a job, and return a presigned S3 PUT URL. |
@@ -134,6 +134,7 @@ DynamoDB contains no raw descriptions or transaction arrays. Use one table with 
 | Statement metadata | `USER#{sub}` | `STATEMENT#{year}-{mm}#{cardLast4}` | S3 key, date, totals, transaction count, upload timestamp, checksum. |
 | Upload job | `USER#{sub}` | `UPLOAD#{jobId}` | State, object key, force flag, safe error code, timestamps, TTL. |
 | Idempotency record | `JOB#{jobId}` | `CHECKSUM#{sha256}` | Prevent duplicate SQS processing and repeated writes. |
+| Authorized user | `AUTHZ#{sub}` | `PROFILE` | Verified allowlist decision and non-sensitive authorization metadata. |
 
 The metadata access pattern replaces unbounded S3 listing and full object fan-out. `dashboard-api` queries metadata for the selected period, fetches only matching S3 documents, validates each document, and aggregates server-side.
 
@@ -375,7 +376,7 @@ The domain package has no Next.js, browser, Lambda, or AWS SDK dependency. Brows
 ### Phase 3: Read APIs and metadata migration
 
 - Backfill statement metadata and user-prefixed S3 objects with an idempotent migration script.
-- Resolve the target `userSub` from the authenticated production Cognito profile, require it as an explicit migration-script argument, and abort if the subject does not belong to `ALLOWED_EMAIL`.
+- Resolve the target `userSub` from the authorized-user DynamoDB record created during Cognito token issuance, require it as an explicit migration-script argument, and abort if no active authorization record exists.
 - Compare old and new statement counts, keys, totals, and aggregate outputs.
 - Deploy statements and dashboard APIs and switch frontend reads behind a feature flag.
 
@@ -429,7 +430,7 @@ The domain package has no Next.js, browser, Lambda, or AWS SDK dependency. Brows
 - Use exact CORS origins and methods; never use wildcard origin with bearer tokens.
 - Use a public Cognito client with PKCE and no embedded client secret.
 - Validate token issuer, audience/client, expiry, and required scopes at API Gateway.
-- Enforce email allowlist and resource ownership in Lambda.
+- Enforce the email allowlist in Cognito triggers; enforce authorized-subject and resource ownership checks in API Lambdas.
 - Derive all S3 and DynamoDB keys from authenticated claims and validated server data.
 - Validate external data with Zod at API, S3, SQS, and Gemini boundaries.
 - Configure WAF managed rules, request-size controls, and rate-based rules at frontend and API edges.
