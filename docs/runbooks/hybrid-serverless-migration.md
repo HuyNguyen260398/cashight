@@ -86,6 +86,14 @@ Expected results:
 Use `pnpm exec playwright install chromium` only on a trusted operator machine
 or in the controlled CI image if the browser binary is missing.
 
+### Deferred checkpoint — 2026-06-27
+
+The Playwright configuration and four smoke-test cases were added in commit
+`4ded84f`, and test discovery was verified. The live production browser run was
+not executed because an authenticated `E2E_STORAGE_STATE` file was not supplied.
+This is intentionally deferred and does not block portable-domain extraction,
+but it must be completed and its result recorded before Phase 9 DNS cutover.
+
 ## Phase gates
 
 Complete each phase in the implementation plan in order. Record the Git SHA,
