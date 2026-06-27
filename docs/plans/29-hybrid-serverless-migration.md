@@ -109,7 +109,7 @@ The plan is a migration contract. A phase is not complete because resources exis
 
 - [ ] **Step 2: Run the privacy test and record its initial result**
 
-  Run: `pnpm test lib/__tests__/architecture-privacy.test.ts`  
+  Run: `pnpm test lib/__tests__/architecture-privacy.test.ts`
   Expected: FAIL until the fixture and any required exported redaction helpers are wired correctly; no sentinel may be printed by the test runner.
 
 - [ ] **Step 3: Implement the privacy fixture and assertions without changing production behavior**
@@ -153,7 +153,7 @@ The plan is a migration contract. A phase is not complete because resources exis
   pnpm tsc --noEmit
   ```
 
-  Expected: all commands pass.  
+  Expected: all commands pass.
   Commit: `test: add hybrid migration safety gates`
 
 ### Implementation Phase 1 — Extract portable domain code and Lambda build system
@@ -186,7 +186,7 @@ The plan is a migration contract. A phase is not complete because resources exis
 
 - [ ] **Step 2: Confirm the package does not exist**
 
-  Run: `pnpm test lib/__tests__/domain-package-parity.test.ts`  
+  Run: `pnpm test lib/__tests__/domain-package-parity.test.ts`
   Expected: FAIL with unresolved `@cashight/domain` imports.
 
 - [ ] **Step 3: Create the workspace package**
@@ -249,7 +249,7 @@ The plan is a migration contract. A phase is not complete because resources exis
   pnpm run build:lambdas
   ```
 
-  Expected: current Amplify build and all tests pass; each Lambda artifact directory exists; parser artifact contains `pdf.worker.mjs`.  
+  Expected: current Amplify build and all tests pass; each Lambda artifact directory exists; parser artifact contains `pdf.worker.mjs`.
   Commit: `refactor: extract portable cashight domain package`
 
 ### Implementation Phase 2 — Shared Lambda adapters and authorization
@@ -347,8 +347,8 @@ The plan is a migration contract. A phase is not complete because resources exis
 
 - [ ] **Step 6: Verify**
 
-  Run: `pnpm test backend/__tests__/shared.test.ts backend/__tests__/auth-guard.test.ts && pnpm tsc --noEmit && pnpm run build:lambdas`  
-  Expected: tests pass and `dist/lambdas/auth-guard/index.js` exists.  
+  Run: `pnpm test backend/__tests__/shared.test.ts backend/__tests__/auth-guard.test.ts && pnpm tsc --noEmit && pnpm run build:lambdas`
+  Expected: tests pass and `dist/lambdas/auth-guard/index.js` exists.
   Commit: `feat(backend): add shared lambda adapters and auth guard`
 
 ### Implementation Phase 3 — Asynchronous upload and parsing
@@ -410,7 +410,7 @@ The plan is a migration contract. A phase is not complete because resources exis
   pnpm run build:lambdas
   ```
 
-  Expected: tests pass; local parser fixture output matches existing documented values; all three artifacts exist.  
+  Expected: tests pass; local parser fixture output matches existing documented values; all three artifacts exist.
   Commit: `feat(upload): add asynchronous lambda parsing pipeline`
 
 ### Implementation Phase 4 — Statement, dashboard, and AI APIs
@@ -448,8 +448,8 @@ The plan is a migration contract. A phase is not complete because resources exis
 
 - [ ] **Step 5: Verify**
 
-  Run: `pnpm test backend/__tests__/statements-api.test.ts backend/__tests__/dashboard-api.test.ts && pnpm run build:lambdas`  
-  Expected: all tests pass and results match current aggregation fixtures.  
+  Run: `pnpm test backend/__tests__/statements-api.test.ts backend/__tests__/dashboard-api.test.ts && pnpm run build:lambdas`
+  Expected: all tests pass and results match current aggregation fixtures.
   Commit: `feat(api): add statements and dashboard lambdas`
 
 ### Task 6: Streaming summary API
@@ -474,8 +474,8 @@ The plan is a migration contract. A phase is not complete because resources exis
 
 - [ ] **Step 4: Verify**
 
-  Run: `pnpm test backend/__tests__/summary-api.test.ts lib/__tests__/summary-payload.test.ts && pnpm run build:lambdas`  
-  Expected: tests pass and `dist/lambdas/summary-api/index.js` exists.  
+  Run: `pnpm test backend/__tests__/summary-api.test.ts lib/__tests__/summary-payload.test.ts && pnpm run build:lambdas`
+  Expected: tests pass and `dist/lambdas/summary-api/index.js` exists.
   Commit: `feat(ai): stream privacy-safe summaries from lambda`
 
 ### Implementation Phase 5 — Cognito SPA authentication and static frontend
@@ -537,8 +537,8 @@ The plan is a migration contract. A phase is not complete because resources exis
 
 - [ ] **Step 6: Verify**
 
-  Run: `pnpm test frontend/__tests__/auth-provider.test.tsx frontend/__tests__/api-client.test.ts && pnpm lint && pnpm tsc --noEmit`  
-  Expected: all tests pass.  
+  Run: `pnpm test frontend/__tests__/auth-provider.test.tsx frontend/__tests__/api-client.test.ts && pnpm lint && pnpm tsc --noEmit`
+  Expected: all tests pass.
   Commit: `feat(auth): add cognito pkce spa session`
 
 ### Task 8: Client-side application routes
@@ -579,8 +579,8 @@ The plan is a migration contract. A phase is not complete because resources exis
 
 - [ ] **Step 6: Verify UI behavior**
 
-  Run: `pnpm test frontend/__tests__/upload-flow.test.tsx && pnpm lint && pnpm tsc --noEmit`  
-  Expected: all tests pass.  
+  Run: `pnpm test frontend/__tests__/upload-flow.test.tsx && pnpm lint && pnpm tsc --noEmit`
+  Expected: all tests pass.
   Commit: `refactor(frontend): consume serverless api from client routes`
 
 ### Task 9: Static export
@@ -625,8 +625,8 @@ The plan is a migration contract. A phase is not complete because resources exis
 
 - [ ] **Step 5: Run browser tests against static output**
 
-  Run: `BASE_URL=http://localhost:4173 pnpm test:e2e`  
-  Expected: public/deep-link tests pass; authenticated tests self-skip without storage state.  
+  Run: `BASE_URL=http://localhost:4173 pnpm test:e2e`
+  Expected: public/deep-link tests pass; authenticated tests self-skip without storage state.
   Commit: `feat(frontend): build cashight as static nextjs spa`
 
 ### Implementation Phase 6 — Terraform foundation, data plane, compute, and API
@@ -690,7 +690,7 @@ The plan is a migration contract. A phase is not complete because resources exis
   terraform plan -detailed-exitcode
   ```
 
-  Expected: exit 0 after only address moves; no retained resource replacement or deletion.  
+  Expected: exit 0 after only address moves; no retained resource replacement or deletion.
   Commit: `refactor(terraform): add state-safe serverless modules`
 
 ### Task 11: Data, compute, and observability infrastructure
@@ -730,8 +730,8 @@ The plan is a migration contract. A phase is not complete because resources exis
 
 - [ ] **Step 7: Verify**
 
-  Run: `terraform fmt -check -recursive && terraform validate && terraform test && tflint --no-color -f compact`  
-  Expected: all checks pass. Plan must contain additions and in-place policy updates only.  
+  Run: `terraform fmt -check -recursive && terraform validate && terraform test && tflint --no-color -f compact`
+  Expected: all checks pass. Plan must contain additions and in-place policy updates only.
   Commit: `feat(terraform): add serverless data and compute platform`
 
 ### Task 12: Auth, API, edge, and deployment infrastructure
@@ -773,7 +773,7 @@ The plan is a migration contract. A phase is not complete because resources exis
 
 - [ ] **Step 7: Verify plan and apply non-cutover resources**
 
-  Run `terraform plan -out=.migration-private/hybrid-phase6.tfplan` and inspect JSON for deletes/replacements. Apply only additions and in-place updates. Verify temporary frontend and API domains, Cognito issuer, and output values.  
+  Run `terraform plan -out=.migration-private/hybrid-phase6.tfplan` and inspect JSON for deletes/replacements. Apply only additions and in-place updates. Verify temporary frontend and API domains, Cognito issuer, and output values.
   Commit: `feat(terraform): add cognito api gateway and cloudfront edge`
 
 ### Implementation Phase 7 — Data migration and reconciliation
@@ -811,7 +811,7 @@ The plan is a migration contract. A phase is not complete because resources exis
 
 - [ ] **Step 5: Verify API parity**
 
-  Invoke new dashboard/statements APIs with an authenticated test token and compare normalized JSON to the current Amplify pages/API for the same periods. No frontend switch occurs until all comparisons pass.  
+  Invoke new dashboard/statements APIs with an authenticated test token and compare normalized JSON to the current Amplify pages/API for the same periods. No frontend switch occurs until all comparisons pass.
   Commit: `feat(migration): add idempotent statement backfill`
 
 ### Implementation Phase 8 — CI/CD and pre-cutover verification
@@ -856,7 +856,7 @@ The plan is a migration contract. A phase is not complete because resources exis
 
 - [ ] **Step 6: Verify in temporary production topology**
 
-  Deploy to `next.cashight.nghuy.link` and `api.cashight.nghuy.link`, run all smoke tests, inspect CloudWatch/X-Ray, export logs to `.migration-private/serverless-production.log`, and run `pnpm security:scan-logs .migration-private/serverless-production.log`.  
+  Deploy to `next.cashight.nghuy.link` and `api.cashight.nghuy.link`, run all smoke tests, inspect CloudWatch/X-Ray, export logs to `.migration-private/serverless-production.log`, and run `pnpm security:scan-logs .migration-private/serverless-production.log`.
   Commit: `ci: add serverless deployment and rollback pipelines`
 
 ### Implementation Phase 9 — Production cutover and observation
@@ -903,7 +903,7 @@ The plan is a migration contract. A phase is not complete because resources exis
 
 - [ ] **Step 7: Update architecture documents**
 
-  Replace current-state Amplify diagrams with CloudFront/API/Lambda diagrams, retain a migration-history note, and document actual deployed resource names and runbooks.  
+  Replace current-state Amplify diagrams with CloudFront/API/Lambda diagrams, retain a migration-history note, and document actual deployed resource names and runbooks.
   Commit: `docs: record serverless production cutover`
 
 ### Implementation Phase 10 — Decommission legacy runtime
@@ -964,7 +964,7 @@ The plan is a migration contract. A phase is not complete because resources exis
   terraform plan -detailed-exitcode
   ```
 
-  Expected: application and infrastructure checks pass; final plan exit code is 0 after decommission apply.  
+  Expected: application and infrastructure checks pass; final plan exit code is 0 after decommission apply.
   Commit: `chore: remove legacy amplify runtime`
 
 ## 3. Alternatives

@@ -1,8 +1,8 @@
 # Cashight Hybrid Serverless Architecture Design
 
-**Status:** Approved for implementation planning  
-**Date:** 2026-06-27  
-**Owner:** Huy  
+**Status:** Approved for implementation planning
+**Date:** 2026-06-27
+**Owner:** Huy
 **Scope:** Replace Amplify-hosted Next.js SSR with a static Next.js SPA and move backend logic to AWS Lambda while preserving Cashight's privacy and data-integrity guarantees.
 
 ## 1. Outcome
