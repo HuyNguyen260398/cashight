@@ -1,7 +1,9 @@
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import {
+  DeleteCommand,
   GetCommand,
   PutCommand,
+  QueryCommand,
   UpdateCommand,
   type DynamoDBDocumentClient,
 } from '@aws-sdk/lib-dynamodb';
@@ -231,6 +233,96 @@ export async function putStatementMetadata(
 ): Promise<void> {
   await client.send(
     new PutCommand({ TableName: tableName, Item: record }),
+  );
+}
+
+export interface StatementQueryResult {
+  items: StatementMetadataRecord[];
+  nextCursor: Record<string, unknown> | null;
+}
+
+export async function queryUserStatements(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  sub: string,
+  cursor: Record<string, unknown> | null,
+  limit = 50,
+): Promise<StatementQueryResult> {
+  const result = await client.send(
+    new QueryCommand({
+      TableName: tableName,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :prefix)',
+      ExpressionAttributeValues: {
+        ':pk': `USER#${sub}`,
+        ':prefix': 'STATEMENT#',
+      },
+      Limit: limit,
+      ExclusiveStartKey: cursor ?? undefined,
+      ScanIndexForward: false,
+    }),
+  );
+  return {
+    items: (result.Items ?? []) as StatementMetadataRecord[],
+    nextCursor: result.LastEvaluatedKey ?? null,
+  };
+}
+
+export async function queryUserStatementsForYear(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  sub: string,
+  year: number,
+): Promise<StatementMetadataRecord[]> {
+  const mm = `${year}-`;
+  const result = await client.send(
+    new QueryCommand({
+      TableName: tableName,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :prefix)',
+      ExpressionAttributeValues: {
+        ':pk': `USER#${sub}`,
+        ':prefix': `STATEMENT#${mm}`,
+      },
+      ScanIndexForward: true,
+    }),
+  );
+  return (result.Items ?? []) as StatementMetadataRecord[];
+}
+
+export async function getStatementMetadataById(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  sub: string,
+  statementId: string,
+): Promise<StatementMetadataRecord | undefined> {
+  // statementId format: ${year}-${mm}-${cardLast4}, SK format: STATEMENT#${year}-${mm}#${cardLast4}
+  const parts = statementId.match(/^(\d{4}-\d{2})-(\d{4})$/);
+  if (!parts) return undefined;
+  const sk = `STATEMENT#${parts[1]}#${parts[2]}`;
+  const result = await client.send(
+    new GetCommand({
+      TableName: tableName,
+      Key: { PK: `USER#${sub}`, SK: sk },
+      ConsistentRead: true,
+    }),
+  );
+  if (!result.Item) return undefined;
+  return result.Item as StatementMetadataRecord;
+}
+
+export async function deleteStatementMetadata(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  sub: string,
+  statementId: string,
+): Promise<void> {
+  const parts = statementId.match(/^(\d{4}-\d{2})-(\d{4})$/);
+  if (!parts) return;
+  const sk = `STATEMENT#${parts[1]}#${parts[2]}`;
+  await client.send(
+    new DeleteCommand({
+      TableName: tableName,
+      Key: { PK: `USER#${sub}`, SK: sk },
+    }),
   );
 }
 
