@@ -84,6 +84,14 @@ Apply the design language from `/Users/huyng/ws/free-nextjs-admin-dashboard-main
 
 > **Milestone:** Cashight uses the sample admin template's sidebar/header/dashboard design while preserving parser, S3, aggregation, auth, AI privacy, and route behavior.
 
+### Phase 9 — Hybrid serverless architecture migration
+
+Replace the Amplify-hosted Next.js SSR monolith with independently deployable static frontend and Lambda backend boundaries. This is a staged migration with parity, rollback, and seven-day observation gates; do not execute its decommission phase early.
+
+- [ ] **[Step 29](./29-hybrid-serverless-migration.md)** — Static Next.js SPA on S3/CloudFront + Cognito/Google PKCE + API Gateway/Lambda/SQS/DynamoDB backend, fully managed by Terraform
+
+> **Milestone:** Cashight runs from CloudFront and the serverless backend with verified data parity, privacy, canary rollback, and Amplify safely decommissioned after the observation window.
+
 ---
 
 ## Step dependencies
@@ -103,6 +111,8 @@ Apply the design language from `/Users/huyng/ws/free-nextjs-admin-dashboard-main
         22 ──▶ 23               (23 reuses 22's pagination control)
 
 21–27 ──▶ 28                    (28 assumes the shipped app UX exists)
+
+28 ──▶ 29                       (29 migrates the shipped application architecture)
 ```
 
 Most steps are linear, but Step 04 (dashboard) and Step 05 (AI) could be parallelized once Step 03 is done if you want to context-switch. In Phase 4, Steps 12–16 are independent and can be tackled in any order (or parallel worktrees); the auth steps come last (Step 17 Google, then Step 18 Cognito which builds on it) because they gate the finished app, and Step 11 (deploy) comes after everything.
