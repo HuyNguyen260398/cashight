@@ -27,10 +27,16 @@ data "aws_iam_policy_document" "github_deploy_trust" {
       variable = "token.actions.githubusercontent.com:aud"
       values   = ["sts.amazonaws.com"]
     }
+    # Allow both the protected production environment AND the main branch so
+    # Terraform plan/apply jobs (branch-scoped) and deploy jobs (environment-
+    # scoped) both work with short-lived credentials.
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:ref:refs/heads/main"]
+      values = [
+        "repo:${var.github_repository}:environment:production",
+        "repo:${var.github_repository}:ref:refs/heads/main",
+      ]
     }
   }
 }
@@ -39,6 +45,8 @@ resource "aws_iam_role" "github_deploy" {
   name               = "${var.project_name}-github-deploy"
   assume_role_policy = data.aws_iam_policy_document.github_deploy_trust.json
 }
+
+# ── Keep the existing Amplify release policy (legacy rollback path) ───────────
 
 data "aws_iam_policy_document" "amplify_release" {
   statement {
@@ -59,6 +67,138 @@ resource "aws_iam_role_policy" "amplify_release" {
   role   = aws_iam_role.github_deploy.id
   policy = data.aws_iam_policy_document.amplify_release.json
 }
+
+# ── Lambda deployment (update code + publish version via CodeDeploy) ──────────
+
+data "aws_iam_policy_document" "lambda_deploy" {
+  statement {
+    sid    = "LambdaArtifactWrite"
+    effect = "Allow"
+    actions = [
+      "s3:PutObject",
+      "s3:GetObject",
+      "s3:ListBucket",
+    ]
+    resources = [
+      aws_s3_bucket.artifacts.arn,
+      "${aws_s3_bucket.artifacts.arn}/*",
+    ]
+  }
+
+  statement {
+    sid    = "LambdaUpdate"
+    effect = "Allow"
+    actions = [
+      "lambda:UpdateFunctionCode",
+      "lambda:PublishVersion",
+      "lambda:GetFunction",
+      "lambda:GetAlias",
+      "lambda:UpdateAlias",
+      "lambda:GetFunctionConfiguration",
+    ]
+    resources = [
+      "arn:aws:lambda:${var.region}:${data.aws_caller_identity.current.account_id}:function:${var.project_name}-*",
+    ]
+  }
+
+  statement {
+    sid    = "CodeDeployDeploy"
+    effect = "Allow"
+    actions = [
+      "codedeploy:CreateDeployment",
+      "codedeploy:GetDeployment",
+      "codedeploy:GetDeploymentConfig",
+      "codedeploy:GetApplicationRevision",
+      "codedeploy:RegisterApplicationRevision",
+      "codedeploy:GetApplication",
+    ]
+    resources = [
+      "arn:aws:codedeploy:${var.region}:${data.aws_caller_identity.current.account_id}:application:${var.project_name}-*",
+      "arn:aws:codedeploy:${var.region}:${data.aws_caller_identity.current.account_id}:deploymentgroup:${var.project_name}-*/*",
+      "arn:aws:codedeploy:${var.region}:${data.aws_caller_identity.current.account_id}:deploymentconfig:CodeDeployDefault.Lambda*",
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_deploy" {
+  name   = "lambda-deploy"
+  role   = aws_iam_role.github_deploy.id
+  policy = data.aws_iam_policy_document.lambda_deploy.json
+}
+
+# ── CloudFront invalidation + S3 frontend deployment ─────────────────────────
+
+data "aws_iam_policy_document" "frontend_deploy" {
+  statement {
+    sid    = "S3FrontendDeploy"
+    effect = "Allow"
+    actions = [
+      "s3:PutObject",
+      "s3:DeleteObject",
+      "s3:GetObject",
+      "s3:ListBucket",
+    ]
+    resources = [
+      aws_s3_bucket.frontend.arn,
+      "${aws_s3_bucket.frontend.arn}/*",
+    ]
+  }
+
+  statement {
+    sid    = "CloudFrontInvalidate"
+    effect = "Allow"
+    actions = [
+      "cloudfront:CreateInvalidation",
+      "cloudfront:GetInvalidation",
+      "cloudfront:ListInvalidations",
+    ]
+    resources = [
+      aws_cloudfront_distribution.frontend.arn,
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "frontend_deploy" {
+  name   = "frontend-deploy"
+  role   = aws_iam_role.github_deploy.id
+  policy = data.aws_iam_policy_document.frontend_deploy.json
+}
+
+# ── Terraform state read access ───────────────────────────────────────────────
+
+data "aws_iam_policy_document" "terraform_state_read" {
+  statement {
+    sid    = "TfstateRead"
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+      "s3:ListBucket",
+    ]
+    resources = [
+      aws_s3_bucket.tfstate.arn,
+      "${aws_s3_bucket.tfstate.arn}/*",
+    ]
+  }
+
+  statement {
+    sid    = "TfstateKmsDecrypt"
+    effect = "Allow"
+    actions = [
+      "kms:Decrypt",
+      "kms:DescribeKey",
+      "kms:GenerateDataKey",
+    ]
+    resources = [aws_kms_key.tfstate.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "terraform_state_read" {
+  name   = "terraform-state-read"
+  role   = aws_iam_role.github_deploy.id
+  policy = data.aws_iam_policy_document.terraform_state_read.json
+}
+
+# ── Outputs ───────────────────────────────────────────────────────────────────
 
 output "github_deploy_role_arn" {
   value       = aws_iam_role.github_deploy.arn
