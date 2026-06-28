@@ -115,7 +115,7 @@ resource "aws_cloudfront_response_headers_policy" "frontend" {
     }
 
     referrer_policy {
-      referrer_policy = "strict-origin-when-cross-origin"
+      referrer_policy = "strict-origin"
       override        = true
     }
   }

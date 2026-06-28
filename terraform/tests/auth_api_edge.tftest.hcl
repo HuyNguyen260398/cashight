@@ -2,6 +2,60 @@
 # Plan-mode assertions for Task 12: Cognito SPA client, API Gateway, CloudFront edge.
 # Run with: terraform test (from the terraform/ directory)
 
+# ── Overrides: stub computed ARNs so templatefile() body is plan-time-known ──
+# aws_api_gateway_rest_api.cashight.body is rendered by templatefile() using
+# Lambda alias and Cognito user-pool ARNs that are unknown at plan time.
+# These file-level overrides give them predictable values so strcontains()
+# assertions on the rendered body can be evaluated during a plan-mode run.
+
+override_resource {
+  target          = aws_cognito_user_pool.users
+  override_during = plan
+  values = {
+    arn = "arn:aws:cognito-idp:ap-southeast-1:123456789012:userpool/ap-southeast-1_stub"
+  }
+}
+
+override_resource {
+  target          = aws_lambda_alias.uploads_api_live
+  override_during = plan
+  values = {
+    arn = "arn:aws:lambda:ap-southeast-1:123456789012:function:cashight-uploads-api:live"
+  }
+}
+
+override_resource {
+  target          = aws_lambda_alias.upload_status_api_live
+  override_during = plan
+  values = {
+    arn = "arn:aws:lambda:ap-southeast-1:123456789012:function:cashight-upload-status-api:live"
+  }
+}
+
+override_resource {
+  target          = aws_lambda_alias.statements_api_live
+  override_during = plan
+  values = {
+    arn = "arn:aws:lambda:ap-southeast-1:123456789012:function:cashight-statements-api:live"
+  }
+}
+
+override_resource {
+  target          = aws_lambda_alias.dashboard_api_live
+  override_during = plan
+  values = {
+    arn = "arn:aws:lambda:ap-southeast-1:123456789012:function:cashight-dashboard-api:live"
+  }
+}
+
+override_resource {
+  target          = aws_lambda_alias.summary_api_live
+  override_during = plan
+  values = {
+    arn = "arn:aws:lambda:ap-southeast-1:123456789012:function:cashight-summary-api:live"
+  }
+}
+
 # ── Cognito SPA client ────────────────────────────────────────────────────────
 
 run "spa_client_has_no_secret" {
@@ -61,6 +115,18 @@ run "cognito_resource_server_exists" {
   assert {
     condition     = length(aws_cognito_resource_server.cashight.scope) == 2
     error_message = "Resource server must define exactly two scopes: read and write"
+  }
+}
+
+run "google_idp_configured" {
+  command = plan
+  assert {
+    condition     = aws_cognito_identity_provider.google.provider_type == "Google"
+    error_message = "Google IdP must have provider_type 'Google'"
+  }
+  assert {
+    condition     = aws_cognito_identity_provider.google.attribute_mapping["username"] == "sub"
+    error_message = "Google IdP must map username to 'sub'"
   }
 }
 
@@ -161,11 +227,37 @@ run "github_trust_allows_main_branch" {
 run "summary_integration_uses_streaming_uri" {
   command = plan
 
-  # The OpenAPI body is rendered from a templatefile; we verify indirectly by
-  # checking the API name is set (body parsing is validated by terraform validate).
   assert {
-    condition     = aws_api_gateway_rest_api.cashight.name == "cashight-api"
-    error_message = "REST API must be named 'cashight-api'"
+    condition     = strcontains(aws_api_gateway_rest_api.cashight.body, "response-streaming-invocations")
+    error_message = "REST API body must reference /response-streaming-invocations for the /summaries Lambda integration"
+  }
+}
+
+run "rest_api_routes_present" {
+  command = plan
+  assert {
+    condition     = strcontains(aws_api_gateway_rest_api.cashight.body, "/summaries")
+    error_message = "REST API must include /summaries route"
+  }
+  assert {
+    condition     = strcontains(aws_api_gateway_rest_api.cashight.body, "/dashboard")
+    error_message = "REST API must include /dashboard route"
+  }
+  assert {
+    condition     = strcontains(aws_api_gateway_rest_api.cashight.body, "/statements")
+    error_message = "REST API must include /statements route"
+  }
+  assert {
+    condition     = strcontains(aws_api_gateway_rest_api.cashight.body, "/uploads")
+    error_message = "REST API must include /uploads route"
+  }
+  assert {
+    condition     = strcontains(aws_api_gateway_rest_api.cashight.body, "/health")
+    error_message = "REST API must include /health route"
+  }
+  assert {
+    condition     = strcontains(aws_api_gateway_rest_api.cashight.body, "CognitoAuth")
+    error_message = "REST API body must reference CognitoAuth security scheme"
   }
 }
 
