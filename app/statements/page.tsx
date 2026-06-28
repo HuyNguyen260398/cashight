@@ -11,7 +11,7 @@ import { FileText, Loader2, UploadCloud } from 'lucide-react';
 import { useStatements } from '@/frontend/hooks/use-statements';
 
 export default function StatementsPage() {
-  const { items, loading, error, deleteStatement } = useStatements();
+  const { items, loading, error, deleteStatement, nextCursor, loadMore } = useStatements();
 
   async function handleDelete(key: string) {
     try {
@@ -69,7 +69,21 @@ export default function StatementsPage() {
           </Button>
         </div>
       ) : (
-        <StatementsTable rows={items} onDelete={handleDelete} />
+        <>
+          <StatementsTable rows={items} onDelete={handleDelete} />
+          {nextCursor !== null && (
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="outline"
+                onClick={loadMore}
+                disabled={loading}
+              >
+                {loading && <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />}
+                Load more
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </main>
   );

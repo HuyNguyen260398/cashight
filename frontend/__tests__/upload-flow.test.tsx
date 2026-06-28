@@ -5,6 +5,8 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { computeSha256 } from '@/frontend/lib/sha256';
 import { sleep } from '@/frontend/lib/sleep';
 import { useUploadJob } from '@/frontend/hooks/use-upload-job';
+import { useDashboard } from '@/frontend/hooks/use-dashboard';
+import { useStatements } from '@/frontend/hooks/use-statements';
 
 // ── module-level mocks (hoisted) ──────────────────────────────────────────────
 
@@ -362,5 +364,174 @@ describe('Streaming summary via apiFetch', () => {
     expect(url).toContain('period=quarter');
     expect(url).toContain('year=2025');
     expect(url).toContain('quarter=3');
+  });
+});
+
+// ── useDashboard ──────────────────────────────────────────────────────────────
+
+const MONTH_SPEC = { type: 'month' as const, year: 2026, month: 5 };
+const YEAR_SPEC = { type: 'year' as const, year: 2026 };
+
+const DASHBOARD_PAYLOAD = {
+  spec: MONTH_SPEC,
+  statementCount: 1,
+  label: 'May 2026',
+};
+
+describe('useDashboard', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('is in loading state while the first fetch is in flight', () => {
+    // Never-resolving promise simulates an in-flight request.
+    mockApiFetch.mockReturnValue(new Promise(() => {}));
+
+    const { result } = renderHook(() => useDashboard(MONTH_SPEC));
+
+    expect(result.current.loading).toBe(true);
+    expect(result.current.data).toBeNull();
+    expect(result.current.error).toBeNull();
+  });
+
+  it('returns error state when apiFetch rejects', async () => {
+    mockApiFetch.mockRejectedValueOnce(new Error('Network error'));
+
+    const { result } = renderHook(() => useDashboard(MONTH_SPEC));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.error).toBe('Network error');
+    expect(result.current.data).toBeNull();
+  });
+
+  it('returns data when fetch succeeds', async () => {
+    mockApiFetch.mockResolvedValueOnce(jsonResponse(DASHBOARD_PAYLOAD));
+
+    const { result } = renderHook(() => useDashboard(MONTH_SPEC));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.data).not.toBeNull();
+    expect(result.current.data?.statementCount).toBe(1);
+    expect(result.current.data?.label).toBe('May 2026');
+  });
+
+  it('re-fetches when spec changes and returns new data', async () => {
+    const yearPayload = { spec: YEAR_SPEC, statementCount: 3, label: '2026' };
+
+    mockApiFetch
+      .mockResolvedValueOnce(jsonResponse(DASHBOARD_PAYLOAD))
+      .mockResolvedValueOnce(jsonResponse(yearPayload));
+
+    type Spec = typeof MONTH_SPEC | typeof YEAR_SPEC;
+    const { result, rerender } = renderHook(
+      ({ spec }: { spec: Spec }) => useDashboard(spec),
+      { initialProps: { spec: MONTH_SPEC as Spec } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.data?.label).toBe('May 2026');
+
+    rerender({ spec: YEAR_SPEC });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.data?.label).toBe('2026');
+    expect(mockApiFetch).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ── useStatements ─────────────────────────────────────────────────────────────
+
+const STATEMENT_ITEM = {
+  statementId: 'statements/9674/2026/2026-05.json',
+  cardLast4: '9674',
+  statementDate: '2026-05-01',
+  totalSpend: 26986712,
+  transactionCount: 41,
+  uploadedAt: '2026-06-01T00:00:00.000Z',
+};
+
+describe('useStatements', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('returns items after the initial load', async () => {
+    mockApiFetch.mockResolvedValueOnce(
+      jsonResponse({ items: [STATEMENT_ITEM], nextCursor: null }),
+    );
+
+    const { result } = renderHook(() => useStatements());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.items).toHaveLength(1);
+    expect(result.current.items[0].cardLast4).toBe('9674');
+    expect(result.current.nextCursor).toBeNull();
+    expect(result.current.error).toBeNull();
+  });
+
+  it('deleteStatement calls DELETE and removes the item from the list', async () => {
+    mockApiFetch
+      .mockResolvedValueOnce(
+        jsonResponse({ items: [STATEMENT_ITEM], nextCursor: null }),
+      )
+      .mockResolvedValueOnce(new Response('', { status: 200 }));
+
+    const { result } = renderHook(() => useStatements());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.items).toHaveLength(1);
+
+    await act(async () => {
+      await result.current.deleteStatement(STATEMENT_ITEM.statementId);
+    });
+
+    const deleteCalls = (mockApiFetch.mock.calls as Array<[string, RequestInit]>).filter(
+      ([, init]) => init?.method === 'DELETE',
+    );
+    expect(deleteCalls).toHaveLength(1);
+    expect(deleteCalls[0][0]).toContain(
+      encodeURIComponent(STATEMENT_ITEM.statementId),
+    );
+
+    // Item optimistically removed from list.
+    expect(result.current.items).toHaveLength(0);
+  });
+
+  it('loadMore fetches with cursor and appends items', async () => {
+    const ITEM_2 = {
+      ...STATEMENT_ITEM,
+      statementId: 'statements/9674/2025/2025-12.json',
+      statementDate: '2025-12-01',
+    };
+    const CURSOR = 'eyJrZXkiOiAic3RhdGVtZW50cy85Njc0LzIwMjYvMjAyNi0wNS5qc29uIn0=';
+
+    mockApiFetch
+      .mockResolvedValueOnce(
+        jsonResponse({ items: [STATEMENT_ITEM], nextCursor: CURSOR }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ items: [ITEM_2], nextCursor: null }),
+      );
+
+    const { result } = renderHook(() => useStatements());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.items).toHaveLength(1);
+    expect(result.current.nextCursor).toBe(CURSOR);
+
+    act(() => {
+      result.current.loadMore();
+    });
+
+    await waitFor(() => expect(result.current.items).toHaveLength(2));
+
+    // Second call must include cursor param.
+    const loadMoreUrl = (mockApiFetch.mock.calls as Array<[string]>)[1][0];
+    expect(loadMoreUrl).toContain('cursor=');
+    expect(result.current.nextCursor).toBeNull();
   });
 });

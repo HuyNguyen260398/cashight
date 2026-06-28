@@ -123,7 +123,8 @@ export function AiSummaryCard({ view }: { view: AggregatedView }) {
         if (err.status === 429) {
           message = 'The AI is busy right now — try again in a minute.';
         } else if (err.status === 503) {
-          message = 'AI summary is not configured.';
+          const body = err.body as { error?: { message?: string } } | null;
+          message = body?.error?.message ?? 'AI summary is not configured.';
         } else {
           message = 'Could not generate summary.';
         }
