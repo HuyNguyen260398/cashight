@@ -1,13 +1,27 @@
-import { signIn } from "@/auth";
-import { Button } from "@/components/ui/button";
-import { BarChart3, ShieldCheck } from "lucide-react";
+'use client';
 
-export default async function SignInPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>;
-}) {
-  const { error } = await searchParams;
+import { Button } from '@/components/ui/button';
+import { BarChart3, ShieldCheck } from 'lucide-react';
+import { getOidcManager } from '@/frontend/auth/oidc';
+
+export default function SignInPage() {
+  // Read the ?error= query parameter on the client side.
+  const error =
+    typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('error')
+      : null;
+
+  function handleGoogle() {
+    const manager = getOidcManager();
+    void manager.signinRedirect({
+      extraQueryParams: { identity_provider: 'Google' },
+    });
+  }
+
+  function handleCognito() {
+    const manager = getOidcManager();
+    void manager.signinRedirect();
+  }
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-gray-50 px-4 py-12 dark:bg-gray-950">
@@ -27,31 +41,26 @@ export default async function SignInPage({
         </div>
         {error ? (
           <p className="mt-4 rounded-lg bg-error-50 px-3 py-2 text-sm text-error-700 dark:bg-error-500/10 dark:text-error-500">
-            {error === "AccessDenied"
+            {error === 'AccessDenied'
               ? "That account isn't allowed to access this app."
               : "Couldn't sign you in. Please try again."}
           </p>
         ) : null}
-        <form
-          className="mt-6"
-          action={async () => {
-            "use server";
-            await signIn("google", { redirectTo: "/" });
-          }}
-        >
-          <Button type="submit" className="w-full">Sign in with Google</Button>
-        </form>
-        <form
-          className="mt-3"
-          action={async () => {
-            "use server";
-            await signIn("cognito", { redirectTo: "/" });
-          }}
-        >
-          <Button type="submit" variant="outline" className="w-full">
+        <div className="mt-6">
+          <Button type="button" className="w-full" onClick={handleGoogle}>
+            Sign in with Google
+          </Button>
+        </div>
+        <div className="mt-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={handleCognito}
+          >
             Sign in with Cognito
           </Button>
-        </form>
+        </div>
       </div>
     </main>
   );

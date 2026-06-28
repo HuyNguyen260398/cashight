@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider } from "@/frontend/auth/auth-provider";
 import { Nav } from "./components/nav";
 import { ScrollToTop } from "./components/scroll-to-top";
 import { ThemeProvider } from "./components/theme-provider";
@@ -34,9 +35,11 @@ export default function RootLayout({
     >
       <body className="min-h-dvh bg-background text-foreground">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <Nav>{children}</Nav>
-          <Toaster />
-          <ScrollToTop />
+          <AuthProvider>
+            <Nav>{children}</Nav>
+            <Toaster />
+            <ScrollToTop />
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>
