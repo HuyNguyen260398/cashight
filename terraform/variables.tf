@@ -31,3 +31,9 @@ variable "alarm_email" {
   description = "Email address for optional security alarm notifications. Leave empty to create alarms without SNS actions."
   default     = ""
 }
+
+variable "allowed_email" {
+  type        = string
+  description = "Single email address permitted to sign in to Cashight."
+  default     = ""
+}
