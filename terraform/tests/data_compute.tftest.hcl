@@ -116,3 +116,39 @@ run "summary_api_concurrency" {
     error_message = "summary-api timeout must be 120 seconds for streaming Gemini responses"
   }
 }
+
+run "dynamodb_ttl_attribute" {
+  command = plan
+
+  assert {
+    condition     = aws_dynamodb_table.cashight.ttl[0].attribute_name == "expiresAtEpoch"
+    error_message = "DynamoDB TTL attribute must be 'expiresAtEpoch'"
+  }
+}
+
+run "dynamodb_encryption_enabled" {
+  command = plan
+
+  assert {
+    condition     = aws_dynamodb_table.cashight.server_side_encryption[0].enabled == true
+    error_message = "DynamoDB must have server-side encryption enabled"
+  }
+}
+
+run "parser_worker_ephemeral_storage" {
+  command = plan
+
+  assert {
+    condition     = aws_lambda_function.parser_worker.ephemeral_storage[0].size == 1024
+    error_message = "parser-worker ephemeral storage must be 1024 MiB"
+  }
+}
+
+run "summary_api_memory" {
+  command = plan
+
+  assert {
+    condition     = aws_lambda_function.summary_api.memory_size == 1024
+    error_message = "summary-api memory must be 1024 MiB"
+  }
+}

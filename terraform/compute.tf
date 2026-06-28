@@ -620,3 +620,175 @@ resource "aws_lambda_alias" "summary_api_live" {
   function_name    = aws_lambda_function.summary_api.function_name
   function_version = "$LATEST"
 }
+
+# ── Lambda invoke permissions ─────────────────────────────────────────────────
+
+# Cognito may invoke auth-guard (e.g. pre-token-generation or post-authentication
+# triggers). The Cognito pool ARN is known at this point.
+resource "aws_lambda_permission" "cognito_auth_guard" {
+  statement_id  = "AllowCognito"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.auth_guard.function_name
+  qualifier     = aws_lambda_alias.auth_guard_live.name
+  principal     = "cognito-idp.amazonaws.com"
+  source_arn    = aws_cognito_user_pool.users.arn
+}
+
+# API Gateway invoke permissions for the remaining 5 API functions will be
+# added in Task 12 once aws_apigatewayv2_api.cashight is provisioned and its
+# execution ARN is known.
+
+# ── CodeDeploy ────────────────────────────────────────────────────────────────
+
+data "aws_iam_policy_document" "codedeploy_assume_role" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["codedeploy.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "codedeploy" {
+  name               = "cashight-codedeploy"
+  assume_role_policy = data.aws_iam_policy_document.codedeploy_assume_role.json
+}
+
+resource "aws_iam_role_policy_attachment" "codedeploy_lambda" {
+  role       = aws_iam_role.codedeploy.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSCodeDeployRoleForLambda"
+}
+
+# auth-guard
+resource "aws_codedeploy_app" "auth_guard" {
+  name             = "cashight-auth-guard"
+  compute_platform = "Lambda"
+}
+
+resource "aws_codedeploy_deployment_group" "auth_guard" {
+  app_name              = aws_codedeploy_app.auth_guard.name
+  deployment_group_name = "cashight-auth-guard-live"
+  service_role_arn      = aws_iam_role.codedeploy.arn
+
+  deployment_config_name = "CodeDeployDefault.LambdaCanary10Percent5Minutes"
+
+  deployment_style {
+    deployment_option = "WITH_TRAFFIC_CONTROL"
+    deployment_type   = "BLUE_GREEN"
+  }
+}
+
+# uploads-api
+resource "aws_codedeploy_app" "uploads_api" {
+  name             = "cashight-uploads-api"
+  compute_platform = "Lambda"
+}
+
+resource "aws_codedeploy_deployment_group" "uploads_api" {
+  app_name              = aws_codedeploy_app.uploads_api.name
+  deployment_group_name = "cashight-uploads-api-live"
+  service_role_arn      = aws_iam_role.codedeploy.arn
+
+  deployment_config_name = "CodeDeployDefault.LambdaCanary10Percent5Minutes"
+
+  deployment_style {
+    deployment_option = "WITH_TRAFFIC_CONTROL"
+    deployment_type   = "BLUE_GREEN"
+  }
+}
+
+# upload-status-api
+resource "aws_codedeploy_app" "upload_status_api" {
+  name             = "cashight-upload-status-api"
+  compute_platform = "Lambda"
+}
+
+resource "aws_codedeploy_deployment_group" "upload_status_api" {
+  app_name              = aws_codedeploy_app.upload_status_api.name
+  deployment_group_name = "cashight-upload-status-api-live"
+  service_role_arn      = aws_iam_role.codedeploy.arn
+
+  deployment_config_name = "CodeDeployDefault.LambdaCanary10Percent5Minutes"
+
+  deployment_style {
+    deployment_option = "WITH_TRAFFIC_CONTROL"
+    deployment_type   = "BLUE_GREEN"
+  }
+}
+
+# parser-worker
+resource "aws_codedeploy_app" "parser_worker" {
+  name             = "cashight-parser-worker"
+  compute_platform = "Lambda"
+}
+
+resource "aws_codedeploy_deployment_group" "parser_worker" {
+  app_name              = aws_codedeploy_app.parser_worker.name
+  deployment_group_name = "cashight-parser-worker-live"
+  service_role_arn      = aws_iam_role.codedeploy.arn
+
+  deployment_config_name = "CodeDeployDefault.LambdaCanary10Percent5Minutes"
+
+  deployment_style {
+    deployment_option = "WITH_TRAFFIC_CONTROL"
+    deployment_type   = "BLUE_GREEN"
+  }
+}
+
+# statements-api
+resource "aws_codedeploy_app" "statements_api" {
+  name             = "cashight-statements-api"
+  compute_platform = "Lambda"
+}
+
+resource "aws_codedeploy_deployment_group" "statements_api" {
+  app_name              = aws_codedeploy_app.statements_api.name
+  deployment_group_name = "cashight-statements-api-live"
+  service_role_arn      = aws_iam_role.codedeploy.arn
+
+  deployment_config_name = "CodeDeployDefault.LambdaCanary10Percent5Minutes"
+
+  deployment_style {
+    deployment_option = "WITH_TRAFFIC_CONTROL"
+    deployment_type   = "BLUE_GREEN"
+  }
+}
+
+# dashboard-api
+resource "aws_codedeploy_app" "dashboard_api" {
+  name             = "cashight-dashboard-api"
+  compute_platform = "Lambda"
+}
+
+resource "aws_codedeploy_deployment_group" "dashboard_api" {
+  app_name              = aws_codedeploy_app.dashboard_api.name
+  deployment_group_name = "cashight-dashboard-api-live"
+  service_role_arn      = aws_iam_role.codedeploy.arn
+
+  deployment_config_name = "CodeDeployDefault.LambdaCanary10Percent5Minutes"
+
+  deployment_style {
+    deployment_option = "WITH_TRAFFIC_CONTROL"
+    deployment_type   = "BLUE_GREEN"
+  }
+}
+
+# summary-api
+resource "aws_codedeploy_app" "summary_api" {
+  name             = "cashight-summary-api"
+  compute_platform = "Lambda"
+}
+
+resource "aws_codedeploy_deployment_group" "summary_api" {
+  app_name              = aws_codedeploy_app.summary_api.name
+  deployment_group_name = "cashight-summary-api-live"
+  service_role_arn      = aws_iam_role.codedeploy.arn
+
+  deployment_config_name = "CodeDeployDefault.LambdaCanary10Percent5Minutes"
+
+  deployment_style {
+    deployment_option = "WITH_TRAFFIC_CONTROL"
+    deployment_type   = "BLUE_GREEN"
+  }
+}
