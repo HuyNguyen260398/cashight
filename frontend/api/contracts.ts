@@ -38,6 +38,31 @@ export const UploadJobResponseSchema = z.object({
 });
 export type UploadJobResponse = z.infer<typeof UploadJobResponseSchema>;
 
+// ── GET /statements list item ────────────────────────────────────────────────
+
+export const StatementListItemSchema = z.object({
+  statementId: z.string(),
+  cardLast4: z.string().regex(/^\d{4}$/),
+  statementDate: z.string(), // "YYYY-MM-DD"
+  totalSpend: z.number(),
+  transactionCount: z.number().int(),
+  uploadedAt: z.string(),
+});
+export type StatementListItem = z.infer<typeof StatementListItemSchema>;
+
+// ── GET /statements response ─────────────────────────────────────────────────
+
+export const StatementsListResponseSchema = z.object({
+  items: z.array(StatementListItemSchema),
+  nextCursor: z.string().nullable(),
+});
+export type StatementsListResponse = z.infer<typeof StatementsListResponseSchema>;
+
+// ── GET /dashboard response ──────────────────────────────────────────────────
+// AggregatedView from @cashight/domain is a complex nested type with no Zod
+// schema, so we accept unknown and cast at the call site.
+export const DashboardResponseSchema = z.unknown();
+
 // ── Standard error envelope ──────────────────────────────────────────────────
 
 export const ApiErrorBodySchema = z.object({

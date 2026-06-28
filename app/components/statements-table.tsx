@@ -66,7 +66,13 @@ function SortIndicator({
   );
 }
 
-export function StatementsTable({ rows }: { rows: StatementRow[] }) {
+export function StatementsTable({
+  rows,
+  onDelete,
+}: {
+  rows: StatementRow[];
+  onDelete?: (key: string) => Promise<void>;
+}) {
   const router = useRouter();
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
@@ -104,24 +110,22 @@ export function StatementsTable({ rows }: { rows: StatementRow[] }) {
   async function handleDelete(row: StatementRow) {
     setDeletingKey(row.key);
     try {
-      const res = await fetch(
-        '/api/statements/' + encodeURIComponent(row.key),
-        { method: 'DELETE' },
-      );
-      if (res.ok) {
-        // Close the dialog immediately; router.refresh() then drops the row.
+      if (onDelete) {
+        // Delegated to parent — parent manages state and toasts.
+        await onDelete(row.key);
+        setOpenKey(null);
+      } else {
+        // Fallback: call the Lambda API directly and refresh the route cache.
+        const { apiFetch } = await import('@/frontend/api/client');
+        const { getPublicConfig } = await import('@/frontend/auth/config');
+        const config = getPublicConfig();
+        await apiFetch(
+          `${config.apiBaseUrl}/statements/${encodeURIComponent(row.key)}`,
+          { method: 'DELETE' },
+        );
         setOpenKey(null);
         toast.success('Statement deleted');
         router.refresh();
-      } else {
-        let message = 'Could not delete statement';
-        try {
-          const body = (await res.json()) as { error?: string };
-          if (body?.error) message = body.error;
-        } catch {
-          // response had no JSON body — keep the default message
-        }
-        toast.error(message);
       }
     } catch {
       toast.error('Could not delete statement');

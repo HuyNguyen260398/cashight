@@ -1,40 +1,25 @@
+'use client';
+
 import Link from 'next/link';
+import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
-import { requireSession } from '@/lib/require-session';
-import { listStatements, getStatement } from '@/lib/storage';
 import {
   StatementsTable,
-  type StatementRow,
 } from '@/app/components/statements-table';
-import { FileText, UploadCloud } from 'lucide-react';
+import { FileText, Loader2, UploadCloud } from 'lucide-react';
+import { useStatements } from '@/frontend/hooks/use-statements';
 
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
+export default function StatementsPage() {
+  const { items, loading, error, deleteStatement } = useStatements();
 
-export default async function StatementsPage() {
-  await requireSession();
-
-  let rows: StatementRow[] = [];
-  let error: string | null = null;
-
-  try {
-    const items = await listStatements();
-    const statements = await Promise.all(
-      items.map((item) => getStatement(item.key)),
-    );
-    rows = items
-      .map((item, i) => ({
-        key: item.key,
-        cardLast4: item.cardLast4,
-        year: item.year,
-        month: item.month,
-        totalSpend: statements[i].totals.totalSpend,
-        uploadedAt: item.lastModified?.toISOString() ?? null,
-      }))
-      .sort((a, b) => b.year - a.year || b.month - a.month);
-  } catch (err) {
-    error = err instanceof Error ? err.message : 'Failed to load statements';
+  async function handleDelete(key: string) {
+    try {
+      await deleteStatement(key);
+      toast.success('Statement deleted');
+    } catch {
+      toast.error('Could not delete statement');
+    }
   }
 
   return (
@@ -59,12 +44,16 @@ export default async function StatementsPage() {
         </Button>
       </header>
 
-      {error ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="size-8 animate-spin text-brand-500" />
+        </div>
+      ) : error ? (
         <div className="rounded-2xl border border-error-500/20 bg-error-50 p-5 text-sm text-error-700 dark:border-error-500/30 dark:bg-error-500/10 dark:text-error-500">
           <p className="font-medium">Could not load statements.</p>
           <p className="mt-1 text-gray-600 dark:text-gray-400">{error}</p>
         </div>
-      ) : rows.length === 0 ? (
+      ) : items.length === 0 ? (
         <div className="rounded-2xl border border-gray-200 bg-white px-6 py-16 text-center shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03]">
           <div className="mx-auto mb-5 flex size-14 items-center justify-center rounded-2xl bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">
             <FileText className="size-7" aria-hidden />
@@ -80,7 +69,7 @@ export default async function StatementsPage() {
           </Button>
         </div>
       ) : (
-        <StatementsTable rows={rows} />
+        <StatementsTable rows={items} onDelete={handleDelete} />
       )}
     </main>
   );

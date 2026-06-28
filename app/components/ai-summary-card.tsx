@@ -5,6 +5,8 @@ import type { AggregatedView } from '@/lib/aggregations';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { apiFetch, ApiRequestError } from '@/frontend/api/client';
+import { getPublicConfig } from '@/frontend/auth/config';
 
 type State =
   | { phase: 'idle' }
@@ -71,35 +73,26 @@ export function AiSummaryCard({ view }: { view: AggregatedView }) {
     dispatch({ type: 'START' });
 
     try {
-      const res = await fetch('/api/summarize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(view),
-        signal: ac.signal,
-      });
-
-      if (!res.ok) {
-        let message: string;
-        if (res.status === 429) {
-          message = 'The AI is busy right now — try again in a minute.';
-        } else if (res.status === 503) {
-          try {
-            const data = (await res.json()) as { error?: string };
-            message = data.error ?? 'AI summary is not configured.';
-          } catch {
-            message = 'AI summary is not configured.';
-          }
-        } else {
-          try {
-            const data = (await res.json()) as { error?: string };
-            message = data.error ?? 'Could not generate summary.';
-          } catch {
-            message = 'Could not generate summary.';
-          }
-        }
-        dispatch({ type: 'ERROR', message });
-        return;
+      // Build period query params for GET /summaries.
+      const periodParams = new URLSearchParams();
+      if (view.spec.type === 'month') {
+        periodParams.set('period', 'month');
+        periodParams.set('year', String(view.spec.year));
+        periodParams.set('month', String(view.spec.month));
+      } else if (view.spec.type === 'quarter') {
+        periodParams.set('period', 'quarter');
+        periodParams.set('year', String(view.spec.year));
+        periodParams.set('quarter', String(view.spec.quarter));
+      } else {
+        periodParams.set('period', 'year');
+        periodParams.set('year', String(view.spec.year));
       }
+
+      const config = getPublicConfig();
+      const res = await apiFetch(
+        `${config.apiBaseUrl}/summaries?${periodParams.toString()}`,
+        { signal: ac.signal },
+      );
 
       if (!res.body) {
         dispatch({
@@ -123,8 +116,20 @@ export function AiSummaryCard({ view }: { view: AggregatedView }) {
 
       cacheRef.current.set(key, text);
       dispatch({ type: 'DONE' });
-    } catch {
+    } catch (err: unknown) {
       if (ac.signal.aborted) return;
+      if (err instanceof ApiRequestError) {
+        let message: string;
+        if (err.status === 429) {
+          message = 'The AI is busy right now — try again in a minute.';
+        } else if (err.status === 503) {
+          message = 'AI summary is not configured.';
+        } else {
+          message = 'Could not generate summary.';
+        }
+        dispatch({ type: 'ERROR', message });
+        return;
+      }
       dispatch({
         type: 'ERROR',
         message:
