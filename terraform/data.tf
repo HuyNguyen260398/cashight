@@ -76,7 +76,9 @@ resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
   rule {
     id     = "expire-uploads"
     status = "Enabled"
-    filter {}
+    filter {
+      prefix = "uploads/"
+    }
 
     expiration {
       days = 1

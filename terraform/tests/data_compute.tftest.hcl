@@ -152,3 +152,33 @@ run "summary_api_memory" {
     error_message = "summary-api memory must be 1024 MiB"
   }
 }
+
+run "uploads_bucket_tls_only_policy_exists" {
+  command = plan
+  # aws_s3_bucket_policy attributes (.bucket, .policy) are computed and
+  # unknown at plan time for new resources. Assert via the data source's
+  # static condition block, which has no dependency on the bucket ARN.
+  assert {
+    condition     = data.aws_iam_policy_document.uploads_deny_insecure.statement[0].effect == "Deny"
+    error_message = "Uploads bucket must have a TLS-only bucket policy attached"
+  }
+}
+
+run "lambda_roles_are_distinct" {
+  command = plan
+  # IAM role ARNs are computed (unknown at plan time for new resources).
+  # Compare role names instead — they are input attributes, always known
+  # during plan, and each function has a unique role name in the config.
+  assert {
+    condition     = aws_iam_role.lambda_auth_guard.name != aws_iam_role.lambda_parser_worker.name
+    error_message = "Each Lambda function must have its own dedicated IAM role"
+  }
+  assert {
+    condition     = aws_iam_role.lambda_uploads_api.name != aws_iam_role.lambda_summary_api.name
+    error_message = "Each Lambda function must have its own dedicated IAM role"
+  }
+  assert {
+    condition     = aws_iam_role.lambda_statements_api.name != aws_iam_role.lambda_dashboard_api.name
+    error_message = "Each Lambda function must have its own dedicated IAM role"
+  }
+}
