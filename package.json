@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "NODE_OPTIONS=--disable-warning=DEP0205 next dev",
-    "build": "NODE_OPTIONS=--disable-warning=DEP0205 next build && node scripts/copy-pdf-worker.mjs",
+    "build": "NODE_OPTIONS=--disable-warning=DEP0205 next build",
+    "verify:static": "node scripts/verify-static-export.mjs",
     "build:lambdas": "node scripts/build-lambdas.mjs",
     "start": "next start",
     "lint": "eslint",
@@ -32,6 +33,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.3.0",
+    "geist": "^1.7.2",
     "lucide-react": "^1.16.0",
     "next": "16.2.6",
     "next-auth": "5.0.0-beta.31",
