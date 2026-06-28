@@ -47,7 +47,7 @@ async function clearSessionAndRedirect(): Promise<void> {
   } catch {
     // ignore — we always redirect
   }
-  window.location.href = '/signin';
+  window.location.href = '/signin/';
 }
 
 /**

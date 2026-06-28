@@ -116,7 +116,7 @@ describe('apiFetch', () => {
     );
 
     expect(mockRemoveUser).toHaveBeenCalledOnce();
-    expect((window.location as { href: string }).href).toBe('/signin');
+    expect((window.location as { href: string }).href).toBe('/signin/');
   });
 
   it('throws ApiRequestError for non-401 error responses', async () => {

@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import { AuthProvider, useAuth } from '../auth/auth-provider';
 import { ProtectedRoute } from '../auth/protected-route';
+import { getOidcManager } from '../auth/oidc';
 import CallbackPage from '../../app/auth/callback/page';
 
 // ── mocks ──────────────────────────────────────────────────────────────────
@@ -137,10 +138,26 @@ describe('AuthProvider', () => {
     expect(mockRemoveUser).toHaveBeenCalledOnce();
   });
 
-  it('calls signoutRedirect when signing out via OIDC manager', async () => {
+  it('calls signoutRedirect when a component triggers OIDC logout', async () => {
+    mockGetUser.mockResolvedValue(makeUser());
     mockSignoutRedirect.mockResolvedValue(undefined);
-    await mockManager.signoutRedirect();
-    expect(mockSignoutRedirect).toHaveBeenCalledOnce();
+
+    function SignOutButton() {
+      function handleSignOut() {
+        const manager = getOidcManager();
+        void manager.signoutRedirect();
+      }
+      return <button onClick={handleSignOut}>Sign out</button>;
+    }
+
+    render(
+      <AuthProvider>
+        <SignOutButton />
+      </AuthProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    await waitFor(() => expect(mockSignoutRedirect).toHaveBeenCalledOnce());
   });
 });
 

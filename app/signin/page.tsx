@@ -1,16 +1,26 @@
 'use client';
 
+import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { BarChart3, ShieldCheck } from 'lucide-react';
 import { getOidcManager } from '@/frontend/auth/oidc';
 
-export default function SignInPage() {
-  // Read the ?error= query parameter on the client side.
-  const error =
-    typeof window !== 'undefined'
-      ? new URLSearchParams(window.location.search).get('error')
-      : null;
+/** Reads ?error= from the URL and renders the error banner when present. */
+function SignInError() {
+  const searchParams = useSearchParams();
+  const error = searchParams.get('error');
+  if (!error) return null;
+  return (
+    <p className="mt-4 rounded-lg bg-error-50 px-3 py-2 text-sm text-error-700 dark:bg-error-500/10 dark:text-error-500">
+      {error === 'AccessDenied'
+        ? "That account isn't allowed to access this app."
+        : "Couldn't sign you in. Please try again."}
+    </p>
+  );
+}
 
+export default function SignInPage() {
   function handleGoogle() {
     const manager = getOidcManager();
     void manager.signinRedirect({
@@ -39,13 +49,9 @@ export default function SignInPage() {
           <ShieldCheck className="size-3.5" aria-hidden />
           Private single-user workspace
         </div>
-        {error ? (
-          <p className="mt-4 rounded-lg bg-error-50 px-3 py-2 text-sm text-error-700 dark:bg-error-500/10 dark:text-error-500">
-            {error === 'AccessDenied'
-              ? "That account isn't allowed to access this app."
-              : "Couldn't sign you in. Please try again."}
-          </p>
-        ) : null}
+        <Suspense fallback={null}>
+          <SignInError />
+        </Suspense>
         <div className="mt-6">
           <Button type="button" className="w-full" onClick={handleGoogle}>
             Sign in with Google
