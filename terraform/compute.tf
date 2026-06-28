@@ -382,7 +382,7 @@ resource "aws_lambda_alias" "parser_worker_live" {
 
 resource "aws_lambda_event_source_mapping" "parser_worker_sqs" {
   event_source_arn                   = aws_sqs_queue.parse.arn
-  function_name                      = aws_lambda_function.parser_worker.arn
+  function_name                      = aws_lambda_alias.parser_worker_live.arn
   batch_size                         = 1
   function_response_types            = ["ReportBatchItemFailures"]
   maximum_batching_window_in_seconds = 0

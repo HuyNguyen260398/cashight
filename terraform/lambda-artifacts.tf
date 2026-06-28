@@ -51,8 +51,9 @@ data "aws_iam_policy_document" "artifacts_tls_only" {
 }
 
 resource "aws_s3_bucket_policy" "artifacts" {
-  bucket = aws_s3_bucket.artifacts.id
-  policy = data.aws_iam_policy_document.artifacts_tls_only.json
+  bucket     = aws_s3_bucket.artifacts.id
+  policy     = data.aws_iam_policy_document.artifacts_tls_only.json
+  depends_on = [aws_s3_bucket_public_access_block.artifacts]
 }
 
 output "artifacts_bucket_name" {

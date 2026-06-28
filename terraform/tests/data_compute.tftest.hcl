@@ -181,4 +181,8 @@ run "lambda_roles_are_distinct" {
     condition     = aws_iam_role.lambda_statements_api.name != aws_iam_role.lambda_dashboard_api.name
     error_message = "Each Lambda function must have its own dedicated IAM role"
   }
+  assert {
+    condition     = aws_iam_role.lambda_upload_status_api.name != aws_iam_role.lambda_parser_worker.name
+    error_message = "Each Lambda function must have its own dedicated IAM role"
+  }
 }
