@@ -2,9 +2,11 @@
 
 import { UploadDropzone } from '@/app/components/upload-dropzone';
 import { UploadCloud } from 'lucide-react';
+import { ProtectedRoute } from '@/frontend/auth/protected-route';
 
 export default function UploadPage() {
   return (
+    <ProtectedRoute>
     <main className="space-y-6">
       <header className="rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03]">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -30,5 +32,6 @@ export default function UploadPage() {
         <UploadDropzone />
       </div>
     </main>
+    </ProtectedRoute>
   );
 }

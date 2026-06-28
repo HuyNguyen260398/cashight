@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiFetch } from '@/frontend/api/client';
 import { getPublicConfig } from '@/frontend/auth/config';
 import { StatementsListResponseSchema } from '@/frontend/api/contracts';
@@ -48,6 +48,7 @@ type LoadedState = {
 export function useStatements(): {
   items: StatementRow[];
   loading: boolean;
+  loadingMore: boolean;
   error: string | null;
   nextCursor: string | null;
   loadMore: () => void;
@@ -56,6 +57,10 @@ export function useStatements(): {
 } {
   // Monotonically increasing counter; incrementing triggers a reload.
   const [requestEpoch, setRequestEpoch] = useState(0);
+
+  // In-flight guard for loadMore — ref (not state) to avoid re-renders.
+  const loadingMoreRef = useRef(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const [loaded, setLoaded] = useState<LoadedState>({
     epoch: -1, // -1 = nothing loaded yet
@@ -101,7 +106,10 @@ export function useStatements(): {
   }, [requestEpoch]);
 
   const loadMore = useCallback(() => {
-    if (!loaded.nextCursor || loading) return;
+    if (!loaded.nextCursor || loading || loadingMoreRef.current) return;
+
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
 
     const config = getPublicConfig();
     const cursor = loaded.nextCursor;
@@ -126,6 +134,10 @@ export function useStatements(): {
               ? err.message
               : 'Failed to load more statements',
         }));
+      })
+      .finally(() => {
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
       });
   }, [loaded.nextCursor, loading]);
 
@@ -149,6 +161,7 @@ export function useStatements(): {
   return {
     items: loaded.items,
     loading,
+    loadingMore,
     error: loaded.error,
     nextCursor: loaded.nextCursor,
     loadMore,

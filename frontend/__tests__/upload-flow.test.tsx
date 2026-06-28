@@ -376,6 +376,12 @@ const DASHBOARD_PAYLOAD = {
   spec: MONTH_SPEC,
   statementCount: 1,
   label: 'May 2026',
+  totals: { totalSpend: 0, totalInstallments: 0, totalCashback: 0, totalFeesAndInterest: 0 },
+  transactions: [],
+  byCategory: [],
+  topMerchants: [],
+  subPeriods: [],
+  installmentSubPeriods: [],
 };
 
 describe('useDashboard', () => {
@@ -419,7 +425,17 @@ describe('useDashboard', () => {
   });
 
   it('re-fetches when spec changes and returns new data', async () => {
-    const yearPayload = { spec: YEAR_SPEC, statementCount: 3, label: '2026' };
+    const yearPayload = {
+      spec: YEAR_SPEC,
+      statementCount: 3,
+      label: '2026',
+      totals: { totalSpend: 0, totalInstallments: 0, totalCashback: 0, totalFeesAndInterest: 0 },
+      transactions: [],
+      byCategory: [],
+      topMerchants: [],
+      subPeriods: [],
+      installmentSubPeriods: [],
+    };
 
     mockApiFetch
       .mockResolvedValueOnce(jsonResponse(DASHBOARD_PAYLOAD))

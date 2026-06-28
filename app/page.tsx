@@ -11,6 +11,7 @@ import { useDashboard } from '@/frontend/hooks/use-dashboard';
 import { apiFetch } from '@/frontend/api/client';
 import { getPublicConfig } from '@/frontend/auth/config';
 import { StatementsListResponseSchema } from '@/frontend/api/contracts';
+import { ProtectedRoute } from '@/frontend/auth/protected-route';
 
 // ── Loading skeleton ─────────────────────────────────────────────────────────
 
@@ -146,8 +147,10 @@ function DashboardPageInner() {
 
 export default function DashboardPage() {
   return (
-    <Suspense>
-      <DashboardPageInner />
-    </Suspense>
+    <ProtectedRoute>
+      <Suspense>
+        <DashboardPageInner />
+      </Suspense>
+    </ProtectedRoute>
   );
 }

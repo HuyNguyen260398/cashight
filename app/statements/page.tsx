@@ -9,9 +9,10 @@ import {
 } from '@/app/components/statements-table';
 import { FileText, Loader2, UploadCloud } from 'lucide-react';
 import { useStatements } from '@/frontend/hooks/use-statements';
+import { ProtectedRoute } from '@/frontend/auth/protected-route';
 
 export default function StatementsPage() {
-  const { items, loading, error, deleteStatement, nextCursor, loadMore } = useStatements();
+  const { items, loading, loadingMore, error, deleteStatement, nextCursor, loadMore } = useStatements();
 
   async function handleDelete(key: string) {
     try {
@@ -23,6 +24,7 @@ export default function StatementsPage() {
   }
 
   return (
+    <ProtectedRoute>
     <main className="space-y-6">
       <header className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03] sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -76,9 +78,9 @@ export default function StatementsPage() {
               <Button
                 variant="outline"
                 onClick={loadMore}
-                disabled={loading}
+                disabled={loading || loadingMore}
               >
-                {loading && <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />}
+                {loadingMore && <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />}
                 Load more
               </Button>
             </div>
@@ -86,5 +88,6 @@ export default function StatementsPage() {
         </>
       )}
     </main>
+    </ProtectedRoute>
   );
 }

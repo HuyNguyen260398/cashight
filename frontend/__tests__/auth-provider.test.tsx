@@ -181,7 +181,7 @@ describe('ProtectedRoute', () => {
         </ProtectedRoute>
       </AuthProvider>,
     );
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/signin'));
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/signin/'));
     expect(screen.queryByText('protected content')).toBeNull();
   });
 
@@ -223,7 +223,7 @@ describe('AuthCallbackPage', () => {
     mockSigninRedirectCallback.mockRejectedValue(new Error('callback error'));
     render(<CallbackPage />);
     await waitFor(() =>
-      expect(mockReplace).toHaveBeenCalledWith('/signin?error=callback'),
+      expect(mockReplace).toHaveBeenCalledWith('/signin/?error=callback'),
     );
   });
 });

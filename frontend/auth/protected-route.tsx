@@ -15,7 +15,7 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.replace('/signin');
+      router.replace('/signin/');
     }
   }, [user, loading, router]);
 

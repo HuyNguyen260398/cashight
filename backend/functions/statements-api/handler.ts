@@ -96,7 +96,7 @@ export function createStatementsApiHandler(deps: StatementsApiDependencies) {
         const cursor = parseCursor(rawCursor);
         const { items, nextCursor } = await deps.queryStatements(sub, cursor);
         return jsonResponse(200, {
-          statements: items.map(metaToSummary),
+          items: items.map(metaToSummary),
           nextCursor: nextCursor ? encodeCursor(nextCursor) : null,
         });
       }

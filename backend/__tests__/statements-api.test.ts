@@ -136,8 +136,8 @@ describe('GET /statements (list)', () => {
     const res = await handler(makeListEvent());
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
-    expect(body.statements).toHaveLength(1);
-    expect(body.statements[0].statementId).toBe('2026-05-9674');
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0].statementId).toBe('2026-05-9674');
     expect(body.nextCursor).toBeNull();
   });
 

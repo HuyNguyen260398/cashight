@@ -73,26 +73,13 @@ export function AiSummaryCard({ view }: { view: AggregatedView }) {
     dispatch({ type: 'START' });
 
     try {
-      // Build period query params for GET /summaries.
-      const periodParams = new URLSearchParams();
-      if (view.spec.type === 'month') {
-        periodParams.set('period', 'month');
-        periodParams.set('year', String(view.spec.year));
-        periodParams.set('month', String(view.spec.month));
-      } else if (view.spec.type === 'quarter') {
-        periodParams.set('period', 'quarter');
-        periodParams.set('year', String(view.spec.year));
-        periodParams.set('quarter', String(view.spec.quarter));
-      } else {
-        periodParams.set('period', 'year');
-        periodParams.set('year', String(view.spec.year));
-      }
-
       const config = getPublicConfig();
-      const res = await apiFetch(
-        `${config.apiBaseUrl}/summaries?${periodParams.toString()}`,
-        { signal: ac.signal },
-      );
+      const res = await apiFetch(`${config.apiBaseUrl}/summaries`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(view),
+        signal: ac.signal,
+      });
 
       if (!res.body) {
         dispatch({

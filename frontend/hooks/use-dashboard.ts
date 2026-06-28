@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '@/frontend/api/client';
 import { getPublicConfig } from '@/frontend/auth/config';
-import { DashboardResponseSchema } from '@/frontend/api/contracts';
+import { AggregatedViewSchema } from '@cashight/domain/schemas';
 import type { AggregatedView } from '@cashight/domain/aggregations';
 import type { PeriodSpec } from '@cashight/domain/period';
 
@@ -57,9 +57,9 @@ export function useDashboard(spec: PeriodSpec | null): {
     apiFetch(`${config.apiBaseUrl}/dashboard?${params.toString()}`)
       .then((res) => res.json())
       .then((raw) => {
-        const json = DashboardResponseSchema.parse(raw) as unknown as AggregatedView;
+        const data = AggregatedViewSchema.parse(raw) as AggregatedView;
         if (!cancelled) {
-          setLoaded({ specKey, data: json, error: null });
+          setLoaded({ specKey, data, error: null });
         }
       })
       .catch((err: unknown) => {
