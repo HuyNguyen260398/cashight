@@ -59,9 +59,15 @@ export const StatementsListResponseSchema = z.object({
 export type StatementsListResponse = z.infer<typeof StatementsListResponseSchema>;
 
 // ── GET /dashboard response ──────────────────────────────────────────────────
-// AggregatedView from @cashight/domain is a complex nested type with no Zod
-// schema, so we accept unknown and cast at the call site.
-export const DashboardResponseSchema = z.unknown();
+// Structural minimum: validates the key envelope fields while letting the full
+// AggregatedView shape pass through via .passthrough(). The call site casts to
+// AggregatedView after parse succeeds.
+export const DashboardResponseSchema = z.object({
+  spec: z.object({ type: z.string(), year: z.number() }).passthrough(),
+  statementCount: z.number(),
+  label: z.string(),
+}).passthrough();
+export type DashboardResponse = z.infer<typeof DashboardResponseSchema>;
 
 // ── Standard error envelope ──────────────────────────────────────────────────
 

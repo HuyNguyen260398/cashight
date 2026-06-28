@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '@/frontend/api/client';
 import { getPublicConfig } from '@/frontend/auth/config';
+import { DashboardResponseSchema } from '@/frontend/api/contracts';
 import type { AggregatedView } from '@cashight/domain/aggregations';
 import type { PeriodSpec } from '@cashight/domain/period';
 
@@ -54,8 +55,9 @@ export function useDashboard(spec: PeriodSpec | null): {
     const params = buildPeriodParams(spec);
 
     apiFetch(`${config.apiBaseUrl}/dashboard?${params.toString()}`)
-      .then((res) => res.json() as Promise<AggregatedView>)
-      .then((json) => {
+      .then((res) => res.json())
+      .then((raw) => {
+        const json = DashboardResponseSchema.parse(raw) as unknown as AggregatedView;
         if (!cancelled) {
           setLoaded({ specKey, data: json, error: null });
         }
