@@ -37,3 +37,20 @@ variable "allowed_email" {
   description = "Single email address permitted to sign in to Cashight."
   default     = ""
 }
+
+variable "cutover_dns_to_cloudfront" {
+  type        = bool
+  description = <<-EOT
+    Phase 9 DNS cutover toggle.
+
+    false (default): cashight.nghuy.link is managed by aws_amplify_domain_association.
+                     CloudFront serves only next.cashight.nghuy.link (staging).
+
+    true (cutover):  aws_amplify_domain_association is removed. A Route 53 ALIAS record
+                     points cashight.nghuy.link at the CloudFront distribution directly.
+                     The Amplify app and branch remain intact for rollback via re-apply.
+
+    To roll back: set this to false and re-apply. Amplify re-provisions its DNS record.
+  EOT
+  default     = false
+}

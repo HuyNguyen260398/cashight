@@ -128,14 +128,19 @@ resource "aws_cloudfront_response_headers_policy" "frontend" {
 # ── CloudFront distribution ───────────────────────────────────────────────────
 
 resource "aws_cloudfront_distribution" "frontend" {
-  comment             = "Cashight SPA — temporary staging distribution (next.cashight.nghuy.link)"
+  # Before cutover: serves staging only (next.cashight.nghuy.link).
+  # After cutover (cutover_dns_to_cloudfront=true): also serves production domain.
+  comment             = var.cutover_dns_to_cloudfront ? "Cashight SPA — production (cashight.nghuy.link)" : "Cashight SPA — staging (next.cashight.nghuy.link)"
   enabled             = true
   is_ipv6_enabled     = true
   default_root_object = "index.html"
   price_class         = "PriceClass_200" # US, Europe, Asia (ap-southeast-1 PoP included)
   http_version        = "http2and3"
 
-  aliases = [
+  aliases = var.cutover_dns_to_cloudfront ? [
+    "cashight.nghuy.link",
+    "next.cashight.nghuy.link",
+    ] : [
     "next.cashight.nghuy.link",
   ]
 
@@ -251,13 +256,32 @@ resource "aws_s3_bucket_policy" "frontend" {
   depends_on = [aws_s3_bucket_public_access_block.frontend]
 }
 
-# ── Route 53 — temporary alias (next.cashight.nghuy.link → CloudFront) ────────
-# The main cashight.nghuy.link record remains pointed at Amplify until
-# the SPA cutover is validated and traffic is switched manually.
+# ── Route 53 — staging alias (next.cashight.nghuy.link → CloudFront) ─────────
+# Always present. Validates the full stack before the production DNS switch.
 
 resource "aws_route53_record" "frontend_temp" {
   zone_id = data.aws_route53_zone.nghuy_link.zone_id
   name    = "next.cashight.nghuy.link"
+  type    = "A"
+
+  alias {
+    name                   = aws_cloudfront_distribution.frontend.domain_name
+    zone_id                = aws_cloudfront_distribution.frontend.hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+# ── Route 53 — production alias (cashight.nghuy.link → CloudFront) ────────────
+# Created when cutover_dns_to_cloudfront=true. At the same apply, the
+# aws_amplify_domain_association is destroyed, releasing its DNS record so this
+# record can take its place. Rollback: set cutover_dns_to_cloudfront=false and
+# re-apply — the Amplify domain association is re-created and this record removed.
+
+resource "aws_route53_record" "frontend_prod" {
+  count = var.cutover_dns_to_cloudfront ? 1 : 0
+
+  zone_id = data.aws_route53_zone.nghuy_link.zone_id
+  name    = "cashight.nghuy.link"
   type    = "A"
 
   alias {
@@ -287,4 +311,14 @@ output "cloudfront_domain_name" {
 output "frontend_temp_url" {
   value       = "https://next.cashight.nghuy.link"
   description = "Staging URL for the new SPA distribution. Validate here before DNS cutover."
+}
+
+output "frontend_production_url" {
+  value       = var.cutover_dns_to_cloudfront ? "https://cashight.nghuy.link" : "https://next.cashight.nghuy.link (cutover pending)"
+  description = "Production URL. Reflects cashight.nghuy.link only after cutover_dns_to_cloudfront=true."
+}
+
+output "dns_cutover_active" {
+  value       = var.cutover_dns_to_cloudfront
+  description = "True when cashight.nghuy.link is pointing at CloudFront (post-cutover)."
 }

@@ -124,7 +124,14 @@ resource "aws_amplify_branch" "main" {
 # `cashight` CNAME into Route53 — no aws_route53_record resources needed.
 # First apply can take 5–30 min while the cert validates; wait_for_verification
 # blocks the apply until it's done.
+#
+# Phase 9 DNS cutover: this resource is gated by cutover_dns_to_cloudfront.
+# When cutover_dns_to_cloudfront=true, this association is destroyed and
+# aws_route53_record.frontend_prod takes ownership of cashight.nghuy.link.
+# Rollback: set cutover_dns_to_cloudfront=false → Amplify re-provisions DNS.
 resource "aws_amplify_domain_association" "cashight" {
+  count = var.cutover_dns_to_cloudfront ? 0 : 1
+
   app_id                = aws_amplify_app.cashight.id
   domain_name           = "nghuy.link"
   wait_for_verification = true
