@@ -94,50 +94,309 @@ not executed because an authenticated `E2E_STORAGE_STATE` file was not supplied.
 This is intentionally deferred and does not block portable-domain extraction,
 but it must be completed and its result recorded before Phase 9 DNS cutover.
 
-## Phase gates
+## Phase 1: Baseline safety gates
 
-Complete each phase in the implementation plan in order. Record the Git SHA,
-Terraform plan artifact, deployment identifier, verification results, and
-rollback result in the migration change record.
+Verify the privacy boundary, snapshot, and CI gates before any migration work.
 
-1. Baseline: unit privacy gates, snapshot, lint, and typecheck pass.
-2. Domain extraction: Amplify build and financial parity remain unchanged.
-3. Shared backend: authorization, ownership, storage-key, and log-redaction
-   tests pass without AWS calls.
-4. Upload pipeline: direct upload, conflict, idempotency, retry, and DLQ tests
-   pass; uploaded PDFs are deleted or expire.
-5. Read and summary APIs: statement/dashboard parity and Gemini privacy tests
-   pass, including streaming behavior.
-6. Static frontend: PKCE login, callback, logout, refresh, deep links, and
-   static export pass without a Next.js server runtime.
-7. Infrastructure: remote-state controls are applied before Cognito Google IdP
-   secrets enter Terraform state; WAF, alarms, IAM, encryption, and deployment
-   aliases are verified.
-8. Data migration: every source item reconciles by safe metadata and hash;
-   legacy keys remain intact.
-9. Cutover: pre-cutover smoke and rollback rehearsals pass before DNS changes.
-10. Observation: maintain seven consecutive healthy production days before
-    requesting legacy decommissioning.
+```bash
+# Run privacy-boundary unit tests
+pnpm test lib/__tests__/architecture-privacy.test.ts
+
+# Run full unit test suite
+pnpm test
+
+# Type-check and lint
+pnpm tsc --noEmit
+pnpm lint
+
+# Capture the current statement baseline (requires AWS credentials + STATEMENTS_BUCKET)
+eval "$(aws configure export-credentials --format env)"   # if using aws login
+mkdir -p .migration-private
+STATEMENTS_BUCKET=$(cd terraform && terraform output -raw statements_bucket_name) \
+STORAGE_REGION=ap-southeast-1 \
+pnpm tsx scripts/snapshot-current-state.ts \
+  --output .migration-private/current-state-$(date +%Y%m%d).json
+```
+
+Gate: all tests pass, snapshot contains no PAN/transactions/email fields.
+
+## Phase 2: Domain extraction (portable domain package)
+
+Verify the extracted `@cashight/domain` package produces identical results to
+the original `lib/` modules and that the existing Amplify build still passes.
+
+```bash
+# Domain parity tests
+pnpm test lib/__tests__/domain-package-parity.test.ts
+
+# Full test suite — must stay green
+pnpm test
+
+# Amplify build equivalent (static export + typecheck)
+pnpm build
+pnpm tsc --noEmit
+pnpm lint
+
+# Lambda artifacts build
+pnpm run build:lambdas
+ls dist/lambdas/parser-worker/pdf.worker.mjs   # must exist
+```
+
+Gate: all tests pass, `pnpm build` succeeds, parser artifact contains the pdf worker.
+
+## Phase 3: Shared Lambda adapters and auth guard
+
+Unit tests cover the shared backend layer without any AWS calls.
+
+```bash
+pnpm test backend/__tests__/shared.test.ts backend/__tests__/auth-guard.test.ts
+pnpm tsc --noEmit
+pnpm run build:lambdas
+ls dist/lambdas/auth-guard/index.js   # must exist
+```
+
+Gate: all backend shared and auth-guard tests pass.
+
+## Phase 4: Upload APIs and parser worker
+
+Verify the async upload pipeline: presigned URL creation, idempotent job
+transitions, parser parity, partial-batch behavior, and conflict handling.
+
+```bash
+pnpm test \
+  backend/__tests__/uploads-api.test.ts \
+  backend/__tests__/upload-status-api.test.ts \
+  backend/__tests__/parser-worker.test.ts \
+  backend/__tests__/parser-parity.test.ts
+
+# Parser parity against the canonical fixture (self-skips in CI when PDF absent)
+pnpm tsx scripts/test-parser.ts
+
+pnpm run build:lambdas
+ls dist/lambdas/uploads-api/index.js
+ls dist/lambdas/parser-worker/index.js
+ls dist/lambdas/parser-worker/pdf.worker.mjs
+```
+
+Gate: all tests pass, parser fixture output matches documented values (41 txns,
+statementBalance 37978402, totalSpend 26986712).
+
+## Phase 5: Statements, dashboard, and summary APIs
+
+Verify read/delete, period aggregation, and privacy-safe Gemini streaming.
+
+```bash
+pnpm test \
+  backend/__tests__/statements-api.test.ts \
+  backend/__tests__/dashboard-api.test.ts \
+  backend/__tests__/summary-api.test.ts \
+  lib/__tests__/summary-payload.test.ts
+
+pnpm run build:lambdas
+ls dist/lambdas/statements-api/index.js
+ls dist/lambdas/dashboard-api/index.js
+ls dist/lambdas/summary-api/index.js
+```
+
+Gate: all tests pass and no sentinel PII appears in prompt capture.
+
+## Phase 6: Static frontend (SPA export)
+
+Verify the browser auth, API client, upload flow, and full static export.
+
+```bash
+# Browser auth and API client unit tests
+pnpm test \
+  frontend/__tests__/auth-provider.test.tsx \
+  frontend/__tests__/api-client.test.ts \
+  frontend/__tests__/upload-flow.test.tsx
+
+# Static export build (placeholder public config for verification)
+NEXT_PUBLIC_API_BASE_URL=https://api.cashight.nghuy.link \
+NEXT_PUBLIC_COGNITO_AUTHORITY=https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_VERIFY \
+NEXT_PUBLIC_COGNITO_CLIENT_ID=static-export-verification-client \
+NEXT_PUBLIC_APP_ORIGIN=https://cashight.nghuy.link \
+pnpm build
+
+# Verify all route HTML files were emitted and no server runtime artifacts remain
+pnpm run verify:static
+
+# Serve locally and run Playwright deep-link tests
+pnpm dlx serve out -l 4173 &
+BASE_URL=http://localhost:4173 pnpm test:e2e
+kill %1
+```
+
+Gate: static export passes verification, Playwright deep-link tests pass
+(authenticated tests self-skip without storage state).
+
+## Phase 7: Infrastructure (Terraform apply + staging verification)
+
+Apply Terraform infrastructure and verify the complete stack on the temporary
+staging domain before touching production DNS.
+
+```bash
+# Authenticate (if using aws login / SSO)
+eval "$(aws configure export-credentials --format env)"
+
+cd terraform
+
+# Step 1: Back up state before any changes
+terraform state pull > ../.migration-private/terraform-state-$(date +%Y%m%d).json
+terraform state list > ../.migration-private/terraform-addresses-$(date +%Y%m%d).txt
+
+# Step 2: Plan — inspect for unexpected replacements or destroys
+terraform plan \
+  -var="google_oauth_client_id=<value>" \
+  -var="google_oauth_client_secret=<value>" \
+  -var="allowed_email=<value>" \
+  -out=../.migration-private/phase7.tfplan
+
+terraform show -json ../.migration-private/phase7.tfplan \
+  | jq '[.resource_changes[] | select(.change.actions != ["no-op"]) | {address, actions: .change.actions}]'
+# Review: no retained resource (DynamoDB, statement bucket, Cognito pool) should be replaced
+
+# Step 3: Apply
+terraform apply ../.migration-private/phase7.tfplan
+
+# Step 4: Capture outputs
+terraform output -json > ../.migration-private/terraform-outputs-$(date +%Y%m%d).json
+cat ../.migration-private/terraform-outputs-$(date +%Y%m%d).json | jq '{
+  staging_url: .frontend_temp_url.value,
+  api_url: .api_gateway_invoke_url.value,
+  cognito_spa_client_id: .cognito_spa_client_id.value,
+  cognito_issuer: .cognito_issuer.value,
+  cloudfront_domain: .cloudfront_domain_name.value
+}'
+cd ..
+
+# Step 5: Deploy application to staging
+#  (trigger via GitHub Actions application-deploy.yaml with the CI run ID, or locally:)
+FRONTEND_BUCKET=$(cd terraform && terraform output -raw frontend_bucket_name) \
+CLOUDFRONT_DISTRIBUTION_ID=$(cd terraform && terraform output -raw cloudfront_distribution_id) \
+GIT_SHA=$(git rev-parse --short HEAD) \
+pnpm deploy:frontend
+
+# Step 6: Run smoke tests against staging
+APP_URL=https://next.cashight.nghuy.link \
+API_URL=https://api.cashight.nghuy.link \
+pnpm smoke:serverless
+
+# Step 7: Export Lambda logs and scan for PII
+aws logs filter-log-events \
+  --log-group-name /aws/lambda/cashight-parser-worker \
+  --start-time $(node -e "console.log(Date.now() - 3600000)") \
+  --output json \
+  > .migration-private/phase7-lambda-logs.json
+pnpm security:scan-logs .migration-private/phase7-lambda-logs.json
+```
+
+Gate: smoke tests pass, log scan reports zero PII findings, Terraform plan
+shows no unreviewed resource replacements.
+
+## Phase 8: Data migration and reconciliation
+
+Copy existing statement objects to the new user-prefixed keys and confirm
+checksums, metadata, and aggregates match before switching read traffic.
+
+```bash
+# Capture current Cognito sub (needed as the migration target)
+# Sign in to the staging app and note the sub from the JWT or DynamoDB:
+aws dynamodb get-item \
+  --table-name cashight \
+  --key '{"PK": {"S": "AUTHZ#<sub>"}, "SK": {"S": "PROFILE"}}' \
+  --region ap-southeast-1
+# Or decode the access token: base64 -d <<< $(cut -d. -f2 <<< <access-token>)
+
+export USER_SUB=<your-cognito-sub>
+
+# Step 1: Dry run — no writes
+pnpm migrate:statements \
+  --user-sub "$USER_SUB" \
+  --source-prefix statements/ \
+  --report .migration-private/statement-migration-dry-run.json \
+  --dry-run
+
+cat .migration-private/statement-migration-dry-run.json | jq '{
+  objectCount: .objectCount,
+  wouldCopy: .wouldCopy,
+  skipped: .skipped,
+  errors: .errors
+}'
+# Review: every source object maps to a destination key; no errors
+
+# Step 2: Apply migration
+pnpm migrate:statements \
+  --user-sub "$USER_SUB" \
+  --source-prefix statements/ \
+  --report .migration-private/statement-migration-$(date +%Y%m%d).json \
+  --apply
+
+# Step 3: Reconcile source and destination
+pnpm reconcile:statements \
+  --user-sub "$USER_SUB" \
+  --report .migration-private/reconciliation-$(date +%Y%m%d).json
+
+cat .migration-private/reconciliation-$(date +%Y%m%d).json | jq '{
+  sourceCount: .sourceCount,
+  destinationCount: .destinationCount,
+  checksumMatches: .checksumMatches,
+  aggregateHashMatch: .aggregateHashMatch,
+  mismatches: .mismatches
+}'
+# Expected: destinationCount == sourceCount, mismatches == [], aggregateHashMatch == true
+
+# Step 4: API parity check — compare new API output to current Amplify output
+# (adjust period to your most recent populated month)
+curl -s -H "Authorization: Bearer <access-token>" \
+  "https://api.cashight.nghuy.link/dashboard?period=month&year=2026&month=5" \
+  | jq '{totalSpend, totalCashback, transactionCount}' \
+  > .migration-private/new-api-dashboard.json
+
+# Compare with Amplify equivalent by running the same period on the current app
+# and confirming totals match the snapshot values.
+```
+
+Gate: reconciliation exits 0, source keys are untouched, aggregate hash matches.
 
 ## Rollback
 
-Before DNS cutover, rollback means routing test traffic back to the existing
-Amplify URL and leaving production DNS unchanged. After cutover, use the
-Terraform-managed rollback record to restore the prior DNS target, then run the
-current-production smoke test against the restored endpoint.
+**Before Phase 9 DNS cutover** — rollback means directing test traffic to the
+existing Amplify URL and leaving `cashight.nghuy.link` DNS unchanged. The
+production site continues serving Amplify SSR without interruption.
 
-Do not delete or mutate the following during the rollback window:
+**After Phase 9 cutover but before Phase 10 apply** — use the Terraform rollback
+plan described in the Phase 9 Step 5 section above.
 
-- Amplify application, branch, compute role, or environment configuration;
-- Auth.js configuration and confidential Cognito app client;
+Do not delete or mutate the following until Phase 10 decommission prerequisites
+are signed off:
+
+- Amplify application, branch, and compute role;
 - legacy `statements/{cardLast4}/{year}/{year}-{mm}.json` objects or versions;
-- existing SSM parameters used by Amplify;
 - prior frontend release manifest or live Lambda versions.
 
-If a backend canary alarms, allow CodeDeploy to restore the previous `live`
-alias and verify API health before retrying. If frontend verification fails,
-restore the prior HTML release and invalidate HTML paths only; immutable assets
-remain versioned by content hash.
+If a backend canary alarms, CodeDeploy automatically restores the previous `live`
+alias. To verify:
+
+```bash
+# Check current live alias version
+aws lambda get-alias \
+  --function-name cashight-parser-worker \
+  --name live \
+  --region ap-southeast-1 \
+  | jq '{FunctionVersion, Description}'
+
+# Manually pin live alias to prior version if needed
+aws lambda update-alias \
+  --function-name cashight-<fn> \
+  --name live \
+  --function-version <prior-version> \
+  --region ap-southeast-1
+```
+
+If frontend verification fails, restore the prior release by re-running the
+application deployment workflow with the previous CI run ID. Immutable
+`_next/static/` assets remain versioned by content hash and are never deleted.
 
 ## Phase 9: DNS cutover
 
@@ -353,14 +612,174 @@ Seven consecutive healthy days required before Phase 10 decommission.
 
 ## Decommission gate
 
-Phase 10 requires all of the following evidence:
+Phase 10 requires all of the following evidence before applying the plan:
 
-- seven consecutive healthy days after CloudFront DNS cutover;
-- zero unreconciled statements or upload jobs;
-- successful production browser and API smoke tests;
-- successful `pnpm security:scan-logs` against exported production Lambda and
-  API logs;
-- confirmed frontend and backend rollback artifacts;
-- an approved Terraform plan that removes only the documented legacy runtime.
+- [ ] Seven consecutive healthy days after CloudFront DNS cutover (see Phase 9 Step 6 log)
+- [ ] Zero unreconciled statements or upload jobs
+- [ ] Successful production browser and API smoke tests
+- [ ] Successful `pnpm security:scan-logs` against exported production Lambda and API logs
+- [ ] Confirmed frontend and backend rollback artifacts exist in S3
+- [ ] An approved Terraform plan that removes only the documented legacy runtime
 
 Decommissioning is a separate reviewed change. Never combine it with cutover.
+
+## Phase 10: Decommission legacy Amplify runtime
+
+**Do not proceed until all decommission gate checkboxes above are ticked.**
+
+### Step 1: Confirm prerequisites
+
+```bash
+eval "$(aws configure export-credentials --format env)"
+
+# Confirm seven healthy days are logged above
+# Confirm DLQ is empty
+aws sqs get-queue-attributes \
+  --queue-url $(cd terraform && terraform output -raw parse_dlq_url 2>/dev/null || echo "<dlq-url>") \
+  --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible \
+  --region ap-southeast-1 \
+  | jq '.Attributes'
+# Expected: both values == "0"
+
+# Confirm no stuck upload jobs (PROCESSING state older than 10 minutes)
+aws dynamodb query \
+  --table-name cashight \
+  --index-name GSI1 \
+  --key-condition-expression "GSI1PK = :state" \
+  --expression-attribute-values '{":state": {"S": "JOB#PROCESSING"}}' \
+  --region ap-southeast-1 \
+  | jq '.Count'
+# Expected: 0
+
+# Export Lambda logs and scan for PII
+aws logs filter-log-events \
+  --log-group-name /aws/lambda/cashight-parser-worker \
+  --start-time $(node -e "console.log(Date.now() - 604800000)") \
+  --output json \
+  > .migration-private/pre-decommission-logs-$(date +%Y%m%d).json
+pnpm security:scan-logs .migration-private/pre-decommission-logs-$(date +%Y%m%d).json
+# Expected: zero PII findings
+```
+
+### Step 2: Remove application dependencies
+
+Already applied in code (`chore: remove legacy amplify runtime` commit). Verify:
+
+```bash
+# next-auth must not be present
+grep "next-auth" package.json && echo "FAIL: next-auth still present" || echo "OK"
+
+# legacy/amplify/ must not exist
+test -d legacy/amplify && echo "FAIL: legacy/amplify still present" || echo "OK"
+
+# deploy.yaml must not exist
+test -f .github/workflows/deploy.yaml && echo "FAIL: deploy.yaml still present" || echo "OK"
+```
+
+### Step 3: Plan and review Terraform decommission
+
+```bash
+cd terraform
+
+# Back up state one more time
+terraform state pull > ../.migration-private/terraform-state-pre-decommission.json
+
+# Plan with the Phase 10 code already in place (amplify.tf is deleted)
+terraform plan \
+  -var="cutover_dns_to_cloudfront=true" \
+  -var="google_oauth_client_id=<value>" \
+  -var="google_oauth_client_secret=<value>" \
+  -var="allowed_email=<value>" \
+  -out=../.migration-private/decommission.tfplan
+
+# Inspect all resource changes — verify ONLY legacy resources are destroyed
+terraform show -json ../.migration-private/decommission.tfplan \
+  | jq '[.resource_changes[] | select(.change.actions != ["no-op"]) | {address, actions: .change.actions}]'
+```
+
+Expected destroys (only these; verify nothing else):
+- `aws_amplify_app.cashight`
+- `aws_amplify_branch.main`
+- `aws_iam_role.amplify_service`
+- `aws_iam_role.amplify_compute`
+- `aws_iam_role_policy_attachment.amplify_service_logs`
+- `aws_iam_role_policy_attachment.amplify_compute_s3`
+- `aws_iam_policy.amplify_service_logs`
+- `aws_iam_policy.statements_rw`
+- `aws_cloudwatch_metric_alarm.amplify_5xx_errors`
+- `aws_cloudwatch_metric_alarm.amplify_4xx_errors`
+- `aws_cloudwatch_metric_alarm.amplify_latency`
+- `aws_wafv2_web_acl_association.cashight_amplify`
+- `aws_cognito_user_pool_client.web`
+- `aws_iam_role_policy.amplify_release`
+
+Must NOT be destroyed:
+- Cognito user pool, hosted UI domain, resource server, SPA client, Google IdP
+- Statement/upload/artifact/state S3 buckets
+- DynamoDB table, SQS queues, Lambda functions, API Gateway, CloudFront
+- WAF ACLs, Secrets Manager resources, CloudWatch log groups
+- Route 53 records (staging and production)
+
+**Abort if the plan shows any unexpected destroy.** Fix the Terraform before proceeding.
+
+### Step 4: Apply decommission
+
+```bash
+# Apply the reviewed plan
+terraform apply ../.migration-private/decommission.tfplan
+cd ..
+
+# Confirm production still works after Amplify is gone
+APP_URL=https://cashight.nghuy.link \
+API_URL=https://api.cashight.nghuy.link \
+pnpm smoke:serverless
+
+# Confirm auth still works
+BASE_URL=https://cashight.nghuy.link \
+E2E_STORAGE_STATE=.migration-private/e2e-prod-state.json \
+pnpm test:e2e
+```
+
+### Step 5: Remove obsolete secrets (after CloudTrail confirms no reads)
+
+Wait seven days from the decommission apply, then confirm no reads:
+
+```bash
+# Check CloudTrail for GetParameter reads on old SSM parameters
+aws cloudtrail lookup-events \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=GetParameter \
+  --start-time $(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ) \
+  --region ap-southeast-1 \
+  | jq '[.Events[] | select(.CloudTrailEvent | fromjson | .requestParameters.name | test("/cashight/prod/(GEMINI_API_KEY|PDF_PASSWORD)"))]'
+# Expected: empty array (no reads from the old SSM paths since the Amplify runtime stopped)
+
+# Only after confirming zero reads: delete the old SSM parameters
+# (Secrets Manager values used by Lambdas are NOT deleted here — only legacy SSM)
+aws ssm delete-parameter --name "/cashight/prod/GEMINI_API_KEY" --region ap-southeast-1
+aws ssm delete-parameter --name "/cashight/prod/PDF_PASSWORD" --region ap-southeast-1
+```
+
+### Step 6: Final verification
+
+```bash
+pnpm audit --audit-level moderate
+pnpm test
+pnpm lint
+pnpm tsc --noEmit
+pnpm build
+pnpm run build:lambdas
+
+cd terraform
+terraform fmt -check -recursive
+terraform validate
+terraform plan \
+  -var="cutover_dns_to_cloudfront=true" \
+  -var="google_oauth_client_id=<value>" \
+  -var="google_oauth_client_secret=<value>" \
+  -var="allowed_email=<value>" \
+  -detailed-exitcode
+# Expected: exit code 0 (no changes)
+cd ..
+```
+
+Gate: all commands exit 0, final plan shows no changes.
