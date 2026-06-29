@@ -65,9 +65,11 @@ resource "aws_cognito_user_pool" "users" {
     enabled = true
   }
 
-  # SEC-003: auth-guard enforces ALLOWED_EMAIL before each token issuance.
+  # SEC-003: auth-guard enforces ALLOWED_EMAIL before each token issuance and
+  # at Google federation sign-up (pre_sign_up).
   lambda_config {
     pre_token_generation = aws_lambda_alias.auth_guard_live.arn
+    pre_sign_up          = aws_lambda_alias.auth_guard_live.arn
   }
 
   tags = {
@@ -180,9 +182,9 @@ resource "aws_cognito_user_pool_client" "spa" {
   ]
 
   logout_urls = [
-    "https://cashight.nghuy.link/signout",
-    "https://${aws_cloudfront_distribution.frontend.domain_name}/signout",
-    "http://localhost:3000/signout",
+    "https://cashight.nghuy.link/signin/",
+    "https://${aws_cloudfront_distribution.frontend.domain_name}/signin/",
+    "http://localhost:3000/signin/",
   ]
 
   prevent_user_existence_errors = "ENABLED"

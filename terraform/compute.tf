@@ -102,6 +102,7 @@ resource "aws_lambda_function" "auth_guard" {
   runtime          = "nodejs22.x"
   timeout          = 30
   memory_size      = 256
+  publish          = true
   filename         = data.archive_file.placeholder.output_path
   source_code_hash = data.archive_file.placeholder.output_base64sha256
 
@@ -116,13 +117,21 @@ resource "aws_lambda_function" "auth_guard" {
     mode = "Active"
   }
 
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
+  }
+
   depends_on = [aws_cloudwatch_log_group.lambda_auth_guard]
 }
 
 resource "aws_lambda_alias" "auth_guard_live" {
   name             = "live"
   function_name    = aws_lambda_function.auth_guard.function_name
-  function_version = "$LATEST"
+  function_version = aws_lambda_function.auth_guard.version
+
+  lifecycle {
+    ignore_changes = [function_version]
+  }
 }
 
 # ── uploads-api ───────────────────────────────────────────────────────────────
@@ -177,6 +186,7 @@ resource "aws_lambda_function" "uploads_api" {
   runtime          = "nodejs22.x"
   timeout          = 30
   memory_size      = 256
+  publish          = true
   filename         = data.archive_file.placeholder.output_path
   source_code_hash = data.archive_file.placeholder.output_base64sha256
 
@@ -191,13 +201,21 @@ resource "aws_lambda_function" "uploads_api" {
     mode = "Active"
   }
 
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
+  }
+
   depends_on = [aws_cloudwatch_log_group.lambda_uploads_api]
 }
 
 resource "aws_lambda_alias" "uploads_api_live" {
   name             = "live"
   function_name    = aws_lambda_function.uploads_api.function_name
-  function_version = "$LATEST"
+  function_version = aws_lambda_function.uploads_api.version
+
+  lifecycle {
+    ignore_changes = [function_version]
+  }
 }
 
 # ── upload-status-api ─────────────────────────────────────────────────────────
@@ -246,6 +264,7 @@ resource "aws_lambda_function" "upload_status_api" {
   runtime          = "nodejs22.x"
   timeout          = 30
   memory_size      = 256
+  publish          = true
   filename         = data.archive_file.placeholder.output_path
   source_code_hash = data.archive_file.placeholder.output_base64sha256
 
@@ -259,13 +278,21 @@ resource "aws_lambda_function" "upload_status_api" {
     mode = "Active"
   }
 
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
+  }
+
   depends_on = [aws_cloudwatch_log_group.lambda_upload_status_api]
 }
 
 resource "aws_lambda_alias" "upload_status_api_live" {
   name             = "live"
   function_name    = aws_lambda_function.upload_status_api.function_name
-  function_version = "$LATEST"
+  function_version = aws_lambda_function.upload_status_api.version
+
+  lifecycle {
+    ignore_changes = [function_version]
+  }
 }
 
 # ── parser-worker ─────────────────────────────────────────────────────────────
@@ -349,6 +376,7 @@ resource "aws_lambda_function" "parser_worker" {
   timeout                        = 120
   memory_size                    = 1536
   reserved_concurrent_executions = 2
+  publish                        = true
   filename                       = data.archive_file.placeholder.output_path
   source_code_hash               = data.archive_file.placeholder.output_base64sha256
 
@@ -369,13 +397,21 @@ resource "aws_lambda_function" "parser_worker" {
     mode = "Active"
   }
 
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
+  }
+
   depends_on = [aws_cloudwatch_log_group.lambda_parser_worker]
 }
 
 resource "aws_lambda_alias" "parser_worker_live" {
   name             = "live"
   function_name    = aws_lambda_function.parser_worker.function_name
-  function_version = "$LATEST"
+  function_version = aws_lambda_function.parser_worker.version
+
+  lifecycle {
+    ignore_changes = [function_version]
+  }
 }
 
 # ── SQS event source mapping for parser-worker ────────────────────────────────
@@ -440,6 +476,7 @@ resource "aws_lambda_function" "statements_api" {
   runtime          = "nodejs22.x"
   timeout          = 30
   memory_size      = 256
+  publish          = true
   filename         = data.archive_file.placeholder.output_path
   source_code_hash = data.archive_file.placeholder.output_base64sha256
 
@@ -454,13 +491,21 @@ resource "aws_lambda_function" "statements_api" {
     mode = "Active"
   }
 
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
+  }
+
   depends_on = [aws_cloudwatch_log_group.lambda_statements_api]
 }
 
 resource "aws_lambda_alias" "statements_api_live" {
   name             = "live"
   function_name    = aws_lambda_function.statements_api.function_name
-  function_version = "$LATEST"
+  function_version = aws_lambda_function.statements_api.version
+
+  lifecycle {
+    ignore_changes = [function_version]
+  }
 }
 
 # ── dashboard-api ─────────────────────────────────────────────────────────────
@@ -515,6 +560,7 @@ resource "aws_lambda_function" "dashboard_api" {
   runtime          = "nodejs22.x"
   timeout          = 30
   memory_size      = 256
+  publish          = true
   filename         = data.archive_file.placeholder.output_path
   source_code_hash = data.archive_file.placeholder.output_base64sha256
 
@@ -529,13 +575,21 @@ resource "aws_lambda_function" "dashboard_api" {
     mode = "Active"
   }
 
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
+  }
+
   depends_on = [aws_cloudwatch_log_group.lambda_dashboard_api]
 }
 
 resource "aws_lambda_alias" "dashboard_api_live" {
   name             = "live"
   function_name    = aws_lambda_function.dashboard_api.function_name
-  function_version = "$LATEST"
+  function_version = aws_lambda_function.dashboard_api.version
+
+  lifecycle {
+    ignore_changes = [function_version]
+  }
 }
 
 # ── summary-api ───────────────────────────────────────────────────────────────
@@ -597,6 +651,7 @@ resource "aws_lambda_function" "summary_api" {
   timeout                        = 120
   memory_size                    = 1024
   reserved_concurrent_executions = 2
+  publish                        = true
   filename                       = data.archive_file.placeholder.output_path
   source_code_hash               = data.archive_file.placeholder.output_base64sha256
 
@@ -612,13 +667,21 @@ resource "aws_lambda_function" "summary_api" {
     mode = "Active"
   }
 
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
+  }
+
   depends_on = [aws_cloudwatch_log_group.lambda_summary_api]
 }
 
 resource "aws_lambda_alias" "summary_api_live" {
   name             = "live"
   function_name    = aws_lambda_function.summary_api.function_name
-  function_version = "$LATEST"
+  function_version = aws_lambda_function.summary_api.version
+
+  lifecycle {
+    ignore_changes = [function_version]
+  }
 }
 
 # ── Lambda invoke permissions ─────────────────────────────────────────────────
@@ -677,6 +740,11 @@ resource "aws_codedeploy_deployment_group" "auth_guard" {
     deployment_option = "WITH_TRAFFIC_CONTROL"
     deployment_type   = "BLUE_GREEN"
   }
+
+  auto_rollback_configuration {
+    enabled = true
+    events  = ["DEPLOYMENT_FAILURE"]
+  }
 }
 
 # uploads-api
@@ -695,6 +763,11 @@ resource "aws_codedeploy_deployment_group" "uploads_api" {
   deployment_style {
     deployment_option = "WITH_TRAFFIC_CONTROL"
     deployment_type   = "BLUE_GREEN"
+  }
+
+  auto_rollback_configuration {
+    enabled = true
+    events  = ["DEPLOYMENT_FAILURE"]
   }
 }
 
@@ -715,6 +788,11 @@ resource "aws_codedeploy_deployment_group" "upload_status_api" {
     deployment_option = "WITH_TRAFFIC_CONTROL"
     deployment_type   = "BLUE_GREEN"
   }
+
+  auto_rollback_configuration {
+    enabled = true
+    events  = ["DEPLOYMENT_FAILURE"]
+  }
 }
 
 # parser-worker
@@ -733,6 +811,11 @@ resource "aws_codedeploy_deployment_group" "parser_worker" {
   deployment_style {
     deployment_option = "WITH_TRAFFIC_CONTROL"
     deployment_type   = "BLUE_GREEN"
+  }
+
+  auto_rollback_configuration {
+    enabled = true
+    events  = ["DEPLOYMENT_FAILURE"]
   }
 }
 
@@ -753,6 +836,11 @@ resource "aws_codedeploy_deployment_group" "statements_api" {
     deployment_option = "WITH_TRAFFIC_CONTROL"
     deployment_type   = "BLUE_GREEN"
   }
+
+  auto_rollback_configuration {
+    enabled = true
+    events  = ["DEPLOYMENT_FAILURE"]
+  }
 }
 
 # dashboard-api
@@ -772,6 +860,11 @@ resource "aws_codedeploy_deployment_group" "dashboard_api" {
     deployment_option = "WITH_TRAFFIC_CONTROL"
     deployment_type   = "BLUE_GREEN"
   }
+
+  auto_rollback_configuration {
+    enabled = true
+    events  = ["DEPLOYMENT_FAILURE"]
+  }
 }
 
 # summary-api
@@ -790,5 +883,10 @@ resource "aws_codedeploy_deployment_group" "summary_api" {
   deployment_style {
     deployment_option = "WITH_TRAFFIC_CONTROL"
     deployment_type   = "BLUE_GREEN"
+  }
+
+  auto_rollback_configuration {
+    enabled = true
+    events  = ["DEPLOYMENT_FAILURE"]
   }
 }

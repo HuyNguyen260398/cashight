@@ -92,7 +92,11 @@ resource "aws_s3_bucket_cors_configuration" "uploads" {
   cors_rule {
     allowed_headers = ["*"]
     allowed_methods = ["PUT"]
-    allowed_origins = ["*"]
+    allowed_origins = [
+      "https://cashight.nghuy.link",
+      "https://next.cashight.nghuy.link",
+      "http://localhost:3000",
+    ]
     expose_headers  = ["ETag"]
     max_age_seconds = 3000
   }

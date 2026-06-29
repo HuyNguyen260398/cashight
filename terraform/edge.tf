@@ -73,8 +73,12 @@ resource "aws_cloudfront_function" "spa_router" {
     function handler(event) {
       var request = event.request;
       var uri = request.uri;
-      if (!uri.match(/\.[a-zA-Z0-9]+$/)) {
-        request.uri = '/index.html';
+      // Serve index.html for directory-style paths (SPA routes end with /)
+      if (uri.endsWith('/')) {
+        request.uri = uri + 'index.html';
+      } else if (!uri.match(/\.[a-zA-Z0-9]+$/)) {
+        // Extensionless path — redirect to trailing-slash form
+        request.uri = uri + '/index.html';
       }
       return request;
     }

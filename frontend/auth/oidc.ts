@@ -20,7 +20,7 @@ export function getOidcManager(): UserManager {
   _manager = new UserManager({
     authority: config.cognitoAuthority,
     client_id: config.cognitoClientId,
-    redirect_uri: `${config.appOrigin}/auth/callback`,
+    redirect_uri: `${config.appOrigin}/auth/callback/`,
     post_logout_redirect_uri: `${config.appOrigin}/signin/`,
     response_type: 'code',
     scope: 'openid email profile cashight/read cashight/write',
