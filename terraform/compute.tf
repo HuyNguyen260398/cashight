@@ -108,8 +108,8 @@ resource "aws_lambda_function" "auth_guard" {
 
   environment {
     variables = {
-      DYNAMODB_TABLE = aws_dynamodb_table.cashight.name
-      ALLOWED_EMAIL  = var.allowed_email
+      TABLE_NAME    = aws_dynamodb_table.cashight.name
+      ALLOWED_EMAIL = var.allowed_email
     }
   }
 
@@ -192,8 +192,8 @@ resource "aws_lambda_function" "uploads_api" {
 
   environment {
     variables = {
-      DYNAMODB_TABLE = aws_dynamodb_table.cashight.name
-      UPLOAD_BUCKET  = aws_s3_bucket.uploads.bucket
+      TABLE_NAME    = aws_dynamodb_table.cashight.name
+      UPLOAD_BUCKET = aws_s3_bucket.uploads.bucket
     }
   }
 
@@ -270,7 +270,7 @@ resource "aws_lambda_function" "upload_status_api" {
 
   environment {
     variables = {
-      DYNAMODB_TABLE = aws_dynamodb_table.cashight.name
+      TABLE_NAME = aws_dynamodb_table.cashight.name
     }
   }
 
@@ -386,10 +386,10 @@ resource "aws_lambda_function" "parser_worker" {
 
   environment {
     variables = {
-      DYNAMODB_TABLE          = aws_dynamodb_table.cashight.name
-      UPLOAD_BUCKET           = aws_s3_bucket.uploads.bucket
-      STATEMENTS_BUCKET       = aws_s3_bucket.statements.bucket
-      PDF_PASSWORD_SECRET_ARN = aws_secretsmanager_secret.pdf_password.arn
+      TABLE_NAME             = aws_dynamodb_table.cashight.name
+      UPLOAD_BUCKET          = aws_s3_bucket.uploads.bucket
+      STATEMENTS_BUCKET      = aws_s3_bucket.statements.bucket
+      PDF_PASSWORD_SECRET_ID = aws_secretsmanager_secret.pdf_password.arn
     }
   }
 
@@ -482,7 +482,7 @@ resource "aws_lambda_function" "statements_api" {
 
   environment {
     variables = {
-      DYNAMODB_TABLE    = aws_dynamodb_table.cashight.name
+      TABLE_NAME        = aws_dynamodb_table.cashight.name
       STATEMENTS_BUCKET = aws_s3_bucket.statements.bucket
     }
   }
@@ -566,7 +566,7 @@ resource "aws_lambda_function" "dashboard_api" {
 
   environment {
     variables = {
-      DYNAMODB_TABLE    = aws_dynamodb_table.cashight.name
+      TABLE_NAME        = aws_dynamodb_table.cashight.name
       STATEMENTS_BUCKET = aws_s3_bucket.statements.bucket
     }
   }
@@ -657,9 +657,9 @@ resource "aws_lambda_function" "summary_api" {
 
   environment {
     variables = {
-      DYNAMODB_TABLE    = aws_dynamodb_table.cashight.name
+      TABLE_NAME        = aws_dynamodb_table.cashight.name
       STATEMENTS_BUCKET = aws_s3_bucket.statements.bucket
-      GEMINI_SECRET_ARN = aws_secretsmanager_secret.gemini_api_key.arn
+      GEMINI_SECRET_ID  = aws_secretsmanager_secret.gemini_api_key.arn
     }
   }
 
