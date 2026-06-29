@@ -1,7 +1,7 @@
 resource "aws_wafv2_web_acl" "cashight" {
   provider = aws.global
 
-  name  = "${var.project_name}-amplify"
+  name  = "${var.project_name}-cloudfront"
   scope = "CLOUDFRONT"
 
   default_action {
@@ -98,16 +98,9 @@ resource "aws_wafv2_web_acl" "cashight" {
 
   visibility_config {
     cloudwatch_metrics_enabled = true
-    metric_name                = "${var.project_name}-amplify-waf"
+    metric_name                = "${var.project_name}-cloudfront-waf"
     sampled_requests_enabled   = true
   }
-}
-
-resource "aws_wafv2_web_acl_association" "cashight_amplify" {
-  provider = aws.global
-
-  resource_arn = aws_amplify_app.cashight.arn
-  web_acl_arn  = aws_wafv2_web_acl.cashight.arn
 }
 
 # ── REGIONAL WAF for API Gateway ─────────────────────────────────────────────

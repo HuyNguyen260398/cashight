@@ -46,28 +46,6 @@ resource "aws_iam_role" "github_deploy" {
   assume_role_policy = data.aws_iam_policy_document.github_deploy_trust.json
 }
 
-# ── Keep the existing Amplify release policy (legacy rollback path) ───────────
-
-data "aws_iam_policy_document" "amplify_release" {
-  statement {
-    effect = "Allow"
-    actions = [
-      "amplify:StartJob",
-      "amplify:GetJob",
-      "amplify:ListJobs",
-    ]
-    resources = [
-      "arn:aws:amplify:${var.region}:${data.aws_caller_identity.current.account_id}:apps/${aws_amplify_app.cashight.id}/branches/*/jobs/*",
-    ]
-  }
-}
-
-resource "aws_iam_role_policy" "amplify_release" {
-  name   = "amplify-release"
-  role   = aws_iam_role.github_deploy.id
-  policy = data.aws_iam_policy_document.amplify_release.json
-}
-
 # ── Lambda deployment (update code + publish version via CodeDeploy) ──────────
 
 data "aws_iam_policy_document" "lambda_deploy" {
