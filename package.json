@@ -12,6 +12,8 @@
     "cleanup:legacy-buckets": "tsx scripts/delete-legacy-s3-buckets.ts --confirm-delete-legacy-buckets",
     "cleanup:legacy-buckets:dry-run": "tsx scripts/delete-legacy-s3-buckets.ts --dry-run",
     "security:scan-logs": "tsx scripts/security-scan-logs.ts",
+    "migrate:statements": "tsx scripts/migrate-statements.ts",
+    "reconcile:statements": "tsx scripts/reconcile-statements.ts",
     "test": "NODE_OPTIONS=--disable-warning=DEP0205 vitest run",
     "test:e2e": "playwright test",
     "test:e2e:current": "playwright test tests/e2e/current-production.spec.ts",
