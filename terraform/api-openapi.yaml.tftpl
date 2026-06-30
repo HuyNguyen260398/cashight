@@ -383,9 +383,8 @@ paths:
       x-amazon-apigateway-integration:
         type: aws_proxy
         httpMethod: POST
-        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${summary_api_arn}/response-streaming-invocations"
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${summary_api_arn}/invocations"
         passthroughBehavior: when_no_match
-        contentHandling: CONVERT_TO_BINARY
     options:
       operationId: optionsSummaries
       summary: CORS preflight

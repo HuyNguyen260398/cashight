@@ -8,7 +8,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import { parseTPBankStatement } from '../lib/parsers/tpbank';
+import { parseTPBankStatement } from '../packages/domain/src/parsers/tpbank';
 
 const FIXTURE = path.join(
   process.cwd(),

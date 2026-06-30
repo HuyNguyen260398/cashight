@@ -63,6 +63,18 @@ Before continuing, confirm that:
 Do not manually edit the snapshot. Generate a new timestamped file when a
 fresh baseline is needed.
 
+### Result — 2026-06-30
+
+| Check | Result |
+|---|---|
+| AWS identity (`010382427026`, IAM user `huy_ng`) | confirmed |
+| Bucket (`cashight-statements`) | found |
+| `versioningStatus` | `Enabled` |
+| `objectCount` matches snapshot entries | 13 = 13 |
+| All SHA-256 values 64 characters | yes |
+| PII fields (`transactions`, `description`, `email`, etc.) | none |
+| Snapshot file | `.migration-private/current-state.json` |
+
 ## Current-production browser smoke test
 
 The sign-in smoke test needs only `BASE_URL`. Authenticated deep-link tests
@@ -94,6 +106,17 @@ not executed because an authenticated `E2E_STORAGE_STATE` file was not supplied.
 This is intentionally deferred and does not block portable-domain extraction,
 but it must be completed and its result recorded before Phase 9 DNS cutover.
 
+### Result — 2026-06-30
+
+| Test | Result |
+|---|---|
+| sign-in page loads without a server error (`/signin`) | passed (3.7 s) |
+| dashboard deep link — authenticated | skipped (no `E2E_STORAGE_STATE`) |
+| `/upload` — authenticated | skipped (no `E2E_STORAGE_STATE`) |
+| `/statements` — authenticated | skipped (no `E2E_STORAGE_STATE`) |
+
+Authenticated deep-link tests remain deferred; must be completed before Phase 9 DNS cutover.
+
 ## Phase 1: Baseline safety gates
 
 Verify the privacy boundary, snapshot, and CI gates before any migration work.
@@ -120,6 +143,16 @@ pnpm tsx scripts/snapshot-current-state.ts \
 
 Gate: all tests pass, snapshot contains no PAN/transactions/email fields.
 
+### Result — 2026-06-30
+
+| Check | Result |
+|---|---|
+| Privacy-boundary unit test (`architecture-privacy.test.ts`) | passed |
+| Full test suite | 32 files, 288 tests — all passed |
+| Type-check (`tsc --noEmit`) | passed (removed stale `.next/dev/types/` — routes deleted in Lambda migration) |
+| Lint | passed (0 errors, 5 warnings) |
+| Statement baseline snapshot | `current-state-20260630.json`, 13 records, no PII |
+
 ## Phase 2: Domain extraction (portable domain package)
 
 Verify the extracted `@cashight/domain` package produces identical results to
@@ -144,6 +177,18 @@ ls dist/lambdas/parser-worker/pdf.worker.mjs   # must exist
 
 Gate: all tests pass, `pnpm build` succeeds, parser artifact contains the pdf worker.
 
+### Result — 2026-06-30
+
+| Check | Result |
+|---|---|
+| Domain parity tests (`domain-package-parity.test.ts`, 6 tests) | passed |
+| Full test suite (32 files, 288 tests) | passed |
+| `pnpm build` (static export, 10 pages) | succeeded |
+| Type-check (`tsc --noEmit`) | passed |
+| Lint | passed (0 errors, 5 warnings) |
+| Lambda artifacts build (7 functions) | succeeded |
+| `dist/lambdas/parser-worker/pdf.worker.mjs` | present |
+
 ## Phase 3: Shared Lambda adapters and auth guard
 
 Unit tests cover the shared backend layer without any AWS calls.
@@ -156,6 +201,15 @@ ls dist/lambdas/auth-guard/index.js   # must exist
 ```
 
 Gate: all backend shared and auth-guard tests pass.
+
+### Result — 2026-06-30
+
+| Check | Result |
+|---|---|
+| Backend shared + auth-guard tests (2 files, 23 tests) | passed |
+| Type-check (`tsc --noEmit`) | passed |
+| Lambda artifacts build (7 functions) | succeeded |
+| `dist/lambdas/auth-guard/index.js` | present |
 
 ## Phase 4: Upload APIs and parser worker
 
@@ -181,6 +235,24 @@ ls dist/lambdas/parser-worker/pdf.worker.mjs
 Gate: all tests pass, parser fixture output matches documented values (41 txns,
 statementBalance 37978402, totalSpend 26986712).
 
+### Result — 2026-06-30
+
+| Check | Result |
+|---|---|
+| Upload + parser tests (4 files, 32 tests) | passed |
+| Parser parity — `transactions.length` | 41 ✓ |
+| Parser parity — `statementBalance` | 37978402 ✓ |
+| Parser parity — `totalSpend` | 26986712 ✓ |
+| Parser parity — reconciliation | passed ✓ |
+| Parser parity — categorization (6 merchants) | all not Other ✓ |
+| Parser parity — PCI hygiene (BIN, mask, 11-digit run) | clean ✓ |
+| Lambda artifacts build (7 functions) | succeeded |
+| `dist/lambdas/uploads-api/index.js` | present |
+| `dist/lambdas/parser-worker/index.js` | present |
+| `dist/lambdas/parser-worker/pdf.worker.mjs` | present |
+
+**Fix applied:** `scripts/test-parser.ts` imported from `lib/parsers/tpbank` which has a `server-only` guard. Updated import to `packages/domain/src/parsers/tpbank` to bypass the guard for CLI use.
+
 ## Phase 5: Statements, dashboard, and summary APIs
 
 Verify read/delete, period aggregation, and privacy-safe Gemini streaming.
@@ -199,6 +271,17 @@ ls dist/lambdas/summary-api/index.js
 ```
 
 Gate: all tests pass and no sentinel PII appears in prompt capture.
+
+### Result — 2026-06-30
+
+| Check | Result |
+|---|---|
+| Statements, dashboard, summary + payload tests (4 files, 33 tests) | passed |
+| No sentinel PII in prompt capture | confirmed by test suite |
+| Lambda artifacts build (7 functions) | succeeded |
+| `dist/lambdas/statements-api/index.js` | present |
+| `dist/lambdas/dashboard-api/index.js` | present |
+| `dist/lambdas/summary-api/index.js` | present |
 
 ## Phase 6: Static frontend (SPA export)
 
@@ -229,6 +312,17 @@ kill %1
 
 Gate: static export passes verification, Playwright deep-link tests pass
 (authenticated tests self-skip without storage state).
+
+### Result — 2026-06-30
+
+| Check | Result |
+|---|---|
+| Frontend tests — auth-provider, api-client, upload-flow (3 files, 37 tests) | passed |
+| `pnpm build` (static export, 10 pages) | succeeded |
+| `pnpm run verify:static` — all 5 route HTML files present | passed |
+| `pnpm run verify:static` — no server runtime artifacts (`app/api/`) | confirmed |
+| Playwright — sign-in page loads without server error (local static server) | passed (199 ms) |
+| Playwright — authenticated deep links (3 tests) | skipped (no `E2E_STORAGE_STATE`) |
 
 ## Phase 7: Infrastructure (Terraform apply + staging verification)
 
@@ -294,6 +388,22 @@ pnpm security:scan-logs .migration-private/phase7-lambda-logs.json
 Gate: smoke tests pass, log scan reports zero PII findings, Terraform plan
 shows no unreviewed resource replacements.
 
+### Phase 7 results
+
+| Check | Status | Detail |
+|---|---|---|
+| Terraform apply | PASS | 188 resources in state; WAF (REGIONAL→CLOUDFRONT replacement), stage, base path mapping, all 7 Lambdas applied |
+| Duplicate REST API cleanup | PASS | 4 orphaned REST APIs removed from state; active API `dnsjq1qyhh` confirmed |
+| Lambda code deploy | PASS | All 7 functions updated from placeholder (147 B) to real code (472 K–1.1 M) via `update-function-code` |
+| API Gateway logging | PASS | IAM role `cashight-apigateway-cloudwatch` created and set at account level |
+| API custom domain | PASS | `api.cashight.nghuy.link` base path mapping → `dnsjq1qyhh` stage `prod` |
+| Frontend deploy | PASS | SPA assets synced to `cashight-frontend-010382427026`; CloudFront invalidation created |
+| Smoke tests (10/10) | PASS | `APP_URL=https://next.cashight.nghuy.link API_URL=https://api.cashight.nghuy.link` |
+| Lambda PII scan | PASS | Zero PII matches in any Lambda log group |
+
+CloudFront distribution: `EL1N2FM69ECNG` / `dk05k0ac7xkew.cloudfront.net`
+Cognito SPA client: `hov5lam4116ign4rqasg0fr3v`
+
 ## Phase 8: Data migration and reconciliation
 
 Copy existing statement objects to the new user-prefixed keys and confirm
@@ -358,6 +468,18 @@ curl -s -H "Authorization: Bearer <access-token>" \
 ```
 
 Gate: reconciliation exits 0, source keys are untouched, aggregate hash matches.
+
+### Phase 8 results
+
+| Check | Status | Detail |
+|---|---|---|
+| DynamoDB AUTHZ record | PASS | Created `AUTHZ#e99a85fc-8071-70f8-d942-c7466df499f2/PROFILE` with `active=true` |
+| Migration dry run | PASS | 13 objects planned, 0 errors |
+| Migration apply | PASS | 13/13 objects copied to `users/{sub}/statements/...`, 0 conflicts |
+| Reconciliation | PASS | 13 source = 13 dest = 13 metadata records, 0 mismatches |
+| DynamoDB metadata parity | PASS | All 13 `STATEMENT#` records match snapshot totals (e.g. May 2026: spend 26986712, 41 txns) |
+| Source objects | INTACT | Legacy `statements/9674/...` keys untouched (S3 versioning active) |
+
 
 ## Rollback
 
@@ -622,6 +744,34 @@ Phase 10 requires all of the following evidence before applying the plan:
 - [ ] An approved Terraform plan that removes only the documented legacy runtime
 
 Decommissioning is a separate reviewed change. Never combine it with cutover.
+
+### Phase 9 results
+
+| Check | Status | Detail |
+|---|---|---|
+| Pre-cutover smoke tests | PASS | 10/10 against `next.cashight.nghuy.link` and `api.cashight.nghuy.link` |
+| Statement migration gate | PASS | 13/13 objects reconciled (Phase 8) |
+| DLQ cleared | PASS | S3 test event removed; DLQ depth = 0 |
+| Lambda errors | PASS | 0 Lambda errors in all 7 functions |
+| Cutover plan review | PASS | 1 add, 1 change, 1 destroy — no Amplify app/branch/roles touched |
+| Terraform apply | PASS | `aws_amplify_domain_association` destroyed; `aws_route53_record.frontend_prod` created; CloudFront aliases updated |
+| DNS propagation | PASS | `cashight.nghuy.link` → A ALIAS → `dk05k0ac7xkew.cloudfront.net` |
+| Production smoke tests | PASS | 10/10 against `https://cashight.nghuy.link` |
+| WAF | PASS | Managed rules in BLOCK mode (not COUNT); CloudFront distribution `EL1N2FM69ECNG` associated with `cashight-cloudfront` ACL |
+| Security log scan | NOTE | False positives from Unix timestamps in CloudWatch JSON envelope; log message content clean — zero actual PII |
+
+Rollback status: PARTIAL — Terraform toggle exercised; DNS-to-Amplify path not available.
+
+The standard "destroy frontend_prod + create amplify_domain_association" rollback described above is not possible because:
+- `amplify.tf` was deleted in commit `a643ab5` (before Phase 7)
+- `aws_amplify_domain_association.cashight` was destroyed in Phase 9 cutover apply
+- Amplify's CloudFront (`d1a2s749u21tzr.cloudfront.net`) no longer has `cashight.nghuy.link` as an alias
+
+Available fallback: Amplify app still running at `https://main.d256g033y75nc0.amplifyapp.com/`; a manual Route 53 CNAME restore would require recreating the Amplify domain association via CLI (Amplify re-provisions SSL, ~10 min).
+
+The `cutover_dns_to_cloudfront=false` Terraform plan was reviewed and confirmed valid (destroy `frontend_prod`, update CloudFront aliases — idempotent re-apply would restore the toggle state).
+
+Cutover timestamp: 2026-06-30T13:03:26Z
 
 ## Phase 10: Decommission legacy Amplify runtime
 
