@@ -1,0 +1,25 @@
+{
+  "name": "@cashight/domain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./schemas": "./src/schemas.ts",
+    "./api": "./src/api.ts",
+    "./period": "./src/period.ts",
+    "./aggregations": "./src/aggregations.ts",
+    "./dashboard-aggregations": "./src/dashboard-aggregations.ts",
+    "./categorize": "./src/categorize.ts",
+    "./format": "./src/format.ts",
+    "./summary-payload": "./src/summary-payload.ts",
+    "./upload-error": "./src/upload-error.ts",
+    "./security/*": "./src/security/*.ts",
+    "./pdf-dom-polyfill": "./src/pdf-dom-polyfill.ts",
+    "./parsers/tpbank": "./src/parsers/tpbank.ts"
+  },
+  "dependencies": {
+    "date-fns": "^4.3.0",
+    "pdf-parse": "^2.4.5",
+    "zod": "^4.4.3"
+  }
+}

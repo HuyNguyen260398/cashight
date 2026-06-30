@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { installPdfDomPolyfills } from '@/lib/pdf-dom-polyfill';
+import { installPdfDomPolyfills } from '@cashight/domain/pdf-dom-polyfill';
 
 describe('pdf DOM polyfill', () => {
   it('installs the globals pdfjs-dist needs under Node', () => {
@@ -39,7 +39,9 @@ describe('pdf DOM polyfill', () => {
 
   it('parser imports the polyfill before pdf-parse so globals exist at eval time', () => {
     const src = readFileSync(
-      fileURLToPath(new URL('../parsers/tpbank.ts', import.meta.url)),
+      fileURLToPath(
+        new URL('../../packages/domain/src/parsers/tpbank.ts', import.meta.url),
+      ),
       'utf8',
     );
     const polyfillIdx = src.indexOf("pdf-dom-polyfill");

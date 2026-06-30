@@ -1,0 +1,414 @@
+openapi: "3.0.1"
+info:
+  title: cashight-api
+  version: "2026-06-29"
+  description: >
+    Cashight REST API — statements, dashboard, uploads, and AI summaries.
+    All endpoints (except /health) require a Cognito access token with the
+    appropriate cashight/read or cashight/write scope.
+
+# SEC-006: CORS is locked to exactly one allowed origin.
+x-amazon-apigateway-cors:
+  allowOrigins:
+    - "https://cashight.nghuy.link"
+  allowMethods:
+    - GET
+    - POST
+    - DELETE
+    - OPTIONS
+  allowHeaders:
+    - Content-Type
+    - Authorization
+    - X-Amz-Date
+    - X-Api-Key
+    - X-Amz-Security-Token
+  maxAge: 300
+
+x-amazon-apigateway-request-validators:
+  all:
+    validateRequestBody: true
+    validateRequestParameters: true
+
+# Inject CORS headers on gateway-level error responses so the browser
+# can surface the error message rather than just seeing a CORS failure.
+x-amazon-apigateway-gateway-responses:
+  UNAUTHORIZED:
+    statusCode: 401
+    responseParameters:
+      gatewayresponse.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+  ACCESS_DENIED:
+    statusCode: 403
+    responseParameters:
+      gatewayresponse.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+  DEFAULT_4XX:
+    responseParameters:
+      gatewayresponse.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+  DEFAULT_5XX:
+    responseParameters:
+      gatewayresponse.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+
+components:
+  securitySchemes:
+    CognitoAuth:
+      type: apiKey
+      name: Authorization
+      in: header
+      x-amazon-apigateway-authtype: cognito_user_pools
+      x-amazon-apigateway-authorizer:
+        type: cognito_user_pools
+        providerARNs:
+          - "${user_pool_arn}"
+        identitySource: method.request.header.Authorization
+
+paths:
+
+  # ── /health (no auth — used by load balancer / uptime checks) ───────────────
+
+  /health:
+    get:
+      operationId: getHealth
+      summary: Health check
+      responses:
+        "200":
+          description: API is healthy
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+            responseTemplates:
+              application/json: '{"status":"ok"}'
+
+  # ── /statements ───────────────────────────────────────────────────────────
+
+  /statements:
+    get:
+      operationId: listStatements
+      summary: List all statements for the authenticated user
+      security:
+        - CognitoAuth: ["cashight/read"]
+      x-amazon-apigateway-request-validator: all
+      responses:
+        "200":
+          description: List of statement metadata
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${statements_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsStatements
+      summary: CORS preflight
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+
+  /statements/{statementId}:
+    get:
+      operationId: getStatement
+      summary: Get a single statement by ID
+      security:
+        - CognitoAuth: ["cashight/read"]
+      x-amazon-apigateway-request-validator: all
+      parameters:
+        - name: statementId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Statement JSON
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${statements_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    delete:
+      operationId: deleteStatement
+      summary: Delete a statement
+      security:
+        - CognitoAuth: ["cashight/write"]
+      x-amazon-apigateway-request-validator: all
+      parameters:
+        - name: statementId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Statement deleted
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${statements_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsStatement
+      summary: CORS preflight
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+
+  # ── /dashboard ────────────────────────────────────────────────────────────
+
+  /dashboard:
+    get:
+      operationId: getDashboard
+      summary: Get aggregated dashboard data for a period
+      security:
+        - CognitoAuth: ["cashight/read"]
+      x-amazon-apigateway-request-validator: all
+      responses:
+        "200":
+          description: AggregatedView JSON
+        "401":
+          description: Unauthorized
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${dashboard_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsDashboard
+      summary: CORS preflight
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+
+  # ── /uploads ──────────────────────────────────────────────────────────────
+
+  /uploads:
+    post:
+      operationId: createUpload
+      summary: Initiate a PDF statement upload (returns a pre-signed S3 URL)
+      security:
+        - CognitoAuth: ["cashight/write"]
+      x-amazon-apigateway-request-validator: all
+      responses:
+        "200":
+          description: Upload job created with pre-signed URL
+        "401":
+          description: Unauthorized
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${uploads_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsUploads
+      summary: CORS preflight
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+
+  /uploads/{jobId}:
+    get:
+      operationId: getUploadStatus
+      summary: Poll the status of an upload/parse job
+      security:
+        - CognitoAuth: ["cashight/read"]
+      x-amazon-apigateway-request-validator: all
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Job status
+        "401":
+          description: Unauthorized
+        "404":
+          description: Job not found
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${upload_status_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsUploadStatus
+      summary: CORS preflight
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+
+  # ── /summaries (response streaming) ──────────────────────────────────────
+  # Uses the /response-streaming-invocations URI suffix to enable Lambda
+  # response streaming — the Lambda function must have InvokeMode = RESPONSE_STREAM.
+
+  /summaries:
+    post:
+      operationId: streamSummary
+      summary: Stream a Gemini-generated natural-language spending summary
+      security:
+        - CognitoAuth: ["cashight/read"]
+      x-amazon-apigateway-request-validator: all
+      responses:
+        "200":
+          description: Streamed summary text (chunked transfer encoding)
+        "401":
+          description: Unauthorized
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${summary_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsSummaries
+      summary: CORS preflight
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"

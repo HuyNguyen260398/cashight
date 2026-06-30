@@ -1,19 +1,24 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider } from "@/frontend/auth/auth-provider";
 import { Nav } from "./components/nav";
 import { ScrollToTop } from "./components/scroll-to-top";
 import { ThemeProvider } from "./components/theme-provider";
 import "./globals.css";
 
-const geistSans = Geist({
+// Use locally bundled variable fonts (geist npm package) so the static export
+// build has no Google Fonts network dependency.
+const geistSans = localFont({
+  src: "../node_modules/geist/dist/fonts/geist-sans/Geist-Variable.woff2",
   variable: "--font-geist-sans",
-  subsets: ["latin"],
+  weight: "100 900",
 });
 
-const geistMono = Geist_Mono({
+const geistMono = localFont({
+  src: "../node_modules/geist/dist/fonts/geist-mono/GeistMono-Variable.woff2",
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: "100 900",
 });
 
 export const metadata: Metadata = {
@@ -34,9 +39,11 @@ export default function RootLayout({
     >
       <body className="min-h-dvh bg-background text-foreground">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <Nav>{children}</Nav>
-          <Toaster />
-          <ScrollToTop />
+          <AuthProvider>
+            <Nav>{children}</Nav>
+            <Toaster />
+            <ScrollToTop />
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { redactForLog } from '@/lib/security/logging';
+import { redactForLog } from '@cashight/domain/security/logging';
 
 describe('redactForLog', () => {
   it('masks PAN-like digit sequences', () => {

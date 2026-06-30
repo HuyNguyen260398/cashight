@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { formatVNDCompact, formatDate } from '@/lib/format';
+import { formatDate, formatVNDCompact } from '@cashight/domain/format';
 
 // ---------------------------------------------------------------------------
 // formatVNDCompact

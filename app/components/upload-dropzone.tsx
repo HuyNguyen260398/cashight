@@ -1,11 +1,9 @@
 'use client';
 
 import { useDropzone } from 'react-dropzone';
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { FileUp, Loader2, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Statement } from '@/lib/schemas';
-import { getUploadErrorMessage } from '@/lib/upload-error';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,89 +15,78 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { buttonVariants } from '@/components/ui/button';
+import { useUploadJob } from '@/frontend/hooks/use-upload-job';
 
-type PendingConflict = {
-  file: File;
-  cardLast4: string;
-  year: number;
-  month: number;
-};
+/**
+ * Drag-and-drop PDF uploader. Implements the presigned-upload flow:
+ *   1. Hash the file with SHA-256
+ *   2. POST /uploads → get presigned S3 URL
+ *   3. PUT the PDF directly to S3 (plain fetch, no auth header)
+ *   4. Poll GET /uploads/:jobId until terminal state
+ *
+ * On CONFLICT the user is prompted to confirm before force-overwriting.
+ * No onParsed callback — the component manages its own lifecycle.
+ */
+export function UploadDropzone() {
+  const { state, start, reset } = useUploadJob();
 
-export function UploadDropzone({ onParsed }: { onParsed: (s: Statement) => void }) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [pendingConflict, setPendingConflict] = useState<PendingConflict | null>(null);
+  const isWorking = state.phase === 'working';
 
-  async function uploadFile(file: File, force: boolean) {
-    setLoading(true);
-    setError(null);
-    const fd = new FormData();
-    fd.append('file', file);
-    try {
-      const res = await fetch('/api/parse' + (force ? '?force=true' : ''), {
-        method: 'POST',
-        body: fd,
-      });
-      if (res.ok) {
-        const statement = (await res.json()) as Statement;
-        toast.success('Statement saved');
-        setPendingConflict(null);
-        onParsed(statement);
-      } else if (res.status === 409) {
-        const body = (await res.json()) as {
-          cardLast4: string;
-          year: number;
-          month: number;
-        };
-        setPendingConflict({
-          file,
-          cardLast4: body.cardLast4,
-          year: body.year,
-          month: body.month,
-        });
-      } else {
-        setError(await getUploadErrorMessage(res));
-      }
-    } catch {
-      setError('Network error — please try again.');
-    } finally {
-      setLoading(false);
+  // Show a toast when the upload succeeds and automatically reset to idle
+  // so the dropzone is ready for the next file.
+  useEffect(() => {
+    if (state.phase === 'succeeded') {
+      // Toast is already shown inside the hook; just reset the UI.
+      const timer = setTimeout(() => reset(), 1500);
+      return () => clearTimeout(timer);
     }
-  }
+  }, [state.phase, reset]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    disabled: loading,
+    disabled: isWorking,
     accept: { 'application/pdf': ['.pdf'] },
     maxFiles: 1,
     maxSize: 5 * 1024 * 1024,
     onDrop: (acceptedFiles) => {
       if (acceptedFiles.length === 0) return;
-      void uploadFile(acceptedFiles[0], false);
+      start(acceptedFiles[0]);
     },
     onDropRejected: (fileRejections) => {
       const firstError = fileRejections[0]?.errors[0];
       if (!firstError) {
-        setError('File rejected.');
+        toast.error('File rejected.');
         return;
       }
       switch (firstError.code) {
         case 'file-invalid-type':
-          setError('Only PDF files are accepted.');
+          toast.error('Only PDF files are accepted.');
           break;
         case 'file-too-large':
-          setError('File is too large (max 5 MB).');
+          toast.error('File is too large (max 5 MB).');
           break;
         default:
-          setError(firstError.message);
+          toast.error(firstError.message);
       }
     },
   });
 
+  const pendingConflict = state.phase === 'conflict' ? state : null;
+
   const monthYearLabel = pendingConflict
-    ? new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(
-        new Date(pendingConflict.year, pendingConflict.month - 1),
+    ? new Intl.DateTimeFormat('en-US', {
+        month: 'long',
+        year: 'numeric',
+      }).format(
+        new Date(
+          pendingConflict.conflict.year,
+          pendingConflict.conflict.month - 1,
+        ),
       )
     : '';
+
+  // Working step label shown while busy.
+  const workingMessage =
+    state.phase === 'working' ? state.message : 'Processing…';
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
@@ -108,10 +95,10 @@ export function UploadDropzone({ onParsed }: { onParsed: (s: Statement) => void 
         className="cursor-pointer rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 p-8 text-center transition hover:border-brand-300 hover:bg-brand-25 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:border-brand-800 dark:hover:bg-brand-500/10 md:p-12"
       >
         <input {...getInputProps()} />
-        {loading ? (
+        {isWorking ? (
           <div className="flex flex-col items-center gap-3 text-gray-500 dark:text-gray-400">
             <Loader2 className="size-9 animate-spin text-brand-500" />
-            <p className="text-sm font-medium">Parsing and saving to S3...</p>
+            <p className="text-sm font-medium">{workingMessage}</p>
           </div>
         ) : isDragActive ? (
           <div className="flex flex-col items-center gap-3">
@@ -138,37 +125,43 @@ export function UploadDropzone({ onParsed }: { onParsed: (s: Statement) => void 
           </div>
         )}
       </div>
-      {error && (
+
+      {state.phase === 'failed' && (
         <p className="mt-3 rounded-lg bg-error-50 px-3 py-2 text-sm text-error-700 dark:bg-error-500/10 dark:text-error-500">
-          {error}
+          {state.error}
         </p>
       )}
 
       <AlertDialog
         open={pendingConflict !== null}
         onOpenChange={(open) => {
-          if (!open) setPendingConflict(null);
+          if (!open) reset();
         }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Replace existing statement?</AlertDialogTitle>
             <AlertDialogDescription>
-              A statement for {monthYearLabel} (****{pendingConflict?.cardLast4}) already
-              exists. Replacing it keeps the previous version for 90 days.
+              A statement for {monthYearLabel} (****
+              {pendingConflict?.conflict.cardLast4}) already exists. Replacing
+              it keeps the previous version for 90 days.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isWorking} onClick={() => reset()}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               className={buttonVariants({ variant: 'destructive' })}
-              disabled={loading}
+              disabled={isWorking}
               onClick={(e) => {
                 e.preventDefault();
-                if (pendingConflict) void uploadFile(pendingConflict.file, true);
+                if (pendingConflict) {
+                  start(pendingConflict.file, true);
+                }
               }}
             >
-              {loading ? (
+              {isWorking ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Replacing…

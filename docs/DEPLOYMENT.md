@@ -1,4 +1,13 @@
-# Deployment Runbook — Amplify (Terraform) + GitHub Actions (Step 11)
+# Deployment Runbook — Amplify SSR (archived)
+
+> **This document is archived.** The Amplify SSR deployment was decommissioned
+> in Phase 10 of the hybrid serverless migration (2026-06-29).
+>
+> **Current deployment guide**: [`docs/DEPLOYMENT_SERVERLESS.md`](DEPLOYMENT_SERVERLESS.md)
+>
+> The content below is retained as migration history only.
+
+---
 
 Operational steps to take Cashight live on AWS Amplify Hosting (SSR) in `ap-southeast-1`
 and wire up the GitHub Actions → Amplify release pipeline (Option A).

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getUploadErrorMessage } from '@/lib/upload-error';
+import { getUploadErrorMessage } from '@cashight/domain/upload-error';
 
 describe('getUploadErrorMessage', () => {
   it('uses a JSON error body when the API returns one', async () => {
