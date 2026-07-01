@@ -79,7 +79,7 @@ data "aws_iam_policy_document" "lambda_auth_guard_permissions" {
   statement {
     sid       = "DynamoDBAccess"
     effect    = "Allow"
-    actions   = ["dynamodb:GetItem", "dynamodb:PutItem"]
+    actions   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"]
     resources = [aws_dynamodb_table.cashight.arn]
   }
 }
