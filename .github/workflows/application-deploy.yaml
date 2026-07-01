@@ -79,24 +79,28 @@ jobs:
             # Wait for the update to propagate before publishing canary traffic
             aws lambda wait function-updated --function-name "${FUNCTION}"
 
-            # Resolve the version the live alias currently points to
+            # Resolve the version the live alias currently points to.
+            # NOTE: CodeDeploy's Lambda AppSpec wants bare version numbers here
+            # (e.g. "1", "2"), not ARNs — passing ARNs fails every deployment
+            # with INVALID_LAMBDA_CONFIGURATION before any traffic shifts.
+            NEW_VER="${NEW_ARN##*:}"
             CURRENT_VER=$(aws lambda get-alias \
               --function-name "${FUNCTION}" --name live \
               --query FunctionVersion --output text)
-            CURRENT_ARN="arn:aws:lambda:${AWS_REGION}:${ACCOUNT}:function:${FUNCTION}:${CURRENT_VER}"
-            echo "  Current alias ARN: ${CURRENT_ARN}"
+            echo "  Current alias version: ${CURRENT_VER}, target version: ${NEW_VER}"
 
             # Build inline AppSpec for CodeDeploy
             APPSPEC=$(jq -cn \
               --arg name "${FUNCTION}" \
-              --arg current "${CURRENT_ARN}" \
-              --arg target "${NEW_ARN}" \
+              --arg current "${CURRENT_VER}" \
+              --arg target "${NEW_VER}" \
               '{version:"0.0",Resources:[{FunctionAlias:{Type:"AWS::Lambda::Function",Properties:{Name:$name,Alias:"live",CurrentVersion:$current,TargetVersion:$target}}}]}')
 
             REVISION=$(jq -n --arg content "${APPSPEC}" \
               '{"revisionType":"AppSpecContent","appSpecContent":{"content":$content}}')
 
-            DEPLOY_ID=$(aws codedeploy create-deployment \
+            # NOTE: the CLI service name for CodeDeploy is "deploy", not "codedeploy".
+            DEPLOY_ID=$(aws deploy create-deployment \
               --application-name "${FUNCTION}" \
               --deployment-group-name "${FUNCTION}-live" \
               --revision "${REVISION}" \
@@ -110,7 +114,7 @@ jobs:
           echo "=== Waiting for canary deployments ==="
           for deploy_id in "${DEPLOY_IDS[@]}"; do
             echo "  Waiting for ${deploy_id}..."
-            aws codedeploy wait deployment-successful \
+            aws deploy wait deployment-successful \
               --deployment-id "${deploy_id}"
             echo "  ${deploy_id}: SUCCEEDED"
           done

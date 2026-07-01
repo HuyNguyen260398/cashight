@@ -295,6 +295,10 @@ pnpm test \
   frontend/__tests__/upload-flow.test.tsx
 
 # Static export build (placeholder public config for verification)
+# WARNING: out/ produced by this build bakes in FAKE Cognito values
+# (ap-southeast-1_VERIFY does not exist as a real user pool). It is only
+# for exercising the export mechanics below — it must NEVER be deployed.
+# Phase 7 Step 5 rebuilds from .env.local before deploying; do not skip that.
 NEXT_PUBLIC_API_BASE_URL=https://api.cashight.nghuy.link \
 NEXT_PUBLIC_COGNITO_AUTHORITY=https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_VERIFY \
 NEXT_PUBLIC_COGNITO_CLIENT_ID=static-export-verification-client \
@@ -312,6 +316,13 @@ kill %1
 
 Gate: static export passes verification, Playwright deep-link tests pass
 (authenticated tests self-skip without storage state).
+
+> **Incident (2026-07-01)**: this placeholder `out/` was deployed to production
+> as-is in a later Phase 7 run because `deploy:frontend` uploads whatever is
+> currently in `out/` and does not rebuild. Production served
+> `ap-southeast-1_VERIFY` and broke both Google and Cognito-native sign-in
+> until it was rebuilt from `.env.local` and redeployed. Step 5 below now
+> starts with a mandatory rebuild for exactly this reason.
 
 ### Result — 2026-06-30
 
@@ -366,6 +377,12 @@ cd ..
 
 # Step 5: Deploy application to staging
 #  (trigger via GitHub Actions application-deploy.yaml with the CI run ID, or locally:)
+
+# MANDATORY: rebuild from .env.local first. Phase 6 leaves out/ populated with
+# fake verification-only Cognito values — deploy:frontend uploads out/ as-is
+# and does not rebuild, so skipping this step ships a broken auth config.
+pnpm build
+
 FRONTEND_BUCKET=$(cd terraform && terraform output -raw frontend_bucket_name) \
 CLOUDFRONT_DISTRIBUTION_ID=$(cd terraform && terraform output -raw cloudfront_distribution_id) \
 GIT_SHA=$(git rev-parse --short HEAD) \

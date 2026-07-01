@@ -250,3 +250,67 @@ sequenceDiagram
     SPA->>SPA: Attach Bearer token to API requests
     SPA->>U: Redirect to dashboard
 ```
+
+## 5. Authentication workflow (decision flowchart)
+
+Same mechanism as §4, shown as branching logic rather than time order — useful for
+tracing "what happens if X fails" (bad credentials, disallowed email, expired
+session, 401 from the API).
+
+```mermaid
+flowchart TD
+    start([User visits app]) --> hasSession{Session in\nsessionStorage?}
+    hasSession -->|valid| dashboard[Render dashboard]
+    hasSession -->|expired| silentRenew["AuthProvider: signinSilent()\nvia refresh token"]
+    hasSession -->|none| signin[/signin page/]
+
+    silentRenew --> renewOk{Renewal\nsucceeded?}
+    renewOk -->|yes| dashboard
+    renewOk -->|no| clearSession[removeUser] --> signin
+
+    signin --> choice{Provider button\nclicked}
+    choice -->|"Sign in with Cognito"| cognitoNative["signinRedirect()"]
+    choice -->|"Sign in with Google"| googleFed["signinRedirect()\nextraQueryParams: identity_provider=Google"]
+
+    cognitoNative --> hostedUI[Cognito Hosted UI\nlogin form]
+    hostedUI --> credsOk{Valid\ncredentials?}
+    credsOk -->|no| hostedUI
+    credsOk -->|yes| preSignUp
+
+    googleFed --> googleConsent[Redirect to Google\nconsent screen]
+    googleConsent --> googleApprove{User\napproves?}
+    googleApprove -->|no| signinError["/signin/?error=..."]
+    googleApprove -->|yes| idpresponse[Google → Cognito\nPOST /oauth2/idpresponse]
+    idpresponse --> preSignUp
+
+    preSignUp{First federated\nsign-up?}
+    preSignUp -->|yes| guardSignUp["auth-guard:\nPreSignUp_ExternalProvider"]
+    preSignUp -->|no, existing user| tokenGen
+    guardSignUp --> emailOk1{"email verified AND\nmatches ALLOWED_EMAIL?"}
+    emailOk1 -->|no| deny1[throw AccessDenied] --> signinError
+    emailOk1 -->|yes| tokenGen[Cognito begins\ntoken issuance]
+
+    tokenGen --> guardToken["auth-guard:\nPreTokenGeneration"]
+    guardToken --> emailOk2{"email verified AND\nmatches ALLOWED_EMAIL?"}
+    emailOk2 -->|no| deny2[throw AccessDenied] --> signinError
+    emailOk2 -->|yes| upsertAuthz["Upsert DynamoDB\nAUTHZ#{sub}/PROFILE (active=true)"]
+    upsertAuthz --> issueCode[Redirect to app\nwith authorization code]
+
+    issueCode --> callback["/auth/callback/\nsigninRedirectCallback()"]
+    callback --> exchange{PKCE code\nexchange OK?}
+    exchange -->|no| signinError
+    exchange -->|yes| storeTokens[Store id/access/refresh tokens\nin sessionStorage] --> dashboard
+
+    dashboard --> apiCall[apiFetch → api.cashight.nghuy.link\nAuthorization: Bearer access_token]
+    apiCall --> gwAuth{API Gateway Cognito\nauthorizer: valid JWT\n+ required scope?}
+    gwAuth -->|no — 401/403| on401[apiFetch: removeUser\n+ location.href = /signin/]
+    gwAuth -->|yes| lambda[Invoke Lambda\nwith verified claims]
+    on401 --> signin
+
+    signOut([User clicks Sign out]) --> signoutRedirect["signoutRedirect()\nCognito /logout endpoint"] --> signin
+
+    classDef guard fill:#fff3e0,stroke:#e65100;
+    classDef deny fill:#ffe6e6,stroke:#c0392b;
+    class guardSignUp,guardToken guard;
+    class deny1,deny2,signinError deny;
+```
