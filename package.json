@@ -57,6 +57,7 @@
   },
   "devDependencies": {
     "@aws-sdk/client-cloudfront": "^3.1075.0",
+    "@aws-sdk/client-lambda": "^3.1075.0",
     "@aws-sdk/client-s3": "^3.1063.0",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
