@@ -25,11 +25,29 @@ jobs:
     env:
       AWS_REGION: ap-southeast-1
       CI_RUN_ID: ${{ inputs.ci_run_id }}
-      GIT_SHA: ${{ github.sha }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v4
+
+      # CI only runs on pull_request, where github.sha is an ephemeral merge-preview
+      # commit that never matches any commit reachable from main. That SHA is what
+      # got baked into the artifact names when CI uploaded them, so this workflow's
+      # own github.sha (main's HEAD at dispatch time) can never match either. Resolve
+      # both the real source commit and the actual artifact names from the CI run.
+      - name: Resolve CI run artifacts
+        id: ci
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+          RUN_ID="${{ inputs.ci_run_id }}"
+          SHA=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}" --jq .head_sha)
+          ARTIFACTS_JSON=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts")
+          LAMBDA_ARTIFACT=$(echo "${ARTIFACTS_JSON}" | jq -r '[.artifacts[] | select(.name | startswith("lambda-artifacts-"))][0].name // empty')
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "lambda_artifact=${LAMBDA_ARTIFACT}" >> "$GITHUB_OUTPUT"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -40,7 +58,7 @@ jobs:
       - name: Download Lambda artifacts
         uses: actions/download-artifact@v4
         with:
-          name: lambda-artifacts-${{ github.sha }}
+          name: ${{ steps.ci.outputs.lambda_artifact }}
           path: dist/artifacts
           run-id: ${{ inputs.ci_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -54,6 +72,7 @@ jobs:
           done
         env:
           ARTIFACTS_BUCKET: ${{ vars.ARTIFACTS_BUCKET }}
+          GIT_SHA: ${{ steps.ci.outputs.sha }}
 
       - name: Update Lambda functions and deploy canaries
         run: |
@@ -121,6 +140,7 @@ jobs:
           echo "All Lambda canary deployments succeeded"
         env:
           ARTIFACTS_BUCKET: ${{ vars.ARTIFACTS_BUCKET }}
+          GIT_SHA: ${{ steps.ci.outputs.sha }}
 
   # ── Frontend: atomic S3 + CloudFront deployment ──────────────────────────────
   deploy-frontend:
@@ -130,11 +150,20 @@ jobs:
     environment: production
     env:
       AWS_REGION: ap-southeast-1
-      GIT_SHA: ${{ github.sha }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v4
+
+      - name: Resolve CI run artifacts
+        id: ci
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          FRONTEND_ARTIFACT=$(gh api "repos/${{ github.repository }}/actions/runs/${{ inputs.ci_run_id }}/artifacts" \
+            --jq '[.artifacts[] | select(.name | startswith("frontend-export-"))][0].name // empty')
+          echo "frontend_artifact=${FRONTEND_ARTIFACT}" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
@@ -157,7 +186,7 @@ jobs:
       - name: Download frontend artifact
         uses: actions/download-artifact@v4
         with:
-          name: frontend-export-${{ github.sha }}
+          name: ${{ steps.ci.outputs.frontend_artifact }}
           path: out
           run-id: ${{ inputs.ci_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -197,11 +226,24 @@ jobs:
     environment: production
     env:
       AWS_REGION: ap-southeast-1
-      GIT_SHA: ${{ github.sha }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v4
+
+      - name: Resolve CI run artifacts
+        id: ci
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+          RUN_ID="${{ inputs.ci_run_id }}"
+          SHA=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}" --jq .head_sha)
+          FRONTEND_ARTIFACT=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts" \
+            --jq '[.artifacts[] | select(.name | startswith("frontend-export-"))][0].name // empty')
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "frontend_artifact=${FRONTEND_ARTIFACT}" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
@@ -224,7 +266,7 @@ jobs:
       - name: Download frontend artifact (for checksums)
         uses: actions/download-artifact@v4
         with:
-          name: frontend-export-${{ github.sha }}
+          name: ${{ steps.ci.outputs.frontend_artifact }}
           path: out
           run-id: ${{ inputs.ci_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -234,3 +276,4 @@ jobs:
         env:
           ARTIFACTS_BUCKET: ${{ vars.ARTIFACTS_BUCKET }}
           CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
+          GIT_SHA: ${{ steps.ci.outputs.sha }}
