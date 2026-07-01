@@ -141,7 +141,10 @@ describe('API error responses', () => {
     const serialized = JSON.stringify(response);
 
     expect(response.statusCode).toBe(500);
-    expect(response.headers).toEqual({ 'content-type': 'application/json' });
+    expect(response.headers).toEqual({
+      'content-type': 'application/json',
+      'Access-Control-Allow-Origin': 'https://cashight.nghuy.link',
+    });
     expect(serialized.includes('PRIVATE MERCHANT DESCRIPTION')).toBe(false);
     expect(JSON.parse(response.body)).toEqual({
       error: {
