@@ -436,7 +436,7 @@ export function AdminShell({
 
             <div
               className={cn(
-                'flex items-center justify-between gap-3 overflow-hidden px-5 shadow-theme-md transition-[max-height,opacity,transform,padding] duration-300 ease-out lg:max-h-none lg:flex-1 lg:translate-y-0 lg:justify-end lg:px-6 lg:py-3 lg:opacity-100 lg:shadow-none',
+                'flex items-center justify-between gap-3 overflow-hidden px-5 shadow-theme-md transition-[max-height,opacity,transform,padding] duration-300 ease-out lg:max-h-none lg:flex-1 lg:translate-y-0 lg:justify-end lg:overflow-visible lg:px-6 lg:py-3 lg:opacity-100 lg:shadow-none',
                 mobileMenuOpen
                   ? 'max-h-20 translate-y-0 py-4 opacity-100'
                   : 'max-h-0 -translate-y-2 py-0 opacity-0 lg:max-h-none',
