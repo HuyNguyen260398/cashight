@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { getOidcManager } from '@/frontend/auth/oidc';
 
@@ -12,8 +12,15 @@ import { getOidcManager } from '@/frontend/auth/oidc';
  */
 export default function AuthCallbackPage() {
   const router = useRouter();
+  const hasRun = useRef(false);
 
   useEffect(() => {
+    // The authorization code + PKCE state are single-use — StrictMode's dev-only
+    // double-invoke would otherwise consume them twice and fail the second call
+    // with "No matching state found in storage".
+    if (hasRun.current) return;
+    hasRun.current = true;
+
     async function handleCallback() {
       try {
         const manager = getOidcManager();
