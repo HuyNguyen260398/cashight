@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import { getOidcManager } from '@/frontend/auth/oidc';
 
 /**
@@ -11,7 +10,6 @@ import { getOidcManager } from '@/frontend/auth/oidc';
  * page with an error indicator.
  */
 export default function AuthCallbackPage() {
-  const router = useRouter();
   const hasRun = useRef(false);
 
   useEffect(() => {
@@ -25,15 +23,19 @@ export default function AuthCallbackPage() {
       try {
         const manager = getOidcManager();
         await manager.signinRedirectCallback();
-        router.replace('/');
+        // Full navigation (not router.replace): AuthProvider only restores the
+        // session on mount, and it's mounted once at the root layout, so a
+        // client-side route change would leave it holding a stale
+        // unauthenticated state and ProtectedRoute would bounce back to /signin.
+        window.location.href = '/';
       } catch (err) {
         console.error('Auth callback failed:', err);
-        router.replace('/signin/?error=callback');
+        window.location.href = '/signin/?error=callback';
       }
     }
 
     void handleCallback();
-  }, [router]);
+  }, []);
 
   return (
     <main className="flex min-h-dvh items-center justify-center">

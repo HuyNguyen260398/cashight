@@ -204,18 +204,32 @@ describe('ProtectedRoute', () => {
 // ── AuthCallbackPage ─────────────────────────────────────────────────────────
 
 describe('AuthCallbackPage', () => {
+  // AuthCallbackPage uses a full navigation (window.location.href), not
+  // router.replace, because AuthProvider only restores the session on mount
+  // and is mounted once at the root layout — a client-side route change would
+  // leave it holding a stale unauthenticated state.
+  const originalLocation = window.location;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...originalLocation, href: '' },
+    });
   });
 
   afterEach(() => {
     cleanup();
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: originalLocation,
+    });
   });
 
   it('calls signinRedirectCallback and redirects to / on success', async () => {
     mockSigninRedirectCallback.mockResolvedValue(undefined);
     render(<CallbackPage />);
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'));
+    await waitFor(() => expect(window.location.href).toBe('/'));
     expect(mockSigninRedirectCallback).toHaveBeenCalledOnce();
   });
 
@@ -223,7 +237,7 @@ describe('AuthCallbackPage', () => {
     mockSigninRedirectCallback.mockRejectedValue(new Error('callback error'));
     render(<CallbackPage />);
     await waitFor(() =>
-      expect(mockReplace).toHaveBeenCalledWith('/signin/?error=callback'),
+      expect(window.location.href).toBe('/signin/?error=callback'),
     );
   });
 });
