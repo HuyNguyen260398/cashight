@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "NODE_OPTIONS=--disable-warning=DEP0205 next dev",
+    "dev:api-proxy": "node scripts/dev-api-proxy.mjs",
     "build": "NODE_OPTIONS=--disable-warning=DEP0205 next build",
     "verify:static": "node scripts/verify-static-export.mjs",
     "build:lambdas": "node scripts/build-lambdas.mjs",
