@@ -17,7 +17,7 @@ export interface ApiErrorBody {
 export interface ApiResponse {
   statusCode: number;
   headers: {
-    'content-type': 'application/json';
+    'content-type': 'application/json' | 'text/plain; charset=utf-8';
     'Access-Control-Allow-Origin': string;
   };
   body: string;
@@ -42,6 +42,20 @@ export function jsonResponse(statusCode: number, body: unknown): ApiResponse {
       'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
     },
     body: JSON.stringify(body),
+  };
+}
+
+// API Gateway's aws_proxy integration only supports buffered responses — a
+// Lambda invoked through it cannot use awslambda.streamifyResponse (that's a
+// Function URL-only invoke mode). This returns a single complete text body.
+export function textResponse(statusCode: number, body: string): ApiResponse {
+  return {
+    statusCode,
+    headers: {
+      'content-type': 'text/plain; charset=utf-8',
+      'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+    },
+    body,
   };
 }
 
