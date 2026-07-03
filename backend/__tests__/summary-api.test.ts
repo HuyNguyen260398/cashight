@@ -3,6 +3,7 @@ import type { AggregatedView } from '@cashight/domain/aggregations';
 
 import {
   prepareSummary,
+  collectResponse,
   type SummaryHandlerDeps,
 } from '../functions/summary-api/handler';
 
@@ -217,5 +218,29 @@ describe('prepareSummary', () => {
       }),
     );
     expect(capturedPrompt).toContain('GROCERY STORE');
+  });
+});
+
+describe('collectResponse', () => {
+  // API Gateway's aws_proxy integration is a buffered invoke — it cannot
+  // consume a Lambda response-streaming (awslambda.streamifyResponse) output,
+  // and doing so causes API Gateway to reject it as a "Malformed Lambda proxy
+  // response" (502). collectResponse must fold the async generator into a
+  // single buffered ApiResponse instead.
+  it('concatenates all chunks into a single buffered text response', async () => {
+    const result = await prepareSummary(makeEvent(mockAggregatedView), makeDeps());
+    const response = await collectResponse(result);
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toBe('text/plain; charset=utf-8');
+    expect(response.body).toBe('First chunk. Second chunk.');
+  });
+
+  it('passes error results through unchanged', async () => {
+    const result = await prepareSummary(
+      makeEvent(mockAggregatedView, { sub: undefined, token_use: undefined }),
+      makeDeps(),
+    );
+    const response = await collectResponse(result);
+    expect(response.statusCode).toBe(401);
   });
 });

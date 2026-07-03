@@ -2,7 +2,7 @@ import { AggregatedViewSchema } from '@cashight/domain/schemas';
 import type { AggregatedView } from '@cashight/domain/aggregations';
 import { buildSummaryPayload } from '@cashight/domain/summary-payload';
 
-import { errorResponse, jsonResponse, type ApiResponse } from '../../shared/api-response';
+import { errorResponse, jsonResponse, textResponse, type ApiResponse } from '../../shared/api-response';
 import { authorizeRequest } from '../../shared/auth-claims';
 import { dynamoDocumentClient } from '../../shared/clients';
 import { requiredEnvironmentValue } from '../../shared/config';
@@ -131,42 +131,24 @@ function makeProductionDeps(): SummaryHandlerDeps {
   };
 }
 
-type ResponseStream = { write: (chunk: string | Buffer) => void; end: () => void };
-type StreamifyResponse = (
-  fn: (event: unknown, responseStream: ResponseStream) => Promise<void>,
-) => unknown;
+// /summaries is invoked through API Gateway's aws_proxy integration, which is
+// a buffered invoke — it cannot consume awslambda.streamifyResponse output
+// (that invoke mode is Function URL-only) and rejects it as a "Malformed
+// Lambda proxy response" (502). So the generator is folded into one response.
+export async function collectResponse(result: SummaryResult): Promise<ApiResponse> {
+  if (result.type === 'error') {
+    return result.response;
+  }
 
-async function streamingImpl(event: unknown, responseStream: ResponseStream): Promise<void> {
+  let text = result.firstChunk;
+  for await (const chunk of result.gen) {
+    text += chunk;
+  }
+  return textResponse(200, text);
+}
+
+export async function handler(event: unknown): Promise<ApiResponse> {
   const deps = makeProductionDeps();
   const result = await prepareSummary(event, deps);
-
-  if (result.type === 'error') {
-    responseStream.write(result.response.body);
-    responseStream.end();
-    return;
-  }
-
-  const { firstChunk, gen } = result;
-  if (firstChunk) responseStream.write(firstChunk);
-  for await (const chunk of gen) {
-    responseStream.write(chunk);
-  }
-  responseStream.end();
+  return collectResponse(result);
 }
-
-// Lambda streaming handler — awslambda is a global available in the Lambda runtime.
-// In non-Lambda environments (tests, local), fall back to a plain async function.
-function getStreamifyResponse(): StreamifyResponse {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const g = globalThis as Record<string, any>;
-    if (typeof g.awslambda?.streamifyResponse === 'function') {
-      return g.awslambda.streamifyResponse as StreamifyResponse;
-    }
-  } catch {
-    // ignore
-  }
-  return (fn) => fn;
-}
-
-export const handler = getStreamifyResponse()(streamingImpl);

@@ -364,20 +364,22 @@ paths:
               method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
               method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
 
-  # ── /summaries (response streaming) ──────────────────────────────────────
-  # Uses the /response-streaming-invocations URI suffix to enable Lambda
-  # response streaming — the Lambda function must have InvokeMode = RESPONSE_STREAM.
+  # ── /summaries ────────────────────────────────────────────────────────────
+  # API Gateway REST APIs only support buffered Lambda proxy integrations —
+  # there is no response-streaming invoke path here (that's Function URL-only,
+  # via InvokeMode = RESPONSE_STREAM). summary-api buffers the full Gemini
+  # output and returns it as one text/plain response.
 
   /summaries:
     post:
       operationId: streamSummary
-      summary: Stream a Gemini-generated natural-language spending summary
+      summary: Generate a Gemini-generated natural-language spending summary
       security:
         - CognitoAuth: ["cashight/read"]
       x-amazon-apigateway-request-validator: all
       responses:
         "200":
-          description: Streamed summary text (chunked transfer encoding)
+          description: Summary text (text/plain)
         "401":
           description: Unauthorized
       x-amazon-apigateway-integration:
