@@ -537,7 +537,7 @@ data "aws_iam_policy_document" "lambda_dashboard_api_permissions" {
   statement {
     sid       = "DynamoDBAccess"
     effect    = "Allow"
-    actions   = ["dynamodb:Query"]
+    actions   = ["dynamodb:Query", "dynamodb:GetItem"]
     resources = [aws_dynamodb_table.cashight.arn]
   }
 }
