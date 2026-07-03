@@ -5,6 +5,13 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # Must stay pinned to exactly what pdf-parse depends on internally
+      # (see node_modules/pdf-parse/package.json). scripts/build-lambdas.mjs
+      # copies this package's worker file into the parser-worker Lambda, and
+      # pdfjs-dist throws at runtime if the API and worker versions mismatch.
+      # A routine Dependabot bump to 6.0.227 silently broke every PDF upload.
+      - dependency-name: "pdfjs-dist"
 
   - package-ecosystem: github-actions
     directory: /
