@@ -208,7 +208,7 @@ jobs:
       # hand it this real build rather than letting it fall back to CI's
       # placeholder-baked export.
       - name: Upload production frontend artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-export-prod-${{ github.run_id }}
           path: out/

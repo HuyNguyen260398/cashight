@@ -68,7 +68,7 @@ jobs:
         run: pnpm verify:static
 
       - name: Upload Lambda artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lambda-artifacts-${{ github.sha }}
           path: dist/artifacts/*.zip
@@ -76,7 +76,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload frontend artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-export-${{ github.sha }}
           path: out/
