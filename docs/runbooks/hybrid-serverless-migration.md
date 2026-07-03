@@ -950,3 +950,42 @@ cd ..
 ```
 
 Gate: all commands exit 0, final plan shows no changes.
+
+### Phase 10 results — 2026-07-03
+
+> **Gate note:** The seven-day observation window was **not** met — cutover was
+> `2026-06-30T13:03:26Z`, decommission applied `2026-07-03` (~3 days). The
+> operator explicitly overrode the 7-day gate, accepting that the Amplify→DNS
+> rollback path is already PARTIAL/manual-only (recorded in Phase 9 results).
+
+| Step | Check | Result |
+|---|---|---|
+| 1 | AWS identity (`010382427026`, IAM user `huy_ng`) | confirmed |
+| 1 | DLQ depth (`cashight-parse-dlq`) | 0 / 0 |
+| 1 | Stuck `PROCESSING` upload jobs (table `cashight`, no GSI1 — scanned) | 0 of 43 items |
+| 1 | PII log scan (`pre-decommission-logs-20260703.json`) | no PAN — only epoch/ID false positives (all 13-digit runs start `17`; zero 16-digit sequences) |
+| 2 | `next-auth`, `legacy/amplify/`, `deploy.yaml`, `terraform/amplify.tf` | all absent |
+| 3 | Plan review (`decommission-20260703.tfplan`) | all 13 documented Amplify destroys present; active API `dnsjq1qyhh` only modified (not destroyed); 3 deleted REST APIs are deposed orphans |
+| 3 | Scope note | Plan also bundled unapplied API-body redeploy, `cognito.google` benign perpetual-diff update, WAF move Amplify→API, and orphan cleanup. Operator chose to apply bundled. |
+| 4 | `terraform apply` | **2 added, 3 changed, 15 destroyed** — exit 0. Amplify app `d256g033y75nc0` + branch + IAM roles/policies + 3 `amplify_*` alarms + `cognito.web` client destroyed |
+| 4 | Post-apply smoke (`cashight.nghuy.link` / `api.cashight.nghuy.link`) | 10/10 (see fix below) |
+| 4 | Auth stack integrity | SPA client `cashight-spa` intact, Google IdP intact, legacy `web` client gone, Amplify app gone |
+| 6 | `tsc --noEmit` / `lint` / `test` | pass / 0 errors, 5 warnings / 291 passed (33 files) |
+| 6 | `pnpm build` / `build:lambdas` | static export OK / 7 Lambdas built |
+| 6 | `terraform fmt -check` / `validate` | clean / valid (benign `github_access_token` undeclared-var warning) |
+| 6 | `terraform plan -detailed-exitcode` | **deferred** — requires OAuth secret vars; also expect Cognito Google IdP perpetual diff |
+
+**Regression found and fixed (WAF `NoUserAgent_HEADER`):** immediately after apply,
+API smoke checks returned `403` on all endpoints. Root cause: the bundled
+`aws_wafv2_web_acl_association.api` placed the API behind
+`AWSManagedRulesCommonRuleSet`, whose `NoUserAgent_HEADER` rule blocks requests
+with no `User-Agent`. Node's `http.request` (used by `scripts/smoke-serverless.mjs`)
+sent none. Real clients (browsers) always send a User-Agent, so production was
+never affected — verified: with a UA `/health`→200 and unauth endpoints→401;
+without a UA everything→403. Fix: `smoke-serverless.mjs` now sends a
+`User-Agent: cashight-smoke-tests/1.0` header → 10/10.
+
+**Not done (later, gated actions):** Step 5 obsolete-secret removal is a +7-day
+CloudTrail-gated action and was not performed. Working-tree changes
+(`scripts/smoke-serverless.mjs`, this results section) are left uncommitted — on
+`main`, so commit/branch left to the operator.

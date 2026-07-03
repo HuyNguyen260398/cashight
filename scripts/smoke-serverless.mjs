@@ -33,7 +33,11 @@ function request(url, options = {}) {
       url,
       {
         method: options.method ?? 'GET',
-        headers: options.headers ?? {},
+        // The API sits behind AWS WAF (AWSManagedRulesCommonRuleSet), whose
+        // NoUserAgent_HEADER rule blocks requests without a User-Agent with a
+        // 403. Real clients are browsers, which always send one — so send a
+        // realistic User-Agent here to represent an actual consumer.
+        headers: { 'User-Agent': 'cashight-smoke-tests/1.0', ...(options.headers ?? {}) },
         timeout: 15000,
       },
       (res) => {
