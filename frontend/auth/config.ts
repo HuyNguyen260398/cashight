@@ -32,13 +32,19 @@ export function getPublicConfig(): PublicRuntimeConfig {
   }
 
   if (process.env.NODE_ENV !== 'test') {
+    // Local development runs the SPA over http://localhost against the deployed
+    // API, so exempt localhost origins from the HTTPS requirement.
+    const isLocalhostOrigin = (value: string) =>
+      value.startsWith('http://localhost') ||
+      value.startsWith('http://127.0.0.1');
+
     const httpsCheck: [string, string][] = [
       [apiBaseUrl, 'NEXT_PUBLIC_API_BASE_URL'],
       [cognitoAuthority, 'NEXT_PUBLIC_COGNITO_AUTHORITY'],
       [appOrigin, 'NEXT_PUBLIC_APP_ORIGIN'],
     ];
     for (const [value, name] of httpsCheck) {
-      if (!value.startsWith('https://')) {
+      if (!value.startsWith('https://') && !isLocalhostOrigin(value)) {
         throw new Error(`${name} must use HTTPS in production`);
       }
     }

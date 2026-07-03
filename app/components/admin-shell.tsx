@@ -278,12 +278,20 @@ function UserDropdown({
             </li>
           </ul>
 
-          <form action={signOutAction} className="pt-3">
-            <button type="submit" role="menuitem" className={itemClassName}>
+          <div className="pt-3">
+            <button
+              type="button"
+              role="menuitem"
+              className={itemClassName}
+              onClick={() => {
+                setOpen(false);
+                void signOutAction();
+              }}
+            >
               <LogOut className={iconClassName} aria-hidden />
               Sign out
             </button>
-          </form>
+          </div>
         </div>
       ) : null}
     </div>

@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { useAuth } from '@/frontend/auth/auth-provider';
-import { getOidcManager } from '@/frontend/auth/oidc';
+import { signOut } from '@/frontend/auth/oidc';
 import { AdminShell } from './admin-shell';
 
 /**
@@ -15,8 +15,7 @@ export function Nav({ children }: { children: ReactNode }) {
   const email = (user?.profile as { email?: string } | undefined)?.email ?? '';
 
   async function signOutAction() {
-    const manager = getOidcManager();
-    await manager.signoutRedirect();
+    await signOut();
   }
 
   // While the session is being restored from sessionStorage, show the page
