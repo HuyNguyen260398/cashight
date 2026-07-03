@@ -117,7 +117,6 @@ function createDefaultPresign(uploadBucket: string) {
       url,
       headers: {
         'Content-Type': params.contentType,
-        'x-amz-checksum-sha256': params.sha256Base64,
       },
       expiresAt,
     };
