@@ -11,7 +11,8 @@ import {
 } from 'recharts';
 import { CHART_AXIS_COLOR, gradientPair } from '@/lib/chart-colors';
 import { categoryColor } from '@/lib/category-colors';
-import { formatVND, formatVNDCompact } from '@/lib/format';
+import { formatVNDCompact } from '@/lib/format';
+import { ChartTooltip } from '@/app/components/chart-tooltip';
 
 export function MerchantBar({
   data,
@@ -45,11 +46,18 @@ export function MerchantBar({
         {/* Name the category in the tooltip — otherwise the colours are the
             only clue to what they mean, which fails for colour-blind users. */}
         <Tooltip
-          formatter={(value, _name, item) => [
-            formatVND(Number(value)),
-            (item?.payload as { category?: string } | undefined)?.category ??
-              'Spend',
-          ]}
+          cursor={{ fill: 'rgba(148, 163, 184, 0.12)' }}
+          content={
+            <ChartTooltip
+              titleOf={(item) => String(item.payload?.merchant ?? '')}
+              colorOf={(item) =>
+                categoryColor(String(item.payload?.category ?? ''))
+              }
+              captionOf={(item) =>
+                (item.payload?.category as string | undefined) ?? undefined
+              }
+            />
+          }
         />
         <defs>
           {gradients.map((stop, index) => (

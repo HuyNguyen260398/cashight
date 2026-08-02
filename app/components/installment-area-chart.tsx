@@ -10,7 +10,8 @@ import {
 } from 'recharts';
 import type { AggregatedView } from '@/lib/aggregations';
 import { CHART_AXIS_COLOR, CHART_COLORS } from '@/lib/chart-colors';
-import { formatVND, formatVNDCompact } from '@/lib/format';
+import { formatVNDCompact } from '@/lib/format';
+import { ChartTooltip } from '@/app/components/chart-tooltip';
 
 export function InstallmentAreaChart({ view }: { view: AggregatedView }) {
   // Per-sub-period installments — monthly buckets for year/quarter views, daily
@@ -37,7 +38,8 @@ export function InstallmentAreaChart({ view }: { view: AggregatedView }) {
           tick={{ fontSize: 12, fill: CHART_AXIS_COLOR }}
           tickFormatter={(v) => formatVNDCompact(Number(v))}
         />
-        <Tooltip formatter={(v) => formatVND(Number(v))} />
+        {/* The area is filled with a gradient url; the stroke is the real hue. */}
+        <Tooltip content={<ChartTooltip colorOf={() => CHART_COLORS.brand} />} />
         <defs>
           <linearGradient id="installmentGradient" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={CHART_COLORS.brand} stopOpacity={0.55} />
