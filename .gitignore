@@ -48,6 +48,11 @@ yarn-error.log*
 # local PDF fixtures (never commit real statements)
 /test-pdfs/
 
+# Statement PDFs are real financial documents and carry a full PAN, so they are
+# ignored wherever they land — not just under /test-pdfs/. No PDF has ever been
+# tracked here; if one ever genuinely belongs in the repo, use `git add -f`.
+*.pdf
+
 # local dev stack data (fake S3 objects + fake DynamoDB table — real statements)
 /.local-data/
 
