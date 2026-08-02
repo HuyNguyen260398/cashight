@@ -3,19 +3,26 @@
 import {
   BarChart,
   Bar,
+  Cell,
   XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { CHART_AXIS_COLOR, CHART_COLORS } from '@/lib/chart-colors';
+import { CHART_AXIS_COLOR, gradientPair } from '@/lib/chart-colors';
+import { categoryColor } from '@/lib/category-colors';
 import { formatVND, formatVNDCompact } from '@/lib/format';
 
 export function MerchantBar({
   data,
 }: {
-  data: Array<{ merchant: string; value: number }>;
+  data: Array<{ merchant: string; value: number; category?: string }>;
 }) {
+  // Each bar takes its category's colour, so a merchant here matches its slice
+  // in the category pie. Gradient ids are per-index and prefixed, since <defs>
+  // ids are global to the document and this chart shares a page with others.
+  const gradients = data.map((d) => gradientPair(categoryColor(d.category ?? '')));
+
   return (
     <ResponsiveContainer width="100%" height={350}>
       <BarChart data={data} layout="vertical" margin={{ left: 16, right: 16 }}>
@@ -35,14 +42,35 @@ export function MerchantBar({
             return label.length > 18 ? `${label.slice(0, 17)}…` : label;
           }}
         />
-        <Tooltip formatter={(v) => formatVND(Number(v))} />
+        {/* Name the category in the tooltip — otherwise the colours are the
+            only clue to what they mean, which fails for colour-blind users. */}
+        <Tooltip
+          formatter={(value, _name, item) => [
+            formatVND(Number(value)),
+            (item?.payload as { category?: string } | undefined)?.category ??
+              'Spend',
+          ]}
+        />
         <defs>
-          <linearGradient id="merchantGradient" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor={CHART_COLORS.brand} />
-            <stop offset="100%" stopColor={CHART_COLORS.brandLight} />
-          </linearGradient>
+          {gradients.map((stop, index) => (
+            <linearGradient
+              key={index}
+              id={`merchantGradient-${index}`}
+              x1="0"
+              y1="0"
+              x2="1"
+              y2="0"
+            >
+              <stop offset="0%" stopColor={stop.from} />
+              <stop offset="100%" stopColor={stop.to} />
+            </linearGradient>
+          ))}
         </defs>
-        <Bar dataKey="value" fill="url(#merchantGradient)" radius={[0, 4, 4, 0]} />
+        <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+          {data.map((d, index) => (
+            <Cell key={d.merchant} fill={`url(#merchantGradient-${index})`} />
+          ))}
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   );

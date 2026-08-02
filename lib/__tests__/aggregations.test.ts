@@ -385,6 +385,48 @@ describe('aggregate — cross-statement merchant accumulation', () => {
     }
   });
 
+  it('tags each merchant with its category so the bar chart can colour it', () => {
+    expect(view.topMerchants.find((m) => m.merchant === 'GRAB')?.category).toBe(
+      'Shopping',
+    );
+  });
+
+  it('picks the dominant category across the whole period, not per statement', () => {
+    // GROCER is Groceries in April but mostly Food & Dining in May. Deciding
+    // per statement would flip its colour between the month and year views.
+    const withCategory = (
+      description: string,
+      amountVnd: number,
+      dateStr: string,
+      category: string,
+    ) => ({ ...makeTx(description, amountVnd, dateStr), category });
+
+    const april: Statement = {
+      ...makeStatement(2026, 4),
+      transactions: [withCategory('GROCER', 300_000, '2026-04-10', 'Groceries')],
+    };
+    const may: Statement = {
+      ...makeStatement(2026, 5),
+      transactions: [
+        withCategory('GROCER', 900_000, '2026-05-10', 'Food & Dining'),
+      ],
+    };
+
+    const merged = aggregate([april, may], spec).topMerchants.find(
+      (m) => m.merchant === 'GROCER',
+    );
+    expect(merged?.value).toBe(1_200_000);
+    expect(merged?.category).toBe('Food & Dining');
+
+    // April alone still reports April's own dominant category.
+    const aprilOnly = aggregate([april, may], {
+      type: 'month',
+      year: 2026,
+      month: 4,
+    }).topMerchants.find((m) => m.merchant === 'GROCER');
+    expect(aprilOnly?.category).toBe('Groceries');
+  });
+
   it('topMerchants is capped at 10 entries', () => {
     // Build 12 statements with distinct merchants to exceed the 10-entry cap
     const stmts: Statement[] = Array.from({ length: 12 }, (_, idx) => ({

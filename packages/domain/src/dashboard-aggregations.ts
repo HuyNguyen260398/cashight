@@ -57,24 +57,66 @@ export function byCategory(
 }
 
 /**
+ * Pick the category a merchant's spend mostly falls under.
+ *
+ * One description can carry rows in more than one category, so the winner is
+ * the category holding the most VND. Ties break on category name so the colour
+ * a merchant gets is stable across renders rather than dependent on Map
+ * insertion order.
+ */
+export function dominantCategory(byCategoryVnd: Map<string, number>): string {
+  let best = '';
+  let bestValue = -Infinity;
+  for (const [category, value] of byCategoryVnd) {
+    if (value > bestValue || (value === bestValue && category < best)) {
+      best = category;
+      bestValue = value;
+    }
+  }
+  return best;
+}
+
+/**
  * Group positive-amountVnd transactions by normalized description (merchant),
  * EXCLUDING category 'Fees & Interest' (shows where money actually went:
  * spend + installments). Sort descending and return the top n entries.
+ *
+ * `categories` carries the per-category split so callers can merge across
+ * statements before choosing a colour; `category` is the dominant one for a
+ * single statement.
  */
 export function topMerchants(
   s: Statement,
   n: number,
-): Array<{ merchant: string; value: number }> {
+): Array<{
+  merchant: string;
+  value: number;
+  category: string;
+  categories: Map<string, number>;
+}> {
   const map = new Map<string, number>();
+  const categories = new Map<string, Map<string, number>>();
 
   for (const t of s.transactions) {
     if (t.amountVnd <= 0) continue;           // skip credits
     if (t.category === 'Fees & Interest') continue; // exclude fee rows
     map.set(t.description, (map.get(t.description) ?? 0) + t.amountVnd);
+
+    const split = categories.get(t.description) ?? new Map<string, number>();
+    split.set(t.category, (split.get(t.category) ?? 0) + t.amountVnd);
+    categories.set(t.description, split);
   }
 
   return Array.from(map.entries())
-    .map(([merchant, value]) => ({ merchant, value }))
+    .map(([merchant, value]) => {
+      const split = categories.get(merchant) ?? new Map<string, number>();
+      return {
+        merchant,
+        value,
+        category: dominantCategory(split),
+        categories: split,
+      };
+    })
     .sort((a, b) => b.value - a.value)
     .slice(0, n);
 }

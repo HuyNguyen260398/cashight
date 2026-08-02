@@ -11,6 +11,7 @@ import type { Statement, Transaction } from './schemas';
 import {
   NON_SPEND,
   byCategory as singleByCategory,
+  dominantCategory,
   topMerchants as singleTopMerchants,
 } from './dashboard-aggregations';
 import { periodLabel, quarterOf, type PeriodSpec } from './period';
@@ -44,7 +45,12 @@ export interface AggregatedView {
   latestStatement?: { statementBalance: number; statementDate: string } | null;
   transactions: Transaction[];
   byCategory: Array<{ category: string; value: number; pct: number }>;
-  topMerchants: Array<{ merchant: string; value: number }>;
+  /**
+   * `category` is the merchant's dominant spending category, carried so the
+   * bar chart can colour each merchant with the same hue its category has in
+   * the pie. Optional for the same reason as `latestStatement`.
+   */
+  topMerchants: Array<{ merchant: string; value: number; category?: string }>;
   /**
    * Year/quarter views: monthly buckets derived from s.totals.totalSpend —
    * bars sum to totals.totalSpend.
@@ -186,21 +192,38 @@ function mergeByCategory(
     .sort((a, b) => b.value - a.value);
 }
 
-/** Merge per-statement topMerchants results, return top 10. */
+/**
+ * Merge per-statement topMerchants results, return top 10.
+ *
+ * The per-category split is merged alongside the totals so a merchant's
+ * dominant category is decided across the whole period, not per statement —
+ * otherwise a merchant could take one colour in a month view and another in
+ * the year view that contains it.
+ */
 function mergeTopMerchants(
   filtered: Statement[],
-): Array<{ merchant: string; value: number }> {
+): Array<{ merchant: string; value: number; category: string }> {
   const map = new Map<string, number>();
+  const categories = new Map<string, Map<string, number>>();
+
   for (const s of filtered) {
-    for (const { merchant, value } of singleTopMerchants(
-      s,
-      Number.MAX_SAFE_INTEGER,
-    )) {
-      map.set(merchant, (map.get(merchant) ?? 0) + value);
+    for (const merchant of singleTopMerchants(s, Number.MAX_SAFE_INTEGER)) {
+      map.set(merchant.merchant, (map.get(merchant.merchant) ?? 0) + merchant.value);
+
+      const split = categories.get(merchant.merchant) ?? new Map<string, number>();
+      for (const [category, value] of merchant.categories) {
+        split.set(category, (split.get(category) ?? 0) + value);
+      }
+      categories.set(merchant.merchant, split);
     }
   }
+
   return Array.from(map.entries())
-    .map(([merchant, value]) => ({ merchant, value }))
+    .map(([merchant, value]) => ({
+      merchant,
+      value,
+      category: dominantCategory(categories.get(merchant) ?? new Map()),
+    }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 10);
 }

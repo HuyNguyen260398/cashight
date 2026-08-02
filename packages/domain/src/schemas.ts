@@ -82,6 +82,9 @@ export const AggregatedViewSchema = z.object({
     z.object({
       merchant: z.string(),
       value: z.number(),
+      // Optional so a cached SPA bundle posting the older shape to /summaries
+      // still validates; `aggregate()` always sets it.
+      category: z.string().optional(),
     }),
   ),
   subPeriods: z.array(
