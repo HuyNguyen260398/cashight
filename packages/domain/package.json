@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./schemas": "./src/schemas.ts",
+    "./banks": "./src/banks.ts",
     "./api": "./src/api.ts",
     "./period": "./src/period.ts",
     "./aggregations": "./src/aggregations.ts",

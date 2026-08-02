@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { AggregatedView } from './aggregations';
+import { BANK_CODES } from './banks';
 
 const IsoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
 
@@ -28,7 +29,7 @@ export const StatementTotalsSchema = z.object({
 export type StatementTotals = z.infer<typeof StatementTotalsSchema>;
 
 export const StatementSchema = z.object({
-  bank: z.literal('TPBank'),
+  bank: z.enum(BANK_CODES),
   cardLast4: z.string().regex(/^\d{4}$/, 'cardLast4 must be exactly 4 digits'),
   statementDate: IsoDate,
   paymentDueDate: IsoDate,
