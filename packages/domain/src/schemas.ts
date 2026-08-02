@@ -56,6 +56,9 @@ export const AggregatedViewSchema = z.object({
   spec: PeriodSpecSchema,
   label: z.string(),
   statementCount: z.number(),
+  // Optional for the same reason as `latestStatement` below — a cached SPA
+  // bundle posting the older shape to /summaries must still validate.
+  availableBanks: z.array(z.enum(BANK_CODES)).optional(),
   totals: z.object({
     totalSpend: z.number(),
     totalInstallments: z.number(),

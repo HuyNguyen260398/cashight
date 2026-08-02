@@ -517,3 +517,45 @@ describe('aggregate with empty input', () => {
     expect(view.installmentSubPeriods.every((p) => p.value === 0)).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Bank filter
+// ---------------------------------------------------------------------------
+
+describe('aggregate — bank filter', () => {
+  const spec = { type: 'month', year: 2026, month: 7 } as const;
+  const statements: Statement[] = [
+    { ...makeStatement(2026, 7), bank: 'TPBank', cardLast4: '9674' },
+    {
+      ...makeStatement(2026, 7, { totalSpend: 250_000 }),
+      bank: 'VIB',
+      cardLast4: '4550',
+    },
+  ];
+
+  it('includes every bank when no filter is given', () => {
+    const view = aggregate(statements, spec);
+    expect(view.statementCount).toBe(2);
+    expect(view.totals.totalSpend).toBe(1_250_000);
+  });
+
+  it('narrows totals to the selected bank', () => {
+    const view = aggregate(statements, spec, { bank: 'VIB' });
+    expect(view.statementCount).toBe(1);
+    expect(view.totals.totalSpend).toBe(250_000);
+  });
+
+  it('lists the banks present in the period regardless of the filter', () => {
+    const view = aggregate(statements, spec, { bank: 'VIB' });
+    expect(view.availableBanks).toEqual(['TPBank', 'VIB']);
+  });
+
+  it('lists no banks for an empty period', () => {
+    const view = aggregate(statements, { type: 'month', year: 2026, month: 1 });
+    expect(view.availableBanks).toEqual([]);
+  });
+
+  it('treats a null bank as no filter', () => {
+    expect(aggregate(statements, spec, { bank: null }).statementCount).toBe(2);
+  });
+});

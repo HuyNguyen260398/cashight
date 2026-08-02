@@ -7,6 +7,7 @@
  */
 
 import { getDaysInMonth } from 'date-fns';
+import type { BankCode } from './banks';
 import type { Statement, Transaction } from './schemas';
 import {
   NON_SPEND,
@@ -22,6 +23,15 @@ export interface AggregatedView {
   spec: PeriodSpec;
   label: string;
   statementCount: number;
+  /**
+   * Banks with a statement in this period, BEFORE the bank filter is applied —
+   * this is what populates the dashboard dropdown, so filtering to one bank
+   * must not make the others disappear from the list.
+   *
+   * Optional for the same reason as `latestStatement`: a cached SPA bundle
+   * posting the older shape to /summaries must still validate.
+   */
+  availableBanks?: BankCode[];
   totals: {
     totalSpend: number;
     totalInstallments: number;
@@ -228,12 +238,24 @@ function mergeTopMerchants(
     .slice(0, 10);
 }
 
+export interface AggregateOptions {
+  /** Narrow the view to one bank. Null/undefined means all banks. */
+  bank?: BankCode | null;
+}
+
 /** Roll up a list of statements for the given period into an AggregatedView. */
 export function aggregate(
   statements: Statement[],
   spec: PeriodSpec,
+  options: AggregateOptions = {},
 ): AggregatedView {
-  const filtered = filterStatements(statements, spec);
+  const inPeriod = filterStatements(statements, spec);
+  // Computed before the bank filter: the dropdown must keep offering every
+  // bank in the period even while one of them is selected.
+  const availableBanks = [...new Set(inPeriod.map((s) => s.bank))].sort();
+  const filtered = options.bank
+    ? inPeriod.filter((s) => s.bank === options.bank)
+    : inPeriod;
 
   const totals = filtered.reduce(
     (acc, s) => ({
@@ -263,6 +285,7 @@ export function aggregate(
     spec,
     label: periodLabel(spec),
     statementCount: filtered.length,
+    availableBanks,
     totals,
     latestStatement: latest
       ? {
