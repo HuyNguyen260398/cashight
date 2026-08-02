@@ -24,6 +24,8 @@ vi.mock('../auth/config', () => ({
     cognitoClientId: 'test-client-id',
     appOrigin: 'https://app.example.com',
   }),
+  // These tests cover the real Cognito path; the local dev bypass is off.
+  isDevAuthBypass: () => false,
 }));
 
 // ── helpers ─────────────────────────────────────────────────────────────────

@@ -48,6 +48,9 @@ yarn-error.log*
 # local PDF fixtures (never commit real statements)
 /test-pdfs/
 
+# local dev stack data (fake S3 objects + fake DynamoDB table — real statements)
+/.local-data/
+
 # private migration snapshots (contain storage inventory metadata)
 /.migration-private/
 
