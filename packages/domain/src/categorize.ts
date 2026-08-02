@@ -1,6 +1,6 @@
 /**
- * Merchant categorization and name normalization for parsed TPBank
- * credit-card statement transactions.
+ * Merchant categorization and name normalization for parsed credit-card
+ * statement transactions, across every supported bank.
  *
  * Both exported functions are PURE: no I/O, no logging, no mutation of
  * shared state. They operate on the RAW transaction description strings
@@ -40,17 +40,20 @@ interface Rule {
  */
 const SPECIAL_RULES: Rule[] = [
   // 1. Fees & interest. `Lai` (interest) is anchored to the line start with a
-  //    word boundary so it does not match inside other words.
+  //    word boundary so it does not match inside other words. `Phi dich vu` is
+  //    VIB's service-fee wording.
   {
-    pattern: /Instalment cancellation|Phi xu ly|^Lai\b/i,
+    pattern: /Instalment cancellation|Phi xu ly|Phi dich vu|^Lai\b/i,
     category: 'Fees & Interest',
   },
-  // 2. Installment marker.
-  { pattern: /Giao dich tra gop/i, category: 'Installments' },
+  // 2. Installment marker. TPBank writes "Giao dich tra gop"; VIB writes
+  //    "GD GOC TRA GOP".
+  { pattern: /Giao dich tra gop|GD GOC TRA GOP/i, category: 'Installments' },
   // 3. Cashback: contains HOAN TIEN or starts with CREDIT_.
   { pattern: /HOAN TIEN|^CREDIT_/i, category: 'Cashback' },
-  // 4. Card repayment.
-  { pattern: /TT QUA TPBANK/i, category: 'Payment' },
+  // 4. Card repayment. TPBank writes "TT QUA TPBANK"; VIB writes
+  //    "Thanh toan sao ke".
+  { pattern: /TT QUA TPBANK|Thanh toan sao ke/i, category: 'Payment' },
 ];
 
 /**

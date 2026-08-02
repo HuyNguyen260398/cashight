@@ -17,7 +17,8 @@
     "./security/*": "./src/security/*.ts",
     "./pdf-dom-polyfill": "./src/pdf-dom-polyfill.ts",
     "./parsers/tpbank": "./src/parsers/tpbank.ts",
-    "./parsers/pdf-layout": "./src/parsers/pdf-layout.ts"
+    "./parsers/pdf-layout": "./src/parsers/pdf-layout.ts",
+    "./parsers/vib-fields": "./src/parsers/vib-fields.ts"
   },
   "dependencies": {
     "date-fns": "^4.3.0",
