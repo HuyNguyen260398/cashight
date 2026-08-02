@@ -33,6 +33,7 @@ import {
   processUploadedPdf,
   seedAuthorizedUser,
 } from './local/handlers';
+import { parsePdfPasswords } from '../backend/shared/pdf-passwords';
 import { UPLOAD_BUCKET, getObject, putObject } from './local/object-store';
 import { localDataDir } from './local/paths';
 
@@ -279,6 +280,21 @@ const server = http.createServer((request, response) => {
   });
 });
 
+/**
+ * Describe the configured PDF passwords WITHOUT revealing any of them.
+ *
+ * Reports the candidate count rather than a boolean: with two supported banks,
+ * "set" was misleading — a single TPBank password reads as configured while
+ * every VIB upload fails with WRONG_PASSWORD.
+ */
+function describePdfPasswords(): string {
+  const secret = process.env.PDF_PASSWORDS ?? process.env.PDF_PASSWORD ?? '';
+  const count = parsePdfPasswords(secret).length;
+  if (count === 0) return 'none set (protected PDFs will fail)';
+  const source = process.env.PDF_PASSWORDS ? 'PDF_PASSWORDS' : 'PDF_PASSWORD';
+  return `${count} candidate${count === 1 ? '' : 's'} from ${source}`;
+}
+
 async function main(): Promise<void> {
   await seedAuthorizedUser();
   server.listen(PORT, () => {
@@ -289,7 +305,7 @@ async function main(): Promise<void> {
         `  data directory      →  ${localDataDir()}`,
         `  acting as sub       →  ${DEV_SUB}`,
         `  CORS origin         →  ${ALLOWED_ORIGIN}`,
-        `  PDF password        →  ${process.env.PDF_PASSWORD ? 'set' : 'not set'}`,
+        `  PDF passwords       →  ${describePdfPasswords()}`,
         `  Gemini              →  ${process.env.GEMINI_API_KEY ? 'real API' : 'stubbed'}`,
         '',
         '  Point the app at it with, in .env.local:',
