@@ -1,9 +1,19 @@
 name: Application Deploy
 
 # Deploys Lambda canaries and frontend from a specific CI run's artifacts.
-# The ci_run_id input pins the exact artifact set so plan and apply are
-# always identical even when new commits land on main mid-deploy.
+# Everything downstream keys off one resolved CI run ID, which pins the exact
+# artifact set so the deploy stays identical even when new commits land on main
+# mid-deploy. Nothing is rebuilt here — what ships is what CI validated.
+#
+# Two ways in:
+#   - a PR merged into main       → resolve that PR's green CI run
+#   - manual dispatch + ci_run_id → deploy any run, including an older one to
+#                                   roll back
 on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
   workflow_dispatch:
     inputs:
       ci_run_id:
@@ -16,38 +26,100 @@ permissions:
   id-token: write
   actions: read # download artifacts from other workflow runs
 
+# One production deploy at a time, across both triggers. Queue rather than
+# cancel: cancelling mid-canary would leave Lambda aliases half-shifted between
+# versions. Both entry points share this group, so an auto-deploy and a manual
+# dispatch can never shift the same aliases concurrently.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 jobs:
+  # ── Resolve what to deploy ──────────────────────────────────────────────────
+  # CI only runs on pull_request, where github.sha is an ephemeral merge-preview
+  # commit that never matches any commit reachable from main. That SHA is what
+  # got baked into the artifact names when CI uploaded them, and this workflow's
+  # own github.sha (the merge commit, or main's HEAD at dispatch time) can never
+  # match either. So resolve the real source commit and artifact name from the
+  # CI run itself, once, and hand them to every job below.
+  resolve:
+    name: Resolve CI Run
+    # `closed` fires on every close; only a merge should deploy.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    outputs:
+      ci_run_id: ${{ steps.ci.outputs.ci_run_id }}
+      sha: ${{ steps.ci.outputs.sha }}
+      lambda_artifact: ${{ steps.ci.outputs.lambda_artifact }}
+      pr_number: ${{ steps.ci.outputs.pr_number }}
+
+    steps:
+      - name: Resolve CI run, commit and artifacts
+        id: ci
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_RUN_ID: ${{ inputs.ci_run_id }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            RUN_ID="${INPUT_RUN_ID}"
+            PR=""
+          else
+            PR="${PR_NUMBER}"
+            # The squash/merge commit on main has no CI run and no artifacts —
+            # CI ran on the PR head, so that is the SHA to look up.
+            echo "PR #${PR} merged, head SHA ${PR_HEAD_SHA}"
+            # Newest success wins: a branch can be re-run after a flake.
+            RUN_ID=$(gh api \
+              "repos/${REPO}/actions/workflows/ci.yaml/runs?head_sha=${PR_HEAD_SHA}&per_page=100" \
+              --jq '[.workflow_runs[] | select(.conclusion == "success")]
+                    | sort_by(.run_started_at) | last | .id // empty')
+
+            if [ -z "${RUN_ID}" ]; then
+              echo "::error::No successful CI run for ${PR_HEAD_SHA} (PR #${PR}). Nothing deployed."
+              exit 1
+            fi
+          fi
+
+          SHA=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}" --jq .head_sha)
+
+          # Artifacts have 30-day retention. Fail here with something actionable
+          # rather than deep in the canary job with an empty artifact name.
+          LAMBDA_ARTIFACT=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts" \
+            --jq '[.artifacts[]
+                   | select(.name | startswith("lambda-artifacts-"))
+                   | select(.expired == false)][0].name // empty')
+
+          if [ -z "${LAMBDA_ARTIFACT}" ]; then
+            echo "::error::CI run ${RUN_ID} has no unexpired lambda-artifacts-* artifact (30-day retention). Re-run CI on the branch, then dispatch this workflow with the new run ID."
+            exit 1
+          fi
+
+          echo "Deploying CI run ${RUN_ID} (commit ${SHA}, artifact ${LAMBDA_ARTIFACT})"
+          {
+            echo "ci_run_id=${RUN_ID}"
+            echo "sha=${SHA}"
+            echo "lambda_artifact=${LAMBDA_ARTIFACT}"
+            echo "pr_number=${PR}"
+          } >> "$GITHUB_OUTPUT"
   # ── Backend: Lambda canary deployment ───────────────────────────────────────
   deploy-backend:
     name: Deploy Lambda Canaries
+    needs: resolve
     runs-on: ubuntu-latest
     environment: production
     env:
       AWS_REGION: ap-southeast-1
-      CI_RUN_ID: ${{ inputs.ci_run_id }}
+      CI_RUN_ID: ${{ needs.resolve.outputs.ci_run_id }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v4
-
-      # CI only runs on pull_request, where github.sha is an ephemeral merge-preview
-      # commit that never matches any commit reachable from main. That SHA is what
-      # got baked into the artifact names when CI uploaded them, so this workflow's
-      # own github.sha (main's HEAD at dispatch time) can never match either. Resolve
-      # both the real source commit and the actual artifact names from the CI run.
-      - name: Resolve CI run artifacts
-        id: ci
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          REPO="${{ github.repository }}"
-          RUN_ID="${{ inputs.ci_run_id }}"
-          SHA=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}" --jq .head_sha)
-          ARTIFACTS_JSON=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts")
-          LAMBDA_ARTIFACT=$(echo "${ARTIFACTS_JSON}" | jq -r '[.artifacts[] | select(.name | startswith("lambda-artifacts-"))][0].name // empty')
-          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
-          echo "lambda_artifact=${LAMBDA_ARTIFACT}" >> "$GITHUB_OUTPUT"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -58,9 +130,9 @@ jobs:
       - name: Download Lambda artifacts
         uses: actions/download-artifact@v4
         with:
-          name: ${{ steps.ci.outputs.lambda_artifact }}
+          name: ${{ needs.resolve.outputs.lambda_artifact }}
           path: dist/artifacts
-          run-id: ${{ inputs.ci_run_id }}
+          run-id: ${{ needs.resolve.outputs.ci_run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Lambda zips to S3
@@ -72,7 +144,7 @@ jobs:
           done
         env:
           ARTIFACTS_BUCKET: ${{ vars.ARTIFACTS_BUCKET }}
-          GIT_SHA: ${{ steps.ci.outputs.sha }}
+          GIT_SHA: ${{ needs.resolve.outputs.sha }}
 
       - name: Update Lambda functions and deploy canaries
         run: |
@@ -140,33 +212,24 @@ jobs:
           echo "All Lambda canary deployments succeeded"
         env:
           ARTIFACTS_BUCKET: ${{ vars.ARTIFACTS_BUCKET }}
-          GIT_SHA: ${{ steps.ci.outputs.sha }}
+          GIT_SHA: ${{ needs.resolve.outputs.sha }}
 
   # ── Frontend: atomic S3 + CloudFront deployment ──────────────────────────────
   deploy-frontend:
     name: Deploy Frontend
-    needs: deploy-backend
+    needs: [resolve, deploy-backend]
     runs-on: ubuntu-latest
     environment: production
     env:
       AWS_REGION: ap-southeast-1
 
     steps:
-      - name: Resolve CI run commit
-        id: ci
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          SHA=$(gh api "repos/${{ github.repository }}/actions/runs/${{ inputs.ci_run_id }}" --jq .head_sha)
-          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
-
-      # Pinned to the exact commit CI tested (not main's HEAD at dispatch
-      # time), so the production build matches what CI validated.
+      # Pinned to the exact commit CI tested (not the merge commit, nor main's
+      # HEAD at dispatch time), so the production build matches what CI validated.
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v4
         with:
-          ref: ${{ steps.ci.outputs.sha }}
+          ref: ${{ needs.resolve.outputs.sha }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
@@ -238,7 +301,7 @@ jobs:
   # ── Release manifest ─────────────────────────────────────────────────────────
   release-manifest:
     name: Record Release Manifest
-    needs: smoke-tests
+    needs: [resolve, smoke-tests]
     runs-on: ubuntu-latest
     environment: production
     env:
@@ -247,15 +310,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v4
-
-      - name: Resolve CI run commit
-        id: ci
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          SHA=$(gh api "repos/${{ github.repository }}/actions/runs/${{ inputs.ci_run_id }}" --jq .head_sha)
-          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
@@ -289,4 +343,59 @@ jobs:
         env:
           ARTIFACTS_BUCKET: ${{ vars.ARTIFACTS_BUCKET }}
           CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
-          GIT_SHA: ${{ steps.ci.outputs.sha }}
+          GIT_SHA: ${{ needs.resolve.outputs.sha }}
+
+  # ── Summary ──────────────────────────────────────────────────────────────────
+  summary:
+    name: Report
+    needs: [resolve, deploy-backend, deploy-frontend, smoke-tests, release-manifest]
+    if: always() && needs.resolve.result != 'skipped'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Write run summary
+        env:
+          RESOLVE_RESULT: ${{ needs.resolve.result }}
+          BACKEND_RESULT: ${{ needs.deploy-backend.result }}
+          FRONTEND_RESULT: ${{ needs.deploy-frontend.result }}
+          SMOKE_RESULT: ${{ needs.smoke-tests.result }}
+          MANIFEST_RESULT: ${{ needs.release-manifest.result }}
+          CI_RUN_ID: ${{ needs.resolve.outputs.ci_run_id }}
+          GIT_SHA: ${{ needs.resolve.outputs.sha }}
+          PR_NUMBER: ${{ needs.resolve.outputs.pr_number }}
+          TRIGGER: ${{ github.event_name }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          {
+            echo "# Production Deploy"
+            echo ""
+
+            if [ "${RESOLVE_RESULT}" != "success" ]; then
+              echo "## Could not resolve a deployable CI run — nothing was deployed."
+              exit 0
+            fi
+
+            echo "| Stage | Result |"
+            echo "|---|---|"
+            echo "| Lambda canaries | ${BACKEND_RESULT} |"
+            echo "| Frontend | ${FRONTEND_RESULT} |"
+            echo "| Smoke tests | ${SMOKE_RESULT} |"
+            echo "| Release manifest | ${MANIFEST_RESULT} |"
+            echo ""
+
+            echo "| | |"
+            echo "|---|---|"
+            if [ -n "${PR_NUMBER}" ]; then
+              echo "| Trigger | merged [PR #${PR_NUMBER}](${REPO_URL}/pull/${PR_NUMBER}) |"
+            else
+              echo "| Trigger | \`${TRIGGER}\` |"
+            fi
+            echo "| Deployed commit | [\`${GIT_SHA}\`](${REPO_URL}/commit/${GIT_SHA}) |"
+            echo "| Source CI run | [${CI_RUN_ID}](${REPO_URL}/actions/runs/${CI_RUN_ID}) |"
+            echo "| Region | \`ap-southeast-1\` |"
+            echo ""
+            echo "The deployed commit is the branch tip CI tested, not the merge commit on main."
+            echo ""
+            echo "- [App](https://cashight.nghuy.link) · [API](https://api.cashight.nghuy.link)"
+          } >> "$GITHUB_STEP_SUMMARY"
