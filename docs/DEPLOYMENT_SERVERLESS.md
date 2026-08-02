@@ -15,8 +15,24 @@ Three GitHub Actions workflows handle deployment:
 |---|---|---|
 | `ci.yaml` | Pull request to `main` | Build, test, typecheck, package artifacts |
 | `infrastructure-deploy.yaml` | Manual (`workflow_dispatch`) | Terraform plan + apply |
-| `application-deploy.yaml` | Manual (`workflow_dispatch`) | Lambda canary + frontend + smoke tests |
-| `deploy.yaml` | Push to `main` | Amplify rollback target (retain until Phase 10) |
+| `application-deploy.yaml` | PR merged into `main`, or manual | Lambda canary + frontend + smoke tests |
+
+Merging a PR into `main` deploys to production automatically. A `resolve` job
+picks the entry point apart — merged PR or manual `ci_run_id` — and every stage
+below consumes its outputs, so both paths run identical steps.
+
+The deploy is pinned to the CI run that tested the PR head; nothing is rebuilt,
+so what ships is byte-identical to what CI validated. The squash/merge commit on
+`main` has no CI run and no artifacts, which is why the pipeline keys off the PR
+head SHA rather than `github.sha`.
+
+Closing a PR without merging does not deploy. Deploys are serialized through a
+`production-deploy` concurrency group covering both entry points, and queue
+rather than cancel — cancelling mid-canary would leave Lambda aliases
+half-shifted between versions.
+
+To roll back, dispatch the workflow manually with the `ci_run_id` of the last
+known-good CI run.
 
 ## Prerequisites
 
@@ -115,15 +131,6 @@ aws lambda update-alias \
 ### Frontend rollback
 
 Re-run `application-deploy.yaml` with the CI run ID from the previous good release. The deploy script uploads in safe order and old `_next/static/` chunks are never deleted, so old SPA shells continue to work.
-
-### Full rollback to Amplify
-
-Until Phase 10 decommission, the Amplify deployment at the original domain remains available:
-
-```bash
-# Revert DNS to Amplify (in terraform/edge.tf or Route 53 console)
-# The deploy.yaml workflow continues to deploy to Amplify on push to main
-```
 
 ---
 
