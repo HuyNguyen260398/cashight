@@ -239,7 +239,11 @@ function mergeTopMerchants(
 }
 
 export interface AggregateOptions {
-  /** Narrow the view to one bank. Null/undefined means all banks. */
+  /**
+   * Narrow the view to one bank. Null/undefined aggregates every bank — the
+   * dashboard never asks for that (its URL parsing always resolves to a single
+   * bank), but the roll-up itself stays general.
+   */
   bank?: BankCode | null;
 }
 

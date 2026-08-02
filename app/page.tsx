@@ -100,12 +100,9 @@ function DashboardPageInner() {
         </p>
       </div>
       <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-        {/* While the view is loading `availableBanks` is unknown — keep the
-            current selection visible rather than dropping to "All banks". */}
-        <BankSelector
-          current={bank}
-          available={view?.availableBanks ?? (bank ? [bank] : [])}
-        />
+        {/* While the view is loading `availableBanks` is unknown; the selector
+            always lists `current` itself, so an empty list is safe here. */}
+        <BankSelector current={bank} available={view?.availableBanks ?? []} />
         <PeriodSelector current={spec} />
       </div>
     </header>

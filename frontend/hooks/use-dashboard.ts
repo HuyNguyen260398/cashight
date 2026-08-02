@@ -29,8 +29,9 @@ type LoadedState = {
 
 /**
  * Fetch `GET /dashboard` for the given period spec and bank filter. Pass a null
- * spec to skip the fetch (e.g. while waiting for a redirect); a null bank means
- * all banks.
+ * spec to skip the fetch (e.g. while waiting for a redirect). A null bank omits
+ * the query param, leaving the API to apply its default bank — the dashboard
+ * always views exactly one bank, never a combined total.
  *
  * `loading` is derived from whether the currently-requested requestKey has been
  * loaded yet — no synchronous setState is called inside the effect.
