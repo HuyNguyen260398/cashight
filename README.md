@@ -92,11 +92,18 @@ pnpm dev
 
 Visit http://localhost:3000, sign in with the allowlisted account, and drop a TPBank statement PDF on the upload page.
 
+To do the same **without an AWS account or a Cognito sign-in**, run `pnpm dev:local`
+alongside `pnpm dev`. It serves the real Lambda handlers against file-backed fake
+S3 and DynamoDB under `.local-data/`. See
+[`docs/local-development.md`](./docs/local-development.md) for setup.
+
 ### Common commands
 
 | Task                                | Command                              |
 | ----------------------------------- | ------------------------------------ |
 | Dev server                          | `pnpm dev`                           |
+| Local API stack (no AWS/Cognito)    | `pnpm dev:local`                     |
+| Wipe local stack data               | `pnpm dev:local:reset`               |
 | Production build                    | `pnpm build`                         |
 | Type check                          | `pnpm tsc --noEmit`                  |
 | Lint                                | `pnpm lint`                          |

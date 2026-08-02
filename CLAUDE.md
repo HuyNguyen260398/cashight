@@ -28,6 +28,8 @@ A personal Next.js 16 (App Router, React 19) web app that:
 | Task | Command |
 |---|---|
 | Dev server | `pnpm dev` |
+| Local API stack (no AWS, no Cognito) | `pnpm dev:local` — see [`docs/local-development.md`](./docs/local-development.md) |
+| Wipe local stack data | `pnpm dev:local:reset` |
 | Production build | `pnpm build` |
 | Type check | `pnpm tsc --noEmit` |
 | Lint | `pnpm lint` |

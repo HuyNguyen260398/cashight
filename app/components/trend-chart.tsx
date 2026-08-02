@@ -10,7 +10,8 @@ import {
 } from 'recharts';
 import type { AggregatedView } from '@/lib/aggregations';
 import { CHART_AXIS_COLOR, CHART_COLORS } from '@/lib/chart-colors';
-import { formatVND, formatVNDCompact } from '@/lib/format';
+import { formatVNDCompact } from '@/lib/format';
+import { ChartTooltip } from '@/app/components/chart-tooltip';
 
 export function TrendChart({ view }: { view: AggregatedView }) {
   // Use a numeric height (not height="100%") so calculatedHeight is positive on
@@ -34,7 +35,12 @@ export function TrendChart({ view }: { view: AggregatedView }) {
           tick={{ fontSize: 12, fill: CHART_AXIS_COLOR }}
           tickFormatter={(v) => formatVNDCompact(Number(v))}
         />
-        <Tooltip formatter={(v) => formatVND(Number(v))} />
+        {/* The bar is filled with a gradient url, which is not a usable text
+            colour, so the tooltip is told the brand hex directly. */}
+        <Tooltip
+          cursor={{ fill: 'rgba(148, 163, 184, 0.12)' }}
+          content={<ChartTooltip colorOf={() => CHART_COLORS.brand} />}
+        />
         <defs>
           <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={CHART_COLORS.brand} />

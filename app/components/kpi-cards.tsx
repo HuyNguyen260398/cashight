@@ -1,17 +1,17 @@
 import type { AggregatedView } from '@/lib/aggregations';
-import { formatVND } from '@/lib/format';
+import { formatDate, formatVND } from '@/lib/format';
 import { Card } from '@/components/ui/card';
 import {
   Wallet,            // Total Spend
+  Landmark,          // Statement Balance
   CalendarClock,     // Installments
   MonitorSmartphone, // Software & Subscriptions
   Percent,           // Fees & Interest
   PiggyBank,         // Cashback
-  FileText,          // Statements
 } from 'lucide-react';
 
 export function KpiCards({ view }: { view: AggregatedView }) {
-  const { totals, statementCount, byCategory } = view;
+  const { totals, byCategory, latestStatement } = view;
   const software =
     byCategory.find((c) => c.category === 'Software & Subscriptions')?.value ?? 0;
 
@@ -21,6 +21,18 @@ export function KpiCards({ view }: { view: AggregatedView }) {
       value: formatVND(totals.totalSpend),
       helper: 'New card purchases',
       icon: Wallet,
+    },
+    {
+      // Second in the list so it shares the first row with Total Spend once
+      // the grid goes two-wide. A balance is a snapshot, not a sum, so for
+      // multi-statement periods this is the latest statement's balance — the
+      // helper text says which one.
+      title: 'Statement Balance',
+      value: latestStatement ? formatVND(latestStatement.statementBalance) : '—',
+      helper: latestStatement
+        ? `As of ${formatDate(latestStatement.statementDate)}`
+        : 'No statement in this period',
+      icon: Landmark,
     },
     {
       title: 'Installments',
@@ -45,12 +57,6 @@ export function KpiCards({ view }: { view: AggregatedView }) {
       value: formatVND(totals.totalCashback),
       helper: 'Credits received',
       icon: PiggyBank,
-    },
-    {
-      title: 'Statements',
-      value: String(statementCount),
-      helper: 'in this period',
-      icon: FileText,
     },
   ];
 

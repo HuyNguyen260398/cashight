@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { categoryColor } from '@/lib/category-colors';
-import { formatVND } from '@/lib/format';
+import { ChartTooltip } from '@/app/components/chart-tooltip';
 
 export function CategoryPie({
   data,
@@ -32,7 +32,16 @@ export function CategoryPie({
             <Cell key={d.category} fill={categoryColor(d.category)} />
           ))}
         </Pie>
-        <Tooltip formatter={(v) => formatVND(Number(v))} />
+        <Tooltip
+          content={
+            <ChartTooltip
+              titleOf={(item) => String(item.payload?.category ?? item.name ?? '')}
+              colorOf={(item) =>
+                categoryColor(String(item.payload?.category ?? ''))
+              }
+            />
+          }
+        />
         <Legend
           verticalAlign="bottom"
           height={40}

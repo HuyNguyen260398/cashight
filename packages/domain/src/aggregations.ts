@@ -11,6 +11,7 @@ import type { Statement, Transaction } from './schemas';
 import {
   NON_SPEND,
   byCategory as singleByCategory,
+  dominantCategory,
   topMerchants as singleTopMerchants,
 } from './dashboard-aggregations';
 import { periodLabel, quarterOf, type PeriodSpec } from './period';
@@ -27,9 +28,29 @@ export interface AggregatedView {
     totalCashback: number;
     totalFeesAndInterest: number;
   };
+  /**
+   * The most recent statement in the period, or null when the period has none.
+   *
+   * Deliberately outside `totals`: every field in `totals` is a sum across the
+   * period, but a statement balance is a point-in-time snapshot that already
+   * includes whatever was carried over from earlier months. Summing balances
+   * across a quarter would report debt that never existed, so the roll-up is
+   * "what was owed as of the latest statement" instead.
+   *
+   * Optional, not just nullable: `/summaries` validates a client-posted view,
+   * and a cached SPA bundle from before this field existed would otherwise be
+   * rejected. `aggregate()` always sets it — readers should treat absent and
+   * null the same way.
+   */
+  latestStatement?: { statementBalance: number; statementDate: string } | null;
   transactions: Transaction[];
   byCategory: Array<{ category: string; value: number; pct: number }>;
-  topMerchants: Array<{ merchant: string; value: number }>;
+  /**
+   * `category` is the merchant's dominant spending category, carried so the
+   * bar chart can colour each merchant with the same hue its category has in
+   * the pie. Optional for the same reason as `latestStatement`.
+   */
+  topMerchants: Array<{ merchant: string; value: number; category?: string }>;
   /**
    * Year/quarter views: monthly buckets derived from s.totals.totalSpend —
    * bars sum to totals.totalSpend.
@@ -171,21 +192,38 @@ function mergeByCategory(
     .sort((a, b) => b.value - a.value);
 }
 
-/** Merge per-statement topMerchants results, return top 10. */
+/**
+ * Merge per-statement topMerchants results, return top 10.
+ *
+ * The per-category split is merged alongside the totals so a merchant's
+ * dominant category is decided across the whole period, not per statement —
+ * otherwise a merchant could take one colour in a month view and another in
+ * the year view that contains it.
+ */
 function mergeTopMerchants(
   filtered: Statement[],
-): Array<{ merchant: string; value: number }> {
+): Array<{ merchant: string; value: number; category: string }> {
   const map = new Map<string, number>();
+  const categories = new Map<string, Map<string, number>>();
+
   for (const s of filtered) {
-    for (const { merchant, value } of singleTopMerchants(
-      s,
-      Number.MAX_SAFE_INTEGER,
-    )) {
-      map.set(merchant, (map.get(merchant) ?? 0) + value);
+    for (const merchant of singleTopMerchants(s, Number.MAX_SAFE_INTEGER)) {
+      map.set(merchant.merchant, (map.get(merchant.merchant) ?? 0) + merchant.value);
+
+      const split = categories.get(merchant.merchant) ?? new Map<string, number>();
+      for (const [category, value] of merchant.categories) {
+        split.set(category, (split.get(category) ?? 0) + value);
+      }
+      categories.set(merchant.merchant, split);
     }
   }
+
   return Array.from(map.entries())
-    .map(([merchant, value]) => ({ merchant, value }))
+    .map(([merchant, value]) => ({
+      merchant,
+      value,
+      category: dominantCategory(categories.get(merchant) ?? new Map()),
+    }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 10);
 }
@@ -213,11 +251,25 @@ export function aggregate(
     },
   );
 
+  // statementDate is a zero-padded YYYY-MM-DD, so lexicographic max is the
+  // chronological max — no Date parsing needed.
+  const latest = filtered.reduce<Statement | null>(
+    (newest, s) =>
+      newest === null || s.statementDate > newest.statementDate ? s : newest,
+    null,
+  );
+
   return {
     spec,
     label: periodLabel(spec),
     statementCount: filtered.length,
     totals,
+    latestStatement: latest
+      ? {
+          statementBalance: latest.totals.statementBalance,
+          statementDate: latest.statementDate,
+        }
+      : null,
     transactions: filtered.flatMap((s) => s.transactions),
     byCategory: mergeByCategory(filtered),
     topMerchants: mergeTopMerchants(filtered),

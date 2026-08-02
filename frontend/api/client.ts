@@ -1,5 +1,5 @@
 import { getOidcManager } from '../auth/oidc';
-import { getPublicConfig } from '../auth/config';
+import { getPublicConfig, isDevAuthBypass } from '../auth/config';
 
 /**
  * Thrown for any non-2xx response from the API (including 401).
@@ -29,6 +29,9 @@ function isApiOrigin(url: string): boolean {
 
 /** Return the current access token, or null if none / expired. */
 async function getAccessToken(): Promise<string | null> {
+  // No OIDC manager exists under the local bypass; the dev API synthesizes
+  // claims and ignores the Authorization header entirely.
+  if (isDevAuthBypass()) return null;
   try {
     const manager = getOidcManager();
     const user = await manager.getUser();

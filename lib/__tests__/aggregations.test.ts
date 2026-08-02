@@ -385,6 +385,48 @@ describe('aggregate — cross-statement merchant accumulation', () => {
     }
   });
 
+  it('tags each merchant with its category so the bar chart can colour it', () => {
+    expect(view.topMerchants.find((m) => m.merchant === 'GRAB')?.category).toBe(
+      'Shopping',
+    );
+  });
+
+  it('picks the dominant category across the whole period, not per statement', () => {
+    // GROCER is Groceries in April but mostly Food & Dining in May. Deciding
+    // per statement would flip its colour between the month and year views.
+    const withCategory = (
+      description: string,
+      amountVnd: number,
+      dateStr: string,
+      category: string,
+    ) => ({ ...makeTx(description, amountVnd, dateStr), category });
+
+    const april: Statement = {
+      ...makeStatement(2026, 4),
+      transactions: [withCategory('GROCER', 300_000, '2026-04-10', 'Groceries')],
+    };
+    const may: Statement = {
+      ...makeStatement(2026, 5),
+      transactions: [
+        withCategory('GROCER', 900_000, '2026-05-10', 'Food & Dining'),
+      ],
+    };
+
+    const merged = aggregate([april, may], spec).topMerchants.find(
+      (m) => m.merchant === 'GROCER',
+    );
+    expect(merged?.value).toBe(1_200_000);
+    expect(merged?.category).toBe('Food & Dining');
+
+    // April alone still reports April's own dominant category.
+    const aprilOnly = aggregate([april, may], {
+      type: 'month',
+      year: 2026,
+      month: 4,
+    }).topMerchants.find((m) => m.merchant === 'GROCER');
+    expect(aprilOnly?.category).toBe('Groceries');
+  });
+
   it('topMerchants is capped at 10 entries', () => {
     // Build 12 statements with distinct merchants to exceed the 10-entry cap
     const stmts: Statement[] = Array.from({ length: 12 }, (_, idx) => ({
@@ -402,10 +444,49 @@ describe('aggregate — cross-statement merchant accumulation', () => {
 // aggregate — empty input
 // ---------------------------------------------------------------------------
 
+describe('aggregate — latestStatement (the Statement Balance KPI)', () => {
+  const apr = makeStatement(2026, 4, { statementBalance: 5_000_000 });
+  const may = makeStatement(2026, 5, { statementBalance: 6_000_000 });
+  const jun = makeStatement(2026, 6, { statementBalance: 7_000_000 });
+
+  it('reports the newest statement, not a sum, across a multi-month period', () => {
+    const view = aggregate([apr, may, jun], {
+      type: 'quarter',
+      year: 2026,
+      quarter: 2,
+    });
+    // A balance already includes carried-over debt, so summing these three
+    // would claim 18M was owed — a figure that never existed.
+    expect(view.latestStatement).toEqual({
+      statementBalance: 7_000_000,
+      statementDate: '2026-06-15',
+    });
+  });
+
+  it('is independent of input ordering', () => {
+    const spec: PeriodSpec = { type: 'quarter', year: 2026, quarter: 2 };
+    expect(aggregate([jun, apr, may], spec).latestStatement).toEqual(
+      aggregate([apr, may, jun], spec).latestStatement,
+    );
+  });
+
+  it('is that month’s own balance on a single-month view', () => {
+    const view = aggregate([apr, may, jun], { type: 'month', year: 2026, month: 5 });
+    expect(view.latestStatement?.statementBalance).toBe(6_000_000);
+  });
+
+  it('ignores statements filtered out of the period', () => {
+    const view = aggregate([apr, may, jun], { type: 'quarter', year: 2026, quarter: 1 });
+    expect(view.latestStatement).toBeNull();
+  });
+});
+
 describe('aggregate with empty input', () => {
   it('monthly: all zero totals, empty arrays, subPeriods full-length zero-filled', () => {
     const view = aggregate([], { type: 'month', year: 2026, month: 5 });
     expect(view.statementCount).toBe(0);
+    // The KPI card renders a dash rather than a misleading 0 ₫.
+    expect(view.latestStatement).toBeNull();
     expect(view.totals.totalSpend).toBe(0);
     expect(view.totals.totalInstallments).toBe(0);
     expect(view.totals.totalCashback).toBe(0);
