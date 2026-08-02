@@ -1,5 +1,5 @@
 import { GetObjectCommand, HeadObjectCommand, DeleteObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
-import { parseTPBankStatement } from '@cashight/domain/parsers/tpbank';
+import { parseStatementPdf } from '@cashight/domain/parsers';
 
 import { dynamoDocumentClient, s3Client } from '../../shared/clients';
 import { requiredEnvironmentValue } from '../../shared/config';
@@ -92,7 +92,7 @@ function createProductionProcessJob(tableName: string, uploadBucket: string, sta
 
     getSecret: (secretId) => getSecretString(secretId),
 
-    parsePdf: (buffer, password) => parseTPBankStatement(buffer, password),
+    parsePdf: (buffer, passwords) => parseStatementPdf(buffer, passwords),
 
     checkDestinationExists: async (key) => {
       try {
@@ -123,6 +123,7 @@ function createProductionProcessJob(tableName: string, uploadBucket: string, sta
         statementId: statementId(statement.cardLast4, year, month),
         objectKey,
         cardLast4: statement.cardLast4,
+        bank: statement.bank,
         statementDate: statement.statementDate,
         totalSpend: statement.totals.totalSpend,
         transactionCount: statement.transactions.length,

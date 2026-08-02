@@ -237,3 +237,51 @@ describe('processJob', () => {
     }
   });
 });
+
+describe('processJob — multi-bank', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('fails the job with UNSUPPORTED_BANK when no parser matches', async () => {
+    const unsupported = new Error('Unrecognised statement');
+    unsupported.name = 'UnsupportedBankError';
+    const localDeps = makeDeps({
+      parsePdf: vi.fn().mockRejectedValue(unsupported),
+    });
+    const processJob = createProcessJob(localDeps);
+    await processJob(S3_KEY);
+
+    expect(localDeps.transitionToTerminal).toHaveBeenCalledWith(
+      'test-job-uuid',
+      'FAILED',
+      expect.objectContaining({ errorCode: 'UNSUPPORTED_BANK' }),
+    );
+    expect(localDeps.deletePdf).toHaveBeenCalledWith(S3_KEY);
+  });
+
+  it('passes every candidate password from the secret to the parser', async () => {
+    const parsePdf = vi.fn().mockResolvedValue(mockStatement);
+    const localDeps = makeDeps({
+      getSecret: vi.fn().mockResolvedValue('{"TPB":"aaa","VIB":"bbb"}'),
+      parsePdf,
+    });
+    const processJob = createProcessJob(localDeps);
+    await processJob(S3_KEY);
+
+    expect(parsePdf).toHaveBeenCalledWith(expect.anything(), ['aaa', 'bbb']);
+  });
+
+  it('writes the statement bank into the metadata record', async () => {
+    const writeMetadata = vi.fn().mockResolvedValue(undefined);
+    const localDeps = makeDeps({ writeMetadata });
+    const processJob = createProcessJob(localDeps);
+    await processJob(S3_KEY);
+
+    expect(writeMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statement: expect.objectContaining({ bank: 'TPBank' }),
+      }),
+    );
+  });
+});
