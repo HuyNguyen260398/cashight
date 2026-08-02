@@ -6,66 +6,76 @@ import { getPublicConfig } from '@/frontend/auth/config';
 import { AggregatedViewSchema } from '@cashight/domain/schemas';
 import type { AggregatedView } from '@cashight/domain/aggregations';
 import type { PeriodSpec } from '@cashight/domain/period';
+import type { BankCode } from '@/lib/banks';
 
-function buildPeriodParams(spec: PeriodSpec): URLSearchParams {
+function buildDashboardParams(
+  spec: PeriodSpec,
+  bank: BankCode | null,
+): URLSearchParams {
   const params = new URLSearchParams();
   params.set('period', spec.type);
   params.set('year', String(spec.year));
   if (spec.type === 'month') params.set('month', String(spec.month));
   if (spec.type === 'quarter') params.set('quarter', String(spec.quarter));
+  if (bank) params.set('bank', bank);
   return params;
 }
 
 type LoadedState = {
-  specKey: string | null;
+  requestKey: string | null;
   data: AggregatedView | null;
   error: string | null;
 };
 
 /**
- * Fetch `GET /dashboard` for the given period spec. Pass `null` to skip the
- * fetch (e.g. while waiting for a redirect).
+ * Fetch `GET /dashboard` for the given period spec and bank filter. Pass a null
+ * spec to skip the fetch (e.g. while waiting for a redirect); a null bank means
+ * all banks.
  *
- * `loading` is derived from whether the currently-requested specKey has been
+ * `loading` is derived from whether the currently-requested requestKey has been
  * loaded yet — no synchronous setState is called inside the effect.
  */
-export function useDashboard(spec: PeriodSpec | null): {
+export function useDashboard(
+  spec: PeriodSpec | null,
+  bank: BankCode | null = null,
+): {
   data: AggregatedView | null;
   loading: boolean;
   error: string | null;
 } {
   // Track what was last successfully (or erroneously) loaded.
   const [loaded, setLoaded] = useState<LoadedState>({
-    specKey: null,
+    requestKey: null,
     data: null,
     error: null,
   });
 
-  // Stable string key for the current spec.
-  const specKey = spec ? JSON.stringify(spec) : null;
+  // Stable string key for the current request. `bank` is included so switching
+  // banks refetches rather than reusing the previous view.
+  const requestKey = spec ? JSON.stringify({ spec, bank }) : null;
 
-  // Loading is true when we have a spec that hasn't been loaded yet.
-  const loading = specKey !== null && loaded.specKey !== specKey;
+  // Loading is true when we have a request that hasn't been loaded yet.
+  const loading = requestKey !== null && loaded.requestKey !== requestKey;
 
   useEffect(() => {
-    if (!specKey || !spec) return;
+    if (!requestKey || !spec) return;
 
     let cancelled = false;
     const config = getPublicConfig();
-    const params = buildPeriodParams(spec);
+    const params = buildDashboardParams(spec, bank);
 
     apiFetch(`${config.apiBaseUrl}/dashboard?${params.toString()}`)
       .then((res) => res.json())
       .then((raw) => {
         const data = AggregatedViewSchema.parse(raw) as AggregatedView;
         if (!cancelled) {
-          setLoaded({ specKey, data, error: null });
+          setLoaded({ requestKey, data, error: null });
         }
       })
       .catch((err: unknown) => {
         if (!cancelled) {
           setLoaded({
-            specKey,
+            requestKey,
             data: null,
             error:
               err instanceof Error
@@ -78,13 +88,13 @@ export function useDashboard(spec: PeriodSpec | null): {
     return () => {
       cancelled = true;
     };
-    // specKey encodes spec; including spec would cause spurious re-runs.
+    // requestKey encodes spec and bank; including them would cause spurious re-runs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [specKey]);
+  }, [requestKey]);
 
-  // Only expose data/error for the currently-requested spec. While a new
-  // spec is loading, the previous data is stale — return null instead.
-  const isCurrent = loaded.specKey === specKey;
+  // Only expose data/error for the currently-requested view. While a new
+  // request is loading, the previous data is stale — return null instead.
+  const isCurrent = loaded.requestKey === requestKey;
   return {
     data: isCurrent ? loaded.data : null,
     loading,

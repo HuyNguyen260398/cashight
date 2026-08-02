@@ -1,5 +1,6 @@
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { aggregate } from '@cashight/domain/aggregations';
+import { parseBankFromSearch } from '@cashight/domain/banks';
 import { parsePeriodFromSearch } from '@cashight/domain/period';
 import { StatementSchema } from '@cashight/domain/schemas';
 import type { Statement } from '@cashight/domain/schemas';
@@ -57,6 +58,7 @@ export function createDashboardApiHandler(deps: DashboardApiDependencies) {
 
       const searchParams = buildSearchParams(event);
       const spec = parsePeriodFromSearch(searchParams);
+      const bank = parseBankFromSearch(searchParams);
 
       // Query all metadata for the period's year then filter to the period
       const allMeta = await deps.queryStatementsForYear(sub, spec.year);
@@ -68,7 +70,7 @@ export function createDashboardApiHandler(deps: DashboardApiDependencies) {
         MAX_CONCURRENCY,
       );
 
-      const view: AggregatedView = aggregate(statements, spec);
+      const view: AggregatedView = aggregate(statements, spec, { bank });
 
       return jsonResponse(200, view);
     } catch (err) {
