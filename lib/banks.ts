@@ -1,5 +1,6 @@
 export {
   BANK_CODES,
+  DEFAULT_BANK,
   bankShortName,
   detectBank,
   isBankCode,

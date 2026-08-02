@@ -12,7 +12,7 @@ The numbered files in `docs/plans/` are the original incremental build spec. If 
 
 The upload path is deterministic and multi-bank. `extractPdfText()` pulls text once, trying each candidate password from the PDF password secret; `detectBank()` identifies the issuer from marker strings; `parsers/index.ts` routes to `parsers/tpbank.ts` (regex over line text) or `parsers/vib.ts` (coordinate-based layout rows), or throws `UnsupportedBankError` → job `errorCode: 'UNSUPPORTED_BANK'`. Then `lib/categorize.ts` categorizes transactions, `StatementSchema.parse()` validates output, and `lib/storage.ts` saves to S3 at `statements/{cardLast4}/{year}/{year}-{mm}.json`. Re-uploading the same month overwrites that key; S3 versioning preserves earlier versions.
 
-Bank knowledge — codes, short names, detection markers, `?bank=` URL parsing — lives only in `packages/domain/src/banks.ts`. Adding a bank means adding a profile there plus a parser.
+Bank knowledge — codes, short names, detection markers, `DEFAULT_BANK`, `?bank=` URL parsing — lives only in `packages/domain/src/banks.ts`. Adding a bank means adding a profile there plus a parser. The dashboard views exactly one bank at a time: `parseBankFromSearch()` never returns null, falling back to `DEFAULT_BANK` when the param is absent or unrecognised.
 
 VIB specifics: amounts are `5,591,567.00` (comma thousands, dot decimal — the inverse of TPBank), descriptions embed a masked PAN, the card-account number and the cardholder's name (stripped by `scrubVibDescription()` at the parser boundary), and the parser reconciles its per-row tally against the statement's own total-debit figure, throwing when they disagree.
 

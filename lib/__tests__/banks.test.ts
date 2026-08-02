@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   BANK_CODES,
+  DEFAULT_BANK,
   bankShortName,
   detectBank,
   isBankCode,
@@ -56,15 +57,31 @@ describe('isBankCode', () => {
 });
 
 describe('parseBankFromSearch', () => {
-  it('returns null when the param is absent', () => {
-    expect(parseBankFromSearch(new URLSearchParams())).toBeNull();
+  it('falls back to the default bank when the param is absent', () => {
+    expect(parseBankFromSearch(new URLSearchParams())).toBe(DEFAULT_BANK);
   });
 
-  it('returns null for an unknown value', () => {
-    expect(parseBankFromSearch(new URLSearchParams('bank=Sacombank'))).toBeNull();
+  it('falls back to the default bank for an unknown value', () => {
+    expect(parseBankFromSearch(new URLSearchParams('bank=Sacombank'))).toBe(
+      DEFAULT_BANK,
+    );
   });
 
   it('returns the code for a known value', () => {
     expect(parseBankFromSearch(new URLSearchParams('bank=VIB'))).toBe('VIB');
+  });
+
+  it('never returns null — the dashboard always views exactly one bank', () => {
+    expect(parseBankFromSearch(new URLSearchParams('bank='))).not.toBeNull();
+  });
+});
+
+describe('DEFAULT_BANK', () => {
+  it('is TPBank', () => {
+    expect(DEFAULT_BANK).toBe('TPBank');
+  });
+
+  it('is a valid bank code', () => {
+    expect(isBankCode(DEFAULT_BANK)).toBe(true);
   });
 });

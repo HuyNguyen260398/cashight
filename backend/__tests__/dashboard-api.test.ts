@@ -225,19 +225,23 @@ describe('GET /dashboard — bank filter', () => {
     expect(body.availableBanks).toEqual(['TPBank', 'VIB']);
   });
 
-  it('includes every bank when no bank param is given', async () => {
+  // No bank param means the default bank, not "every bank": the dashboard
+  // always shows exactly one bank.
+  it('falls back to the default bank when no bank param is given', async () => {
     const handler = createDashboardApiHandler(makeMultiBankDeps());
     const res = await handler(makeEvent({ period: 'month', year: '2026', month: '5' }));
+    const body = JSON.parse(res.body);
 
-    expect(JSON.parse(res.body).statementCount).toBe(2);
+    expect(body.statementCount).toBe(1);
+    expect(body.availableBanks).toEqual(['TPBank', 'VIB']);
   });
 
-  it('ignores an unrecognised bank value', async () => {
+  it('falls back to the default bank for an unrecognised bank value', async () => {
     const handler = createDashboardApiHandler(makeMultiBankDeps());
     const res = await handler(
       makeEvent({ period: 'month', year: '2026', month: '5', bank: 'Sacombank' }),
     );
 
-    expect(JSON.parse(res.body).statementCount).toBe(2);
+    expect(JSON.parse(res.body).statementCount).toBe(1);
   });
 });

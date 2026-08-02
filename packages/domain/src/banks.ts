@@ -48,11 +48,17 @@ export function isBankCode(value: unknown): value is BankCode {
   );
 }
 
+/** The bank shown when the URL does not name one. */
+export const DEFAULT_BANK: BankCode = 'TPBank';
+
 /**
- * Read the dashboard bank filter out of the URL. Absent or unrecognised means
- * "all banks" — the same forgiving contract as parsePeriodFromSearch.
+ * Read the dashboard bank filter out of the URL.
+ *
+ * The dashboard always views exactly one bank — there is no combined view — so
+ * this never returns null: absent or unrecognised falls back to DEFAULT_BANK,
+ * the same forgiving contract as parsePeriodFromSearch.
  */
-export function parseBankFromSearch(params: URLSearchParams): BankCode | null {
+export function parseBankFromSearch(params: URLSearchParams): BankCode {
   const raw = params.get('bank');
-  return isBankCode(raw) ? raw : null;
+  return isBankCode(raw) ? raw : DEFAULT_BANK;
 }
