@@ -402,10 +402,49 @@ describe('aggregate — cross-statement merchant accumulation', () => {
 // aggregate — empty input
 // ---------------------------------------------------------------------------
 
+describe('aggregate — latestStatement (the Statement Balance KPI)', () => {
+  const apr = makeStatement(2026, 4, { statementBalance: 5_000_000 });
+  const may = makeStatement(2026, 5, { statementBalance: 6_000_000 });
+  const jun = makeStatement(2026, 6, { statementBalance: 7_000_000 });
+
+  it('reports the newest statement, not a sum, across a multi-month period', () => {
+    const view = aggregate([apr, may, jun], {
+      type: 'quarter',
+      year: 2026,
+      quarter: 2,
+    });
+    // A balance already includes carried-over debt, so summing these three
+    // would claim 18M was owed — a figure that never existed.
+    expect(view.latestStatement).toEqual({
+      statementBalance: 7_000_000,
+      statementDate: '2026-06-15',
+    });
+  });
+
+  it('is independent of input ordering', () => {
+    const spec: PeriodSpec = { type: 'quarter', year: 2026, quarter: 2 };
+    expect(aggregate([jun, apr, may], spec).latestStatement).toEqual(
+      aggregate([apr, may, jun], spec).latestStatement,
+    );
+  });
+
+  it('is that month’s own balance on a single-month view', () => {
+    const view = aggregate([apr, may, jun], { type: 'month', year: 2026, month: 5 });
+    expect(view.latestStatement?.statementBalance).toBe(6_000_000);
+  });
+
+  it('ignores statements filtered out of the period', () => {
+    const view = aggregate([apr, may, jun], { type: 'quarter', year: 2026, quarter: 1 });
+    expect(view.latestStatement).toBeNull();
+  });
+});
+
 describe('aggregate with empty input', () => {
   it('monthly: all zero totals, empty arrays, subPeriods full-length zero-filled', () => {
     const view = aggregate([], { type: 'month', year: 2026, month: 5 });
     expect(view.statementCount).toBe(0);
+    // The KPI card renders a dash rather than a misleading 0 ₫.
+    expect(view.latestStatement).toBeNull();
     expect(view.totals.totalSpend).toBe(0);
     expect(view.totals.totalInstallments).toBe(0);
     expect(view.totals.totalCashback).toBe(0);

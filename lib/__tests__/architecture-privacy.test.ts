@@ -62,10 +62,19 @@ describe('hybrid architecture privacy boundaries', () => {
       ],
     });
 
-    const payload = buildSummaryPayload(
-      aggregate([statement], { type: 'month', year: 2026, month: 5 }),
-    );
+    const view = aggregate([statement], { type: 'month', year: 2026, month: 5 });
+    const payload = buildSummaryPayload(view);
     const logSafeStatement = redactForLog(statement);
+
+    // The dashboard needs the balance, Gemini must never see it. The KPI card
+    // reads it off the view; buildSummaryPayload builds `totals` field by field
+    // precisely so a new view field cannot leak into a prompt by accident.
+    expect(view.latestStatement).toEqual({
+      statementBalance: 1_010_000,
+      statementDate: '2026-05-31',
+    });
+    expect(JSON.stringify(payload)).not.toContain('1010000');
+    expect(JSON.stringify(payload)).not.toContain('latestStatement');
 
     expect(payload.totals).toEqual({
       spend: 1_000_000,

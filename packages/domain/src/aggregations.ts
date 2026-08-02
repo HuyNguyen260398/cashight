@@ -27,6 +27,21 @@ export interface AggregatedView {
     totalCashback: number;
     totalFeesAndInterest: number;
   };
+  /**
+   * The most recent statement in the period, or null when the period has none.
+   *
+   * Deliberately outside `totals`: every field in `totals` is a sum across the
+   * period, but a statement balance is a point-in-time snapshot that already
+   * includes whatever was carried over from earlier months. Summing balances
+   * across a quarter would report debt that never existed, so the roll-up is
+   * "what was owed as of the latest statement" instead.
+   *
+   * Optional, not just nullable: `/summaries` validates a client-posted view,
+   * and a cached SPA bundle from before this field existed would otherwise be
+   * rejected. `aggregate()` always sets it — readers should treat absent and
+   * null the same way.
+   */
+  latestStatement?: { statementBalance: number; statementDate: string } | null;
   transactions: Transaction[];
   byCategory: Array<{ category: string; value: number; pct: number }>;
   topMerchants: Array<{ merchant: string; value: number }>;
@@ -213,11 +228,25 @@ export function aggregate(
     },
   );
 
+  // statementDate is a zero-padded YYYY-MM-DD, so lexicographic max is the
+  // chronological max — no Date parsing needed.
+  const latest = filtered.reduce<Statement | null>(
+    (newest, s) =>
+      newest === null || s.statementDate > newest.statementDate ? s : newest,
+    null,
+  );
+
   return {
     spec,
     label: periodLabel(spec),
     statementCount: filtered.length,
     totals,
+    latestStatement: latest
+      ? {
+          statementBalance: latest.totals.statementBalance,
+          statementDate: latest.statementDate,
+        }
+      : null,
     transactions: filtered.flatMap((s) => s.transactions),
     byCategory: mergeByCategory(filtered),
     topMerchants: mergeTopMerchants(filtered),

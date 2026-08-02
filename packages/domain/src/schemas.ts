@@ -61,6 +61,15 @@ export const AggregatedViewSchema = z.object({
     totalCashback: z.number(),
     totalFeesAndInterest: z.number(),
   }),
+  // Zod strips unknown keys, so this has to be declared or the dashboard would
+  // silently lose the field on the client (`use-dashboard.ts` parses the API
+  // response through this schema). `.nullish()` rather than `.nullable()` so a
+  // cached SPA bundle posting the older shape to /summaries still validates —
+  // it must stay in step with the optional property on `AggregatedView`, which
+  // the `satisfies` assertion at the bottom of this file enforces.
+  latestStatement: z
+    .object({ statementBalance: z.number(), statementDate: z.string() })
+    .nullish(),
   transactions: z.array(TransactionSchema),
   byCategory: z.array(
     z.object({
