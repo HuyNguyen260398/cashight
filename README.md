@@ -37,12 +37,13 @@ Upload a statement, get back KPI cards, category breakdowns, top merchants, and 
 
 ## Features
 
-- **Deterministic PDF parser** for TPBank Vietnamese credit card statements — no LLM in the parse path, just regex + Zod validation. Handles **password-protected PDFs** via a `PDF_PASSWORD` decrypt-and-retry.
+- **Deterministic PDF parsers** for **TPBank and VIB** Vietnamese credit card statements — no LLM in the parse path, just regex / coordinate geometry + Zod validation. The issuing bank is **auto-detected** from the statement text, so you just drop the file in. Handles **password-protected PDFs** by trying each configured password.
 - **Asynchronous upload pipeline** — the browser hashes the PDF, uploads straight to S3 through a checksum-pinned presigned URL, and polls a job record while a queue-driven worker parses it. Nothing large passes through the API.
 - **Rule-based categorization** with merchant name normalization (strips locale suffixes, maps known variants to canonical names).
 - **Dashboard**: KPI cards, category donut, top-merchants bar coloured by category, spending trend, installment area chart, and a transactions table with category filtering.
 - **AI summary** streamed from Google Gemini (2.5 Flash) using **anonymized aggregates only** — no card numbers, no individual transactions, no PII leaves the backend.
 - **Multi-period views**: switch between month / quarter / year; the period lives in the URL so views are shareable and survive refresh.
+- **Bank filter**: narrow the dashboard to one bank or view them combined; like the period, the selection lives in the URL.
 - **Cognito authentication** using Authorization Code + PKCE — no client secret exists in browser code — gated to a single allowlisted email.
 - **Dark mode** toggle (system / light / dark) and a **mobile-first** layout designed to work at 390px and up.
 - **Offline dev stack** — run the real Lambda handlers against file-backed fake S3 and DynamoDB with no AWS account and no sign-in.
@@ -171,7 +172,7 @@ Backend values are read by the Lambdas at runtime. In production the secrets liv
 | `STORAGE_REGION` / `AWS_REGION` | `ap-southeast-1` |
 | `ALLOWED_EMAIL` | The single account permitted to sign in |
 | `GEMINI_API_KEY` | Google AI Studio key for the summary endpoint |
-| `PDF_PASSWORD` | Unlocks password-protected statement PDFs (optional) |
+| `PDF_PASSWORD` | Unlocks password-protected statement PDFs (optional). May instead be a JSON map of per-bank candidates, `{"TPB":"…","VIB":"…"}` — keys are labels, every value is tried |
 
 ## Deployment
 

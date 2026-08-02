@@ -17,7 +17,7 @@ unmodified; only what sits underneath it changes.
 | S3 (uploads + statements) | `.local-data/objects/<bucket>/<key>` — real files on disk |
 | DynamoDB single table | `.local-data/table.json` |
 | S3 → SQS → parser Lambda | a background call to `createProcessJob(...)` after the PUT |
-| Secrets Manager | `PDF_PASSWORD` / `GEMINI_API_KEY` from `.env.local` |
+| Secrets Manager | `PDF_PASSWORDS` (JSON map, falling back to `PDF_PASSWORD`) / `GEMINI_API_KEY` from `.env.local` |
 
 Because the metadata layer talks to a fake `DynamoDBDocumentClient`
 (`scripts/local/dynamo.ts`) rather than a reimplementation, the conditional
@@ -36,8 +36,12 @@ In `.env.local`:
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8787
 NEXT_PUBLIC_DEV_AUTH_BYPASS=true
 
-# Optional — only if your statement PDFs are password protected
-PDF_PASSWORD=...
+# Optional — only if your statement PDFs are password protected.
+# One password:
+PDF_PASSWORD=
+# Or one per bank — keys are labels, every value is tried in turn (the bank
+# can only be detected after the PDF is decrypted). Wins over PDF_PASSWORD:
+PDF_PASSWORDS={"TPB":"...","VIB":"..."}...
 # Optional — without it, /summaries returns a canned stub instead of calling Gemini
 GEMINI_API_KEY=...
 ```

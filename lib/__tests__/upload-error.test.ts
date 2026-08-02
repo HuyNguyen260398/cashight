@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { getUploadErrorMessage } from '@cashight/domain/upload-error';
+import {
+  getUploadErrorMessage,
+  uploadErrorMessage,
+} from '@cashight/domain/upload-error';
 
 describe('getUploadErrorMessage', () => {
   it('uses a JSON error body when the API returns one', async () => {
@@ -19,5 +22,23 @@ describe('getUploadErrorMessage', () => {
     });
 
     await expect(getUploadErrorMessage(response)).resolves.toBe('Upload failed (500)');
+  });
+});
+
+describe('uploadErrorMessage', () => {
+  it('explains an unrecognised bank', () => {
+    expect(uploadErrorMessage('UNSUPPORTED_BANK')).toMatch(/TPBank and VIB/);
+  });
+
+  it('explains a failed decryption', () => {
+    expect(uploadErrorMessage('WRONG_PASSWORD')).toMatch(/password/i);
+  });
+
+  it('falls back for an unknown code', () => {
+    expect(uploadErrorMessage('SOMETHING_NEW')).toBe('Processing failed');
+  });
+
+  it('falls back when no code is given', () => {
+    expect(uploadErrorMessage(undefined)).toBe('Processing failed');
   });
 });

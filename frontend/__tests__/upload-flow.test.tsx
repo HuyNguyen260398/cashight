@@ -7,6 +7,7 @@ import { sleep } from '@/frontend/lib/sleep';
 import { useUploadJob } from '@/frontend/hooks/use-upload-job';
 import { useDashboard } from '@/frontend/hooks/use-dashboard';
 import { useStatements } from '@/frontend/hooks/use-statements';
+import { uploadErrorMessage } from '@cashight/domain/upload-error';
 
 // ── module-level mocks (hoisted) ──────────────────────────────────────────────
 
@@ -292,7 +293,28 @@ describe('useUploadJob', () => {
 
     const s = result.current.state;
     if (s.phase !== 'failed') throw new Error('wrong phase');
-    expect(s.error).toBe('PARSE_ERROR');
+    // The raw error code is mapped to readable text before it reaches the UI.
+    expect(s.error).toBe(uploadErrorMessage('PARSE_ERROR'));
+    expect(s.error).not.toBe('PARSE_ERROR');
+  });
+
+  it('explains an unrecognised bank rather than showing the raw code', async () => {
+    mockApiFetch
+      .mockResolvedValueOnce(jsonResponse(makeCreateResponse()))
+      .mockResolvedValueOnce(
+        jsonResponse(makeJobResponse('FAILED', { errorCode: 'UNSUPPORTED_BANK' })),
+      );
+
+    const { result } = renderHook(() => useUploadJob());
+    act(() => { result.current.start(makeFile()); });
+
+    await waitFor(() =>
+      expect(result.current.state.phase).toBe('failed'),
+    );
+
+    const s = result.current.state;
+    if (s.phase !== 'failed') throw new Error('wrong phase');
+    expect(s.error).toMatch(/TPBank and VIB/);
   });
 
   it('reset() returns to idle from failed phase', async () => {
