@@ -7,6 +7,7 @@ import {
   detectBank,
   isBankCode,
   parseBankFromSearch,
+  resolveBank,
 } from '@cashight/domain/banks';
 
 describe('detectBank', () => {
@@ -57,22 +58,42 @@ describe('isBankCode', () => {
 });
 
 describe('parseBankFromSearch', () => {
-  it('falls back to the default bank when the param is absent', () => {
-    expect(parseBankFromSearch(new URLSearchParams())).toBe(DEFAULT_BANK);
+  // null means "the URL did not choose" — which bank to show then depends on
+  // what the period actually holds, so only the aggregation can decide.
+  it('returns null when the param is absent', () => {
+    expect(parseBankFromSearch(new URLSearchParams())).toBeNull();
   });
 
-  it('falls back to the default bank for an unknown value', () => {
-    expect(parseBankFromSearch(new URLSearchParams('bank=Sacombank'))).toBe(
-      DEFAULT_BANK,
-    );
+  it('returns null for an unknown value', () => {
+    expect(parseBankFromSearch(new URLSearchParams('bank=Sacombank'))).toBeNull();
   });
 
   it('returns the code for a known value', () => {
     expect(parseBankFromSearch(new URLSearchParams('bank=VIB'))).toBe('VIB');
   });
+});
 
-  it('never returns null — the dashboard always views exactly one bank', () => {
-    expect(parseBankFromSearch(new URLSearchParams('bank='))).not.toBeNull();
+describe('resolveBank', () => {
+  it('honours an explicit choice even when that bank has no statements', () => {
+    expect(resolveBank('VIB', ['TPBank'])).toBe('VIB');
+  });
+
+  it('prefers the default bank when it has statements in the period', () => {
+    expect(resolveBank(null, ['TPBank', 'VIB'])).toBe(DEFAULT_BANK);
+  });
+
+  it('falls back to whichever bank has statements when the default has none', () => {
+    expect(resolveBank(null, ['VIB'])).toBe('VIB');
+  });
+
+  it('falls back to the default bank for an empty period', () => {
+    expect(resolveBank(null, [])).toBe(DEFAULT_BANK);
+  });
+
+  it('always returns a valid bank code', () => {
+    for (const available of [[], ['VIB'], ['TPBank', 'VIB']] as const) {
+      expect(isBankCode(resolveBank(null, [...available]))).toBe(true);
+    }
   });
 });
 

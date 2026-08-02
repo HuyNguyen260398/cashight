@@ -48,17 +48,39 @@ export function isBankCode(value: unknown): value is BankCode {
   );
 }
 
-/** The bank shown when the URL does not name one. */
+/** Preferred bank when the URL does not name one and that bank has data. */
 export const DEFAULT_BANK: BankCode = 'TPBank';
 
 /**
  * Read the dashboard bank filter out of the URL.
  *
- * The dashboard always views exactly one bank — there is no combined view — so
- * this never returns null: absent or unrecognised falls back to DEFAULT_BANK,
- * the same forgiving contract as parsePeriodFromSearch.
+ * Returns null when the URL does not choose one. Null is NOT "all banks" — the
+ * dashboard always views exactly one bank — it means "not chosen yet", and
+ * which bank to show then depends on what the period actually holds. Only the
+ * aggregation knows that, so `resolveBank` finishes the job there.
  */
-export function parseBankFromSearch(params: URLSearchParams): BankCode {
+export function parseBankFromSearch(params: URLSearchParams): BankCode | null {
   const raw = params.get('bank');
-  return isBankCode(raw) ? raw : DEFAULT_BANK;
+  return isBankCode(raw) ? raw : null;
+}
+
+/**
+ * Decide which single bank a view shows.
+ *
+ * An explicit request always wins, even when that bank has no statements this
+ * period — the user asked for it, and "no VIB statements in August" is a real
+ * answer worth showing rather than silently switching banks underneath them.
+ *
+ * Otherwise prefer DEFAULT_BANK when it has data, else the first bank that
+ * does, so landing on the dashboard never shows an empty view when some bank
+ * has statements. `available` is expected pre-sorted (as `aggregate` builds it)
+ * so the fallback is deterministic.
+ */
+export function resolveBank(
+  requested: BankCode | null,
+  available: BankCode[],
+): BankCode {
+  if (requested) return requested;
+  if (available.includes(DEFAULT_BANK)) return DEFAULT_BANK;
+  return available[0] ?? DEFAULT_BANK;
 }

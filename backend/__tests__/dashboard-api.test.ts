@@ -225,23 +225,38 @@ describe('GET /dashboard — bank filter', () => {
     expect(body.availableBanks).toEqual(['TPBank', 'VIB']);
   });
 
-  // No bank param means the default bank, not "every bank": the dashboard
-  // always shows exactly one bank.
-  it('falls back to the default bank when no bank param is given', async () => {
+  // No bank param means "pick one that has data", not "every bank": the
+  // dashboard always shows exactly one bank.
+  it('auto-selects the default bank when it has statements in the period', async () => {
     const handler = createDashboardApiHandler(makeMultiBankDeps());
     const res = await handler(makeEvent({ period: 'month', year: '2026', month: '5' }));
     const body = JSON.parse(res.body);
 
+    expect(body.selectedBank).toBe('TPBank');
     expect(body.statementCount).toBe(1);
     expect(body.availableBanks).toEqual(['TPBank', 'VIB']);
   });
 
-  it('falls back to the default bank for an unrecognised bank value', async () => {
+  it('auto-selects the only bank present when the default has none', async () => {
+    const handler = createDashboardApiHandler(
+      makeDeps({
+        queryStatementsForYear: vi.fn().mockResolvedValue([vibMeta]),
+        getStatementObject: vi.fn().mockResolvedValue(vibStatement),
+      }),
+    );
+    const res = await handler(makeEvent({ period: 'month', year: '2026', month: '5' }));
+    const body = JSON.parse(res.body);
+
+    expect(body.selectedBank).toBe('VIB');
+    expect(body.statementCount).toBe(1);
+  });
+
+  it('auto-selects for an unrecognised bank value', async () => {
     const handler = createDashboardApiHandler(makeMultiBankDeps());
     const res = await handler(
       makeEvent({ period: 'month', year: '2026', month: '5', bank: 'Sacombank' }),
     );
 
-    expect(JSON.parse(res.body).statementCount).toBe(1);
+    expect(JSON.parse(res.body).selectedBank).toBe('TPBank');
   });
 });

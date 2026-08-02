@@ -43,7 +43,7 @@ Upload a statement, get back KPI cards, category breakdowns, top merchants, and 
 - **Dashboard**: KPI cards, category donut, top-merchants bar coloured by category, spending trend, installment area chart, and a transactions table with category filtering.
 - **AI summary** streamed from Google Gemini (2.5 Flash) using **anonymized aggregates only** — no card numbers, no individual transactions, no PII leaves the backend.
 - **Multi-period views**: switch between month / quarter / year; the period lives in the URL so views are shareable and survive refresh.
-- **Bank filter**: the dashboard shows one bank at a time, defaulting to TPB; like the period, the selection lives in the URL.
+- **Bank filter**: the dashboard shows one bank at a time and opens on whichever bank actually has statements in the period (preferring TPB); like the period, the selection lives in the URL and survives navigation.
 - **Cognito authentication** using Authorization Code + PKCE — no client secret exists in browser code — gated to a single allowlisted email.
 - **Dark mode** toggle (system / light / dark) and a **mobile-first** layout designed to work at 390px and up.
 - **Offline dev stack** — run the real Lambda handlers against file-backed fake S3 and DynamoDB with no AWS account and no sign-in.

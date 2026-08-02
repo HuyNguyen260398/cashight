@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { parsePeriodFromSearch } from '@/lib/period';
-import { parseBankFromSearch } from '@/lib/banks';
+import { DEFAULT_BANK, parseBankFromSearch } from '@/lib/banks';
 import { Dashboard } from '@/app/components/dashboard';
 import { PeriodSelector } from '@/app/components/period-selector';
 import { BankSelector } from '@/app/components/bank-selector';
@@ -38,7 +38,8 @@ function DashboardPageInner() {
   const hasPeriod = searchParams.has('period');
 
   const spec = parsePeriodFromSearch(searchParams);
-  const bank = parseBankFromSearch(searchParams);
+  // null when the URL names no bank — the API then picks one that has data.
+  const requestedBank = parseBankFromSearch(searchParams);
 
   // When no period is in the URL, fetch the statement list to find the most
   // recent month and redirect.  `fetchCompleted` is set to true only in async
@@ -83,7 +84,7 @@ function DashboardPageInner() {
 
   const { data: view, loading: dashLoading, error } = useDashboard(
     hasPeriod ? spec : null,
-    bank,
+    requestedBank,
   );
 
   const header = (
@@ -100,9 +101,14 @@ function DashboardPageInner() {
         </p>
       </div>
       <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-        {/* While the view is loading `availableBanks` is unknown; the selector
-            always lists `current` itself, so an empty list is safe here. */}
-        <BankSelector current={bank} available={view?.availableBanks ?? []} />
+        {/* `selectedBank` is the server's answer — when the URL names no bank
+            it picked one that has data, and the dropdown must show that rather
+            than a guess. Falls back to the URL's bank (then the default) while
+            the view is still loading. */}
+        <BankSelector
+          current={view?.selectedBank ?? requestedBank ?? DEFAULT_BANK}
+          available={view?.availableBanks ?? []}
+        />
         <PeriodSelector current={spec} />
       </div>
     </header>
