@@ -19,7 +19,8 @@
     "./parsers/tpbank": "./src/parsers/tpbank.ts",
     "./parsers/pdf-layout": "./src/parsers/pdf-layout.ts",
     "./parsers/vib-fields": "./src/parsers/vib-fields.ts",
-    "./parsers/vib": "./src/parsers/vib.ts"
+    "./parsers/vib": "./src/parsers/vib.ts",
+    "./parsers/pdf-text": "./src/parsers/pdf-text.ts"
   },
   "dependencies": {
     "date-fns": "^4.3.0",
