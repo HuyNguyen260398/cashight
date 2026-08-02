@@ -54,6 +54,9 @@ function metaToSummary(record: StatementMetadataRecord) {
   return {
     statementId: record.statementId,
     cardLast4: record.cardLast4,
+    // Records written before multi-bank support carry no `bank` — every one of
+    // them is a TPBank statement.
+    bank: record.bank ?? 'TPBank',
     statementDate: record.statementDate,
     totalSpend: record.totalSpend,
     transactionCount: record.transactionCount,

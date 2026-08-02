@@ -29,10 +29,12 @@ import {
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
 import { formatVND, formatDate } from '@/lib/format';
+import { bankShortName, type BankCode } from '@/lib/banks';
 
 export type StatementRow = {
   key: string;
   cardLast4: string;
+  bank: BankCode;
   year: number;
   month: number;
   totalSpend: number;
@@ -139,6 +141,7 @@ export function StatementsTable({
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead>Bank</TableHead>
             <TableHead>Card</TableHead>
             <TableHead
               className="cursor-pointer select-none"
@@ -176,6 +179,9 @@ export function StatementsTable({
             const isDeleting = deletingKey === row.key;
             return (
               <TableRow key={row.key}>
+                <TableCell>
+                  <Badge variant="outline">{bankShortName(row.bank)}</Badge>
+                </TableCell>
                 <TableCell>
                   <Badge variant="secondary">****{row.cardLast4}</Badge>
                 </TableCell>

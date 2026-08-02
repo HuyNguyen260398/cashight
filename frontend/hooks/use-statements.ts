@@ -5,6 +5,7 @@ import { apiFetch } from '@/frontend/api/client';
 import { getPublicConfig } from '@/frontend/auth/config';
 import { StatementsListResponseSchema } from '@/frontend/api/contracts';
 import type { StatementRow } from '@/app/components/statements-table';
+import type { BankCode } from '@/lib/banks';
 
 /**
  * Map a Lambda statement list item to the StatementRow shape used by
@@ -13,6 +14,7 @@ import type { StatementRow } from '@/app/components/statements-table';
 function toStatementRow(item: {
   statementId: string;
   cardLast4: string;
+  bank: BankCode;
   statementDate: string;
   totalSpend: number;
   uploadedAt: string;
@@ -21,6 +23,7 @@ function toStatementRow(item: {
   return {
     key: item.statementId,
     cardLast4: item.cardLast4,
+    bank: item.bank,
     year: parseInt(yearStr, 10),
     month: parseInt(monthStr, 10),
     totalSpend: item.totalSpend,
