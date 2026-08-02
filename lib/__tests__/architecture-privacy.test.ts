@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { aggregate } from '@cashight/domain/aggregations';
+import { scrubVibDescription } from '@cashight/domain/parsers/vib-fields';
 import { redactForLog } from '@cashight/domain/security/logging';
 import { StatementSchema } from '@cashight/domain/schemas';
 import { buildSummaryPayload } from '@cashight/domain/summary-payload';
@@ -92,5 +93,14 @@ describe('hybrid architecture privacy boundaries', () => {
     });
     expectSentinelsAbsent(payload);
     expectSentinelsAbsent(logSafeStatement);
+  });
+
+  it('scrubs PAN, account number, and cardholder name out of VIB descriptions', () => {
+    const raw =
+      '526887xxxxxx4550-000000000786286 - NGUYEN GIA HUY - Thanh toan sao ke the Master Card 06/2026';
+    const scrubbed = scrubVibDescription(raw);
+    expect(scrubbed).not.toMatch(/\d{6}[x*]{6}\d{4}/i);
+    expect(scrubbed).not.toMatch(/\b\d{9,}\b/);
+    expect(scrubbed).not.toContain('NGUYEN');
   });
 });

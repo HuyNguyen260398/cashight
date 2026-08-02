@@ -14,7 +14,7 @@
 // `@napi-rs/canvas` that would supply it cannot load, so we install the globals
 // ourselves first. See ../pdf-dom-polyfill.ts for the full story.
 import '../pdf-dom-polyfill';
-import { PDFParse } from 'pdf-parse';
+import { extractPdfText } from './pdf-text';
 import { categorize, normalizeMerchant } from '../categorize';
 import {
   StatementSchema,
@@ -196,37 +196,10 @@ function buildForeignFeeMerchants(rows: ParsedRow[]): string[] {
 }
 
 /**
- * Extract raw text from a PDF, optionally supplying a decryption password.
- * Destroys the pdf.js parser in all cases (success or error) to avoid leaking
- * workers — every PDFParse instance created must be destroyed.
- *
- * A fresh Uint8Array is allocated per call on purpose: pdf.js TRANSFERS the
- * typed array to its worker and detaches it, so a single array cannot be reused
- * across two PDFParse instances (the unprotected attempt + the password retry).
- * Reusing one throws "DataCloneError: Cannot transfer object of unsupported type".
+ * Parse a TPBank statement from already-extracted PDF text. The dispatcher
+ * extracts once, detects the bank, then calls this — no second extraction.
  */
-async function extractText(buffer: Buffer, password?: string): Promise<string> {
-  const data = new Uint8Array(buffer);
-  const parser = new PDFParse(password ? { data, password } : { data });
-  try {
-    return (await parser.getText()).text;
-  } finally {
-    await parser.destroy();
-  }
-}
-
-export async function parseTPBankStatement(buffer: Buffer, password?: string): Promise<Statement> {
-  let text: string;
-  try {
-    text = await extractText(buffer);
-  } catch (err) {
-    if (password && err instanceof Error && err.name === 'PasswordException') {
-      text = await extractText(buffer, password);
-    } else {
-      throw err;
-    }
-  }
-
+export function parseTPBankStatementFromText(text: string): Statement {
   // --- PCI: mask the PAN immediately, derive cardLast4, then drop the rest. ---
   const rawCardNumber = requireMatch(text, HEADER.cardNumber, 'Card Number');
   const last4Match = rawCardNumber.match(/(\d{4})\D*$/);
@@ -337,4 +310,17 @@ export async function parseTPBankStatement(buffer: Buffer, password?: string): P
   };
 
   return StatementSchema.parse(rawStatement);
+}
+
+/**
+ * Parse a TPBank statement straight from a PDF buffer. Retained for the
+ * verification script and the fixture tests; the upload path goes through
+ * `parseStatementPdf` in ./index.ts instead.
+ */
+export async function parseTPBankStatement(
+  buffer: Buffer,
+  password?: string,
+): Promise<Statement> {
+  const { text } = await extractPdfText(buffer, password ? [password] : []);
+  return parseTPBankStatementFromText(text);
 }

@@ -15,7 +15,7 @@ When the user asks to "start", "do step N", or "continue", treat the relevant `d
 ## What you're building
 
 A personal Next.js 16 (App Router, React 19) web app that:
-1. Parses **TPBank Vietnamese credit card PDF statements** with a deterministic regex parser (no LLM in the parse path). Supports password-protected PDFs via `PDF_PASSWORD`.
+1. Parses **Vietnamese credit card PDF statements from TPBank and VIB** with deterministic parsers (no LLM in the parse path). The issuing bank is auto-detected from marker strings in the extracted text; TPBank uses regex over `pdf-parse` line text, VIB uses coordinate-based layout extraction. Supports password-protected PDFs via the PDF password secret.
 2. Categorizes transactions via a rule table, then renders a dashboard (KPI cards, category donut, top-merchants bar, spending trend, installment area chart, transactions table with category filter).
 3. Streams a Gemini-generated natural-language summary of the month's spending.
 4. Persists statements to S3 keyed by `statements/{cardLast4}/{year}/{year}-{mm}.json`.
@@ -47,7 +47,12 @@ These cut across multiple steps; deviating from them means rewriting later steps
 - **PCI hygiene.** Mask the card number to `cardLast4` **immediately** after PDF extraction. The full PAN must never appear in any log, any API response, any storage key, or any payload sent to Gemini. The parser must enforce this at its boundary.
 - **AI gets aggregates only.** `/api/summarize` receives the parsed `Statement` or `AggregatedView` from the client, but the route strips it to anonymized totals/top-categories/top-merchants via `buildSummaryPayload()` before constructing the Gemini prompt. Raw transaction descriptions, names, and card numbers must not be sent.
 - **`pdf-parse` requires the Node runtime.** Any route that imports it must export `runtime = 'nodejs'`. Edge runtime breaks it.
-- **Vietnamese number format.** TPBank uses `.` as the thousands separator: `17.184.741` is seventeen million, not seventeen. Strip dots before `parseInt`. The parser is the only place that does this conversion.
+- **Bank knowledge lives in `packages/domain/src/banks.ts`** — codes, short names, detection markers, and `?bank=` URL parsing. Adding a bank means adding a profile there plus a parser; nothing else should hard-code a bank name.
+- **Vietnamese number format is per-bank.** TPBank uses `.` as the thousands separator (`17.184.741` is seventeen million); VIB uses `,` with a `.` decimal (`5,591,567.00`). Each conversion lives only in that bank's parser module — `parsers/tpbank.ts` and `parsers/vib-fields.ts` respectively. Do not spread it elsewhere.
+- **VIB descriptions embed PII** — a masked PAN, the card-account number, and the cardholder's name. `scrubVibDescription()` strips them at the parser boundary, before the text reaches storage or the Gemini payload.
+- **The VIB parser reconciles against the statement's own total-debit figure** (`Phát sinh nợ trong kỳ`) and throws when the per-row tally disagrees. A layout change fails loudly instead of silently storing wrong numbers.
+- **The DOM polyfill import must precede any `pdfjs-dist` or `pdf-parse` import** in the same module. pdfjs references `DOMMatrix` while its module body evaluates; getting this wrong crashes at import time, and only in the bundled Lambda. `lib/__tests__/pdf-dom-polyfill.test.ts` asserts the source order.
+- **`dist/lambdas/parser-worker/pdf.worker.mjs` is required at runtime** by the bundled pdfjs. `scripts/build-lambdas.mjs` copies it; do not drop that step.
 - **Zod at the boundary.** `StatementSchema.parse()` validates both the parser's output and anything read from S3 — treat the inferred types as trustworthy only after validation.
 - **URL is the source of truth for period state.** The dashboard is a server component that reads `searchParams`; do not put period selection in React context or `useState`. This is what makes the view shareable and survives refresh.
 - **Force-dynamic on data-reading pages.** `app/page.tsx` and statements API routes use `export const dynamic = 'force-dynamic'` because S3 content can change between requests.
@@ -61,7 +66,11 @@ These cut across multiple steps; deviating from them means rewriting later steps
 ```
 PDF upload
   → /api/parse (Node runtime)
-  → lib/parsers/tpbank.ts (regex → raw shape)
+  → parsers/pdf-text.ts extractPdfText() (tries each candidate password)
+  → banks.ts detectBank() → parsers/index.ts routes on the result
+      TPBank → parsers/tpbank.ts    (regex over line text)
+      VIB    → parsers/vib.ts       (coordinate-based layout rows)
+      neither → UnsupportedBankError → job errorCode UNSUPPORTED_BANK
   → lib/categorize.ts (rule table)
   → StatementSchema.parse() (Zod validation)
   → lib/storage.ts saveStatement() (S3 PUT)
@@ -86,7 +95,7 @@ Set in `.env.local` for dev (gitignored) and in the Amplify Console for producti
 - `GEMINI_API_KEY` — from Google AI Studio
 - `STATEMENTS_BUCKET` — from `terraform output statements_bucket_name`
 - `STORAGE_REGION` / `AWS_REGION` — `ap-southeast-1`. Prod uses `STORAGE_REGION` because Amplify reserves the `AWS_*` prefix; dev can use `AWS_REGION`. (`lib/storage.ts:getStorageRegion`)
-- `PDF_PASSWORD` — optional; unlocks password-protected statement PDFs (server-only)
+- `PDF_PASSWORD` — optional; unlocks password-protected statement PDFs (server-only). In production the Secrets Manager value may instead be a JSON map of candidate passwords, one per bank: `{"TPB":"…","VIB":"…"}`. **The keys are labels only** — every value is tried in turn, because the PDF must be decrypted before its bank can be detected. A plain string is still accepted as a single password. Locally, `PDF_PASSWORDS` holds the same JSON and takes precedence over `PDF_PASSWORD`.
 - `AUTH_SECRET` — Auth.js session secret (`npx auth secret`)
 - `ALLOWED_EMAIL` — the single account permitted to sign in
 - `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` — Google OAuth client
@@ -94,12 +103,25 @@ Set in `.env.local` for dev (gitignored) and in the Amplify Console for producti
 
 The app **crashes on the first S3 call if `STATEMENTS_BUCKET` is unset** — this is intentional, do not add fallback logic.
 
-## Sample PDF for parser development
+## Sample PDFs for parser development
 
-`test-pdfs/VC_sao_ke_the_tin_dung_05_2026_9674.pdf` is the canonical fixture. The directory is gitignored, so fixture-dependent vitest suites self-skip in CI. Known acceptance numbers for the May 2026 statement (verified by `scripts/test-parser.ts`):
+`test-pdfs/` is gitignored, so fixture-dependent vitest suites self-skip in CI. Both fixtures are verified by `scripts/test-parser.ts`.
+
+**TPBank** — `test-pdfs/VC_sao_ke_the_tin_dung_05_2026_9674.pdf`, May 2026:
 
 - `cardLast4 === '9674'`
 - `totals.statementBalance === 37978402`
 - `totals.totalSpend === 26986712`
 - `totals.totalCashback === 519020`
 - `transactions.length === 41`
+
+**VIB** — `test-pdfs/vib_saoke_07_2026_4550.pdf`, July 2026 (password-protected; pass it via `VIB_PDF_PASSWORD` when running the script):
+
+- `bank === 'VIB'`, `cardLast4 === '4550'`
+- `statementDate === '2026-07-25'`, `paymentDueDate === '2026-08-10'`
+- `creditLimit === 124000000`
+- `totals.statementBalance === 5591567`, `totals.minimumPayment === 5582360`
+- `totals.totalSpend === 0`, `totals.totalInstallments === 5581667`, `totals.totalFeesAndInterest === 9900`
+- `transactions.length === 3`
+
+Note this VIB month is a degenerate sample — previous balance, end balance, total debit, and total credit are all `5,591,567.00` — so it cannot catch a label/value mix-up on its own. The parser's debit reconciliation check is the real guard.

@@ -1,14 +1,19 @@
 /**
- * CLI verification for the TPBank PDF parser. This IS the acceptance test for
- * Step 02. Parses the canonical fixture and hard-asserts the known May-2026
- * numbers, transaction count, categorization, and PCI hygiene.
+ * CLI verification for the statement PDF parsers. This IS the acceptance test
+ * for Step 02. Parses the canonical fixtures and hard-asserts the known
+ * numbers, transaction counts, categorization, and PCI hygiene.
+ *
+ * TPBank (May 2026) always runs; VIB (July 2026) runs when its fixture is
+ * present. Both fixtures live in the gitignored test-pdfs/.
  *
  * Run: pnpm tsx scripts/test-parser.ts
  */
 
 import fs from 'fs/promises';
+import { existsSync } from 'fs';
 import path from 'path';
 import { parseTPBankStatement } from '../packages/domain/src/parsers/tpbank';
+import { parseVIBStatement } from '../packages/domain/src/parsers/vib';
 
 const FIXTURE = path.join(
   process.cwd(),
@@ -130,6 +135,76 @@ async function main(): Promise<void> {
     !/\d{11,}/.test(serialized),
     (serialized.match(/\d{11,}/) ?? ['n/a'])[0],
   );
+
+  // --- VIB (July 2026) ---
+  const vibFixture = path.join(
+    process.cwd(),
+    'test-pdfs',
+    'vib_saoke_07_2026_4550.pdf',
+  );
+  if (existsSync(vibFixture)) {
+    console.log('\n--- VIB (July 2026) ---');
+    const vib = await parseVIBStatement(
+      await fs.readFile(vibFixture),
+      process.env.VIB_PDF_PASSWORD,
+    );
+    check('bank === "VIB"', vib.bank === 'VIB', vib.bank);
+    check('cardLast4 === "4550"', vib.cardLast4 === '4550', vib.cardLast4);
+    check(
+      'statementDate === "2026-07-25"',
+      vib.statementDate === '2026-07-25',
+      vib.statementDate,
+    );
+    check(
+      'paymentDueDate === "2026-08-10"',
+      vib.paymentDueDate === '2026-08-10',
+      vib.paymentDueDate,
+    );
+    check(
+      'creditLimit === 124000000',
+      vib.creditLimit === 124_000_000,
+      String(vib.creditLimit),
+    );
+    check(
+      'statementBalance === 5591567',
+      vib.totals.statementBalance === 5_591_567,
+      String(vib.totals.statementBalance),
+    );
+    check(
+      'minimumPayment === 5582360',
+      vib.totals.minimumPayment === 5_582_360,
+      String(vib.totals.minimumPayment),
+    );
+    check(
+      'totalSpend === 0',
+      vib.totals.totalSpend === 0,
+      String(vib.totals.totalSpend),
+    );
+    check(
+      'totalInstallments === 5581667',
+      vib.totals.totalInstallments === 5_581_667,
+      String(vib.totals.totalInstallments),
+    );
+    check(
+      'totalFeesAndInterest === 9900',
+      vib.totals.totalFeesAndInterest === 9_900,
+      String(vib.totals.totalFeesAndInterest),
+    );
+    check(
+      'transactions.length === 3',
+      vib.transactions.length === 3,
+      String(vib.transactions.length),
+    );
+    const vibSerialized = JSON.stringify(vib);
+    check(
+      'no PAN or cardholder name in output',
+      !/\d{6}[x*]{6}\d{4}/i.test(vibSerialized) &&
+        !vibSerialized.includes('NGUYEN') &&
+        vib.transactions.every((t) => !/\d{9,}/.test(t.description)),
+    );
+  } else {
+    console.log('\n--- VIB: fixture absent, skipped ---');
+  }
 
   console.log('');
   if (failures > 0) {

@@ -1,4 +1,4 @@
-import { parseTPBankStatement } from '@cashight/domain/parsers/tpbank';
+import { parseStatementPdf } from '@cashight/domain/parsers';
 import type { Statement } from '@cashight/domain/schemas';
 
 import { ApiError, type ApiResponse } from '../../backend/shared/api-response';
@@ -204,10 +204,13 @@ export const processUploadedPdf = createProcessJob({
   deletePdf: (key) => deleteObject(UPLOAD_BUCKET, key),
 
   // In production this reads Secrets Manager; locally the password comes
-  // straight from .env.local. Empty string means "no password".
-  getSecret: async () => process.env.PDF_PASSWORD ?? '',
+  // straight from .env.local. PDF_PASSWORDS holds the same JSON map as the
+  // production secret; PDF_PASSWORD remains valid as a single password.
+  // Empty string means "no password".
+  getSecret: async () =>
+    process.env.PDF_PASSWORDS ?? process.env.PDF_PASSWORD ?? '',
 
-  parsePdf: (buffer, password) => parseTPBankStatement(buffer, password),
+  parsePdf: (buffer, passwords) => parseStatementPdf(buffer, passwords),
 
   checkDestinationExists: (key) => objectExists(STATEMENTS_BUCKET, key),
 
@@ -223,6 +226,7 @@ export const processUploadedPdf = createProcessJob({
       statementId: statementId(statement.cardLast4, year, month),
       objectKey,
       cardLast4: statement.cardLast4,
+      bank: statement.bank,
       statementDate: statement.statementDate,
       totalSpend: statement.totals.totalSpend,
       transactionCount: statement.transactions.length,

@@ -8,6 +8,7 @@ import {
   type DynamoDBDocumentClient,
 } from '@aws-sdk/lib-dynamodb';
 import type { UploadJobState } from '@cashight/domain/api';
+import { BANK_CODES, type BankCode } from '@cashight/domain/banks';
 import { z } from 'zod';
 
 import { ApiError } from './api-response';
@@ -26,6 +27,8 @@ export interface StatementMetadataRecord {
   statementId: string;
   objectKey: string;
   cardLast4: string;
+  /** Absent on records written before multi-bank support — read as 'TPBank'. */
+  bank?: BankCode;
   statementDate: string;
   totalSpend: number;
   transactionCount: number;
@@ -47,6 +50,7 @@ const statementMetadataRecordSchema = z.object({
   statementId: z.string().regex(/^\d{4}-\d{2}-\d{4}$/),
   objectKey: z.string().min(1),
   cardLast4: z.string().regex(/^\d{4}$/),
+  bank: z.enum(BANK_CODES).optional(),
   statementDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   totalSpend: z.number(),
   transactionCount: z.number().int().nonnegative(),

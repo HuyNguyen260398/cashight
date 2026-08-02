@@ -260,3 +260,33 @@ describe('DELETE /statements/{statementId}', () => {
     expect(deps.deleteStatementObject).not.toHaveBeenCalled();
   });
 });
+
+describe('GET /statements — bank field', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('reports the bank on each list item, defaulting legacy records to TPBank', async () => {
+    const deps = makeDeps({
+      queryStatements: vi.fn().mockResolvedValue({
+        items: [
+          {
+            ...mockMetadataRecord,
+            statementId: '2026-07-4550',
+            SK: 'STATEMENT#2026-07#4550',
+            cardLast4: '4550',
+            bank: 'VIB',
+          },
+          // No `bank` key: a record written before multi-bank support.
+          mockMetadataRecord,
+        ],
+        nextCursor: null,
+      }),
+    });
+    const handler = createStatementsApiHandler(deps);
+
+    const res = await handler(makeListEvent());
+    const body = JSON.parse(res.body);
+
+    expect(body.items[0].bank).toBe('VIB');
+    expect(body.items[1].bank).toBe('TPBank');
+  });
+});

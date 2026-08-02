@@ -10,7 +10,13 @@ The numbered files in `docs/plans/` are the original incremental build spec. If 
 
 ## Architecture & Runtime Constraints
 
-The upload path is deterministic: PDF upload goes to `/api/parse` using the Node runtime, `lib/parsers/tpbank.ts` extracts and masks card data, `lib/categorize.ts` categorizes transactions, `StatementSchema.parse()` validates output, and `lib/storage.ts` saves to S3 at `statements/{cardLast4}/{year}/{year}-{mm}.json`. Re-uploading the same month overwrites that key; S3 versioning preserves earlier versions.
+The upload path is deterministic and multi-bank. `extractPdfText()` pulls text once, trying each candidate password from the PDF password secret; `detectBank()` identifies the issuer from marker strings; `parsers/index.ts` routes to `parsers/tpbank.ts` (regex over line text) or `parsers/vib.ts` (coordinate-based layout rows), or throws `UnsupportedBankError` → job `errorCode: 'UNSUPPORTED_BANK'`. Then `lib/categorize.ts` categorizes transactions, `StatementSchema.parse()` validates output, and `lib/storage.ts` saves to S3 at `statements/{cardLast4}/{year}/{year}-{mm}.json`. Re-uploading the same month overwrites that key; S3 versioning preserves earlier versions.
+
+Bank knowledge — codes, short names, detection markers, `?bank=` URL parsing — lives only in `packages/domain/src/banks.ts`. Adding a bank means adding a profile there plus a parser.
+
+VIB specifics: amounts are `5,591,567.00` (comma thousands, dot decimal — the inverse of TPBank), descriptions embed a masked PAN, the card-account number and the cardholder's name (stripped by `scrubVibDescription()` at the parser boundary), and the parser reconciles its per-row tally against the statement's own total-debit figure, throwing when they disagree.
+
+The DOM polyfill import must precede any `pdfjs-dist` or `pdf-parse` import in the same module — pdfjs touches `DOMMatrix` at module-eval time, and getting this wrong crashes only in the bundled Lambda. `dist/lambdas/parser-worker/pdf.worker.mjs` must ship beside `index.js`; `scripts/build-lambdas.mjs` copies it.
 
 Dashboard data is server-rendered from S3: `getAllStatements()` lists and loads statements, pure aggregation helpers roll up month/quarter/year views, and the period state lives in the URL (`?period=quarter&year=2026&quarter=2`). Keep `app/page.tsx` and data-reading API routes dynamic because S3 content can change between requests.
 
@@ -49,7 +55,7 @@ Validate external data at boundaries with Zod schemas from `lib/schemas.ts`. Tre
 
 Vitest runs in a Node environment. Put focused unit tests in `lib/__tests__/` with names like `storage.test.ts` or `aggregations.test.ts`. Prefer deterministic tests around parser output, period math, categorization, storage, formatting, upload error mapping, PDF DOM polyfills, and auth allowlist logic.
 
-Parser tests may depend on gitignored fixture PDFs in `test-pdfs/`; use the existing self-skip pattern when fixtures are absent so CI remains green. The canonical local fixture is `test-pdfs/VC_sao_ke_the_tin_dung_05_2026_9674.pdf`, with expected values documented in `CLAUDE.md`.
+Parser tests may depend on gitignored fixture PDFs in `test-pdfs/`; use the existing self-skip pattern when fixtures are absent so CI remains green. The canonical local fixtures are `test-pdfs/VC_sao_ke_the_tin_dung_05_2026_9674.pdf` (TPBank) and `test-pdfs/vib_saoke_07_2026_4550.pdf` (VIB, password-protected), with expected values documented in `CLAUDE.md`. Parser logic that does not need a PDF — layout row grouping, amount and date parsing, description scrubbing, bank detection — belongs in fixture-free tests so it runs in CI.
 
 Run `pnpm test` for logic changes, `pnpm lint` for UI/route/TypeScript changes, and `pnpm tsc --noEmit` when changing shared types or schemas. CI on pull requests runs lint, build, and tests on Node 24.
 
@@ -59,7 +65,9 @@ Copy `.env.example` to `.env.local` for local development and never commit secre
 
 Preserve PCI hygiene. Mask the card number to `cardLast4` immediately after PDF extraction. The full PAN must never appear in logs, API responses, storage keys, persisted JSON, test output, or AI payloads. Logs may include booleans, counts, totals, storage keys, and `cardLast4`; they must not include raw transaction descriptions, names, full card numbers, file contents, secrets, or `PDF_PASSWORD`.
 
-TPBank statements use Vietnamese number formatting where `.` is the thousands separator. Strip dots in the parser before integer conversion; do not spread that conversion logic elsewhere.
+Vietnamese number formatting differs per bank: TPBank uses `.` as the thousands separator (`17.184.741`), VIB uses `,` with a `.` decimal (`5,591,567.00`). Each conversion lives only in that bank's parser module — `parsers/tpbank.ts` and `parsers/vib-fields.ts`. Do not spread that logic elsewhere.
+
+The PDF password secret may hold either a plain string (one password) or a JSON map of candidates, `{"TPB":"…","VIB":"…"}`. The keys are labels only: the bank cannot be known before the PDF is decrypted, so every value is tried in turn. Never log the secret, the parsed list, or any element of it.
 
 ## Commit & Pull Request Guidelines
 

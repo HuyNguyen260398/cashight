@@ -4,6 +4,7 @@ import {
   UploadJobStateSchema,
   CreateUploadRequestSchema,
 } from '@cashight/domain/api';
+import { BANK_CODES } from '@cashight/domain/banks';
 
 // Re-export domain primitives for consumers of this module.
 export { UploadJobSchema, UploadJobStateSchema, CreateUploadRequestSchema };
@@ -43,6 +44,8 @@ export type UploadJobResponse = z.infer<typeof UploadJobResponseSchema>;
 export const StatementListItemSchema = z.object({
   statementId: z.string(),
   cardLast4: z.string().regex(/^\d{4}$/),
+  // Older API responses omit this; every pre-VIB statement is a TPBank one.
+  bank: z.enum(BANK_CODES).default('TPBank'),
   statementDate: z.string(), // "YYYY-MM-DD"
   totalSpend: z.number(),
   transactionCount: z.number().int(),

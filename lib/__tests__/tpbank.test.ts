@@ -82,3 +82,16 @@ describe.skipIf(!canTestProtected)('parseTPBankStatement — password-protected 
     expect(stmt.transactions.length).toBeGreaterThan(0);
   });
 });
+
+// The dispatcher extracts text once and hands it to the parser, so the
+// text-taking entry point must be exported independently of the buffer one.
+describe('parseTPBankStatementFromText', () => {
+  it('is exported and rejects text that is not a TPBank statement', async () => {
+    const { parseTPBankStatementFromText } = await import(
+      '@cashight/domain/parsers/tpbank'
+    );
+    expect(() => parseTPBankStatementFromText('not a statement')).toThrow(
+      /could not find/i,
+    );
+  });
+});

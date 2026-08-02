@@ -6,6 +6,7 @@ import { apiFetch } from '@/frontend/api/client';
 import { getPublicConfig } from '@/frontend/auth/config';
 import { computeSha256 } from '@/frontend/lib/sha256';
 import { sleep } from '@/frontend/lib/sleep';
+import { uploadErrorMessage } from '@cashight/domain/upload-error';
 import {
   CreateUploadResponseSchema,
   UploadJobResponseSchema,
@@ -184,7 +185,7 @@ export function useUploadJob(): {
           default:
             setState({
               phase: 'failed',
-              error: finalJob.errorCode ?? 'Processing failed',
+              error: uploadErrorMessage(finalJob.errorCode),
             });
         }
       } catch (err: unknown) {

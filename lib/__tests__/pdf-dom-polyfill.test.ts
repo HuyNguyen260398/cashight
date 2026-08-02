@@ -37,16 +37,36 @@ describe('pdf DOM polyfill', () => {
     expect(inv.f).toBeCloseTo(-2);
   });
 
-  it('parser imports the polyfill before pdf-parse so globals exist at eval time', () => {
+  // Both PDF engines reference `DOMMatrix` while their module body evaluates,
+  // so the polyfill import must come first in any module that pulls one in.
+  // Getting this wrong crashes at import time with "DOMMatrix is not defined",
+  // and only in the bundled Lambda — hence a source-order assertion.
+  it.each([
+    ['pdf-text.ts (pdf-parse)', 'pdf-text.ts', "from 'pdf-parse'"],
+    ['pdf-layout.ts (pdfjs-dist)', 'pdf-layout.ts', "from 'pdfjs-dist"],
+  ])('%s imports the polyfill first', (_label, file, engineImport) => {
+    const src = readFileSync(
+      fileURLToPath(
+        new URL(`../../packages/domain/src/parsers/${file}`, import.meta.url),
+      ),
+      'utf8',
+    );
+    const polyfillIdx = src.indexOf('pdf-dom-polyfill');
+    const engineIdx = src.indexOf(engineImport);
+    expect(polyfillIdx).toBeGreaterThanOrEqual(0);
+    expect(engineIdx).toBeGreaterThan(polyfillIdx);
+  });
+
+  // The TPBank parser no longer imports a PDF engine directly — it receives
+  // already-extracted text. If that ever regresses, the rule above must cover it.
+  it('tpbank.ts does not import a PDF engine directly', () => {
     const src = readFileSync(
       fileURLToPath(
         new URL('../../packages/domain/src/parsers/tpbank.ts', import.meta.url),
       ),
       'utf8',
     );
-    const polyfillIdx = src.indexOf("pdf-dom-polyfill");
-    const pdfParseIdx = src.indexOf("from 'pdf-parse'");
-    expect(polyfillIdx).toBeGreaterThanOrEqual(0);
-    expect(pdfParseIdx).toBeGreaterThan(polyfillIdx);
+    expect(src).not.toContain("from 'pdf-parse'");
+    expect(src).not.toContain("from 'pdfjs-dist");
   });
 });

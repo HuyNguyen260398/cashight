@@ -4,6 +4,7 @@ import { StatementSchema } from '@cashight/domain/schemas';
 import type { Statement } from '@cashight/domain/schemas';
 
 import type { TransitionResult, UploadJobRecord } from '../../shared/metadata';
+import { parsePdfPasswords } from '../../shared/pdf-passwords';
 import { statementId, statementObjectKey } from '../../shared/storage';
 
 export interface ProcessJobDependencies {
@@ -22,7 +23,7 @@ export interface ProcessJobDependencies {
   downloadPdf: (key: string) => Promise<Buffer>;
   deletePdf: (key: string) => Promise<void>;
   getSecret: (id: string) => Promise<string>;
-  parsePdf: (buffer: Buffer, password?: string) => Promise<Statement>;
+  parsePdf: (buffer: Buffer, passwords: string[]) => Promise<Statement>;
   checkDestinationExists: (key: string) => Promise<boolean>;
   writeStatement: (key: string, statement: Statement) => Promise<void>;
   writeMetadata: (params: {
@@ -44,6 +45,10 @@ function isPasswordError(err: unknown): boolean {
     err.message.toLowerCase().includes('password') ||
     err.message.toLowerCase().includes('encrypted')
   );
+}
+
+function isUnsupportedBankError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'UnsupportedBankError';
 }
 
 function isPdfMagic(buffer: Buffer): boolean {
@@ -110,11 +115,21 @@ export function createProcessJob(deps: ProcessJobDependencies) {
     // Parse PDF
     let statement: Statement;
     try {
-      const pdfPassword = await deps.getSecret(process.env.PDF_PASSWORD_SECRET_ID ?? '');
-      const rawStatement = await deps.parsePdf(pdfBuffer, pdfPassword || undefined);
+      const secret = await deps.getSecret(process.env.PDF_PASSWORD_SECRET_ID ?? '');
+      const passwords = parsePdfPasswords(secret);
+      const rawStatement = await deps.parsePdf(pdfBuffer, passwords);
       // Validate with Zod
       statement = StatementSchema.parse(rawStatement);
     } catch (err) {
+      // Checked before the password branch: an unsupported-bank error can carry
+      // a message that mentions neither passwords nor encryption.
+      if (isUnsupportedBankError(err)) {
+        await deps.transitionToTerminal(jobId, 'FAILED', {
+          errorCode: 'UNSUPPORTED_BANK',
+        });
+        await deps.deletePdf(s3Key);
+        return;
+      }
       if (isPasswordError(err)) {
         await deps.transitionToTerminal(jobId, 'FAILED', { errorCode: 'WRONG_PASSWORD' });
         await deps.deletePdf(s3Key);

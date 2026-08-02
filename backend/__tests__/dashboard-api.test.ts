@@ -185,3 +185,59 @@ describe('GET /dashboard', () => {
     expect(body.statementCount).toBe(10);
   });
 });
+
+describe('GET /dashboard — bank filter', () => {
+  const vibMeta: StatementMetadataRecord = {
+    ...mockMetaRecord,
+    SK: 'STATEMENT#2026-05#4550',
+    statementId: '2026-05-4550',
+    objectKey: 'users/user-123/statements/4550/2026/2026-05.json',
+    cardLast4: '4550',
+    bank: 'VIB',
+  };
+  const vibStatement: Statement = {
+    ...mockStatement,
+    bank: 'VIB',
+    cardLast4: '4550',
+  };
+
+  function makeMultiBankDeps(): DashboardApiDependencies {
+    return makeDeps({
+      queryStatementsForYear: vi.fn().mockResolvedValue([mockMetaRecord, vibMeta]),
+      getStatementObject: vi
+        .fn()
+        .mockImplementation(async (key: string) =>
+          key === vibMeta.objectKey ? vibStatement : mockStatement,
+        ),
+    });
+  }
+
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('narrows the view to the requested bank', async () => {
+    const handler = createDashboardApiHandler(makeMultiBankDeps());
+    const res = await handler(
+      makeEvent({ period: 'month', year: '2026', month: '5', bank: 'VIB' }),
+    );
+    const body = JSON.parse(res.body);
+
+    expect(body.statementCount).toBe(1);
+    expect(body.availableBanks).toEqual(['TPBank', 'VIB']);
+  });
+
+  it('includes every bank when no bank param is given', async () => {
+    const handler = createDashboardApiHandler(makeMultiBankDeps());
+    const res = await handler(makeEvent({ period: 'month', year: '2026', month: '5' }));
+
+    expect(JSON.parse(res.body).statementCount).toBe(2);
+  });
+
+  it('ignores an unrecognised bank value', async () => {
+    const handler = createDashboardApiHandler(makeMultiBankDeps());
+    const res = await handler(
+      makeEvent({ period: 'month', year: '2026', month: '5', bank: 'Sacombank' }),
+    );
+
+    expect(JSON.parse(res.body).statementCount).toBe(2);
+  });
+});
