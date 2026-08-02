@@ -16,7 +16,8 @@
     "./upload-error": "./src/upload-error.ts",
     "./security/*": "./src/security/*.ts",
     "./pdf-dom-polyfill": "./src/pdf-dom-polyfill.ts",
-    "./parsers/tpbank": "./src/parsers/tpbank.ts"
+    "./parsers/tpbank": "./src/parsers/tpbank.ts",
+    "./parsers/pdf-layout": "./src/parsers/pdf-layout.ts"
   },
   "dependencies": {
     "date-fns": "^4.3.0",
