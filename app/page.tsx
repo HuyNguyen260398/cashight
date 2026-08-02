@@ -3,8 +3,10 @@
 import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { parsePeriodFromSearch } from '@/lib/period';
+import { parseBankFromSearch } from '@/lib/banks';
 import { Dashboard } from '@/app/components/dashboard';
 import { PeriodSelector } from '@/app/components/period-selector';
+import { BankSelector } from '@/app/components/bank-selector';
 import { EmptyState } from '@/app/components/empty-state';
 import { EmptyPeriodState } from '@/app/components/empty-period-state';
 import { useDashboard } from '@/frontend/hooks/use-dashboard';
@@ -36,6 +38,7 @@ function DashboardPageInner() {
   const hasPeriod = searchParams.has('period');
 
   const spec = parsePeriodFromSearch(searchParams);
+  const bank = parseBankFromSearch(searchParams);
 
   // When no period is in the URL, fetch the statement list to find the most
   // recent month and redirect.  `fetchCompleted` is set to true only in async
@@ -80,6 +83,7 @@ function DashboardPageInner() {
 
   const { data: view, loading: dashLoading, error } = useDashboard(
     hasPeriod ? spec : null,
+    bank,
   );
 
   const header = (
@@ -95,7 +99,15 @@ function DashboardPageInner() {
           Track statement totals, category mix, installments, and merchant spend.
         </p>
       </div>
-      <PeriodSelector current={spec} />
+      <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+        {/* While the view is loading `availableBanks` is unknown — keep the
+            current selection visible rather than dropping to "All banks". */}
+        <BankSelector
+          current={bank}
+          available={view?.availableBanks ?? (bank ? [bank] : [])}
+        />
+        <PeriodSelector current={spec} />
+      </div>
     </header>
   );
 
