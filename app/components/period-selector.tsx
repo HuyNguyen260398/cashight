@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -15,9 +15,15 @@ import {
 
 export function PeriodSelector({ current }: { current: PeriodSpec }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   function setPeriod(spec: PeriodSpec) {
-    const params = new URLSearchParams();
+    // Start from the current URL so the bank filter survives a period change —
+    // rebuilding from scratch silently reset it on every next/prev click.
+    // month/quarter are rewritten below, so stale ones must be cleared.
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('month');
+    params.delete('quarter');
     params.set('period', spec.type);
     params.set('year', String(spec.year));
     if (spec.type === 'month') {

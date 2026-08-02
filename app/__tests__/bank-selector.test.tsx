@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { BankSelector, bankOptions } from '@/app/components/bank-selector';
 
@@ -12,6 +12,10 @@ vi.mock('next/navigation', () => ({
 }));
 
 describe('BankSelector', () => {
+  // No vitest globals in this project, so Testing Library's auto-cleanup never
+  // registers; without this, renders accumulate across tests.
+  afterEach(cleanup);
+
   it('shows the short name of the selected bank', () => {
     render(<BankSelector current={'TPBank'} available={['TPBank', 'VIB']} />);
     expect(screen.getByText('TPB')).toBeTruthy();

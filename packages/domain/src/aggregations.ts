@@ -7,7 +7,7 @@
  */
 
 import { getDaysInMonth } from 'date-fns';
-import type { BankCode } from './banks';
+import { resolveBank, type BankCode } from './banks';
 import type { Statement, Transaction } from './schemas';
 import {
   NON_SPEND,
@@ -32,6 +32,14 @@ export interface AggregatedView {
    * posting the older shape to /summaries must still validate.
    */
   availableBanks?: BankCode[];
+  /**
+   * The bank this view actually covers — the caller's choice, or the one
+   * `resolveBank` picked when the URL named none. The dropdown renders from
+   * this, so what is highlighted always matches what the numbers describe.
+   *
+   * Optional for the same reason as `availableBanks`.
+   */
+  selectedBank?: BankCode;
   totals: {
     totalSpend: number;
     totalInstallments: number;
@@ -240,9 +248,13 @@ function mergeTopMerchants(
 
 export interface AggregateOptions {
   /**
-   * Narrow the view to one bank. Null/undefined aggregates every bank — the
-   * dashboard never asks for that (its URL parsing always resolves to a single
-   * bank), but the roll-up itself stays general.
+   * Which bank to show. A view is always exactly one bank — never a combined
+   * total across banks, because balances and totals from different cards do
+   * not add up to anything meaningful.
+   *
+   *  - a BankCode: exactly that bank, even if it has no statements this period
+   *  - null/undefined: resolved by `resolveBank` against the banks actually
+   *    present in the period. The choice is reported back as `selectedBank`.
    */
   bank?: BankCode | null;
 }
@@ -257,9 +269,10 @@ export function aggregate(
   // Computed before the bank filter: the dropdown must keep offering every
   // bank in the period even while one of them is selected.
   const availableBanks = [...new Set(inPeriod.map((s) => s.bank))].sort();
-  const filtered = options.bank
-    ? inPeriod.filter((s) => s.bank === options.bank)
-    : inPeriod;
+  // Resolved here rather than at URL-parse time: picking a bank that has data
+  // requires knowing what the period holds, which only this function does.
+  const selectedBank = resolveBank(options.bank ?? null, availableBanks);
+  const filtered = inPeriod.filter((s) => s.bank === selectedBank);
 
   const totals = filtered.reduce(
     (acc, s) => ({
@@ -290,6 +303,7 @@ export function aggregate(
     label: periodLabel(spec),
     statementCount: filtered.length,
     availableBanks,
+    selectedBank,
     totals,
     latestStatement: latest
       ? {

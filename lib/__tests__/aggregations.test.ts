@@ -533,16 +533,11 @@ describe('aggregate — bank filter', () => {
     },
   ];
 
-  it('includes every bank when no filter is given', () => {
-    const view = aggregate(statements, spec);
-    expect(view.statementCount).toBe(2);
-    expect(view.totals.totalSpend).toBe(1_250_000);
-  });
-
   it('narrows totals to the selected bank', () => {
     const view = aggregate(statements, spec, { bank: 'VIB' });
     expect(view.statementCount).toBe(1);
     expect(view.totals.totalSpend).toBe(250_000);
+    expect(view.selectedBank).toBe('VIB');
   });
 
   it('lists the banks present in the period regardless of the filter', () => {
@@ -555,7 +550,39 @@ describe('aggregate — bank filter', () => {
     expect(view.availableBanks).toEqual([]);
   });
 
-  it('treats a null bank as no filter', () => {
-    expect(aggregate(statements, spec, { bank: null }).statementCount).toBe(2);
+  // Unspecified means "pick one that has data" — never a combined total.
+  it('auto-selects the default bank when it has statements in the period', () => {
+    const view = aggregate(statements, spec, { bank: null });
+    expect(view.selectedBank).toBe('TPBank');
+    expect(view.statementCount).toBe(1);
+    expect(view.totals.totalSpend).toBe(1_000_000);
+  });
+
+  it('auto-selects the only bank present when the default has none', () => {
+    const vibOnly = [
+      {
+        ...makeStatement(2026, 7, { totalSpend: 250_000 }),
+        bank: 'VIB' as const,
+        cardLast4: '4550',
+      },
+    ];
+    const view = aggregate(vibOnly, spec);
+    expect(view.selectedBank).toBe('VIB');
+    expect(view.statementCount).toBe(1);
+    expect(view.totals.totalSpend).toBe(250_000);
+  });
+
+  it('honours an explicit bank that has no statements in the period', () => {
+    const view = aggregate(statements, { type: 'month', year: 2026, month: 1 }, {
+      bank: 'VIB',
+    });
+    expect(view.selectedBank).toBe('VIB');
+    expect(view.statementCount).toBe(0);
+  });
+
+  it('reports a selected bank even for an empty period', () => {
+    const view = aggregate([], spec);
+    expect(view.selectedBank).toBe('TPBank');
+    expect(view.statementCount).toBe(0);
   });
 });
