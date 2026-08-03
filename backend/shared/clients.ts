@@ -1,6 +1,6 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
 import { S3Client } from '@aws-sdk/client-s3';
+import { SSMClient } from '@aws-sdk/client-ssm';
 import { SQSClient } from '@aws-sdk/client-sqs';
 import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 
@@ -13,5 +13,5 @@ export const dynamoDocumentClient = DynamoDBDocumentClient.from(
   new DynamoDBClient({ region }),
   { marshallOptions: { removeUndefinedValues: true } },
 );
-export const secretsManagerClient = new SecretsManagerClient({ region });
+export const ssmClient = new SSMClient({ region });
 export const sqsClient = new SQSClient({ region });
