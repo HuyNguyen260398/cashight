@@ -41,16 +41,24 @@ variable "allowed_email" {
 variable "cutover_dns_to_cloudfront" {
   type        = bool
   description = <<-EOT
-    Phase 9 DNS cutover toggle.
+    Phase 9 DNS cutover toggle. The cutover is complete, so this defaults to true
+    and there is no longer a supported way to set it to false.
 
-    false (default): cashight.nghuy.link is managed by aws_amplify_domain_association.
-                     CloudFront serves only next.cashight.nghuy.link (staging).
+    true (current): a Route 53 ALIAS record points cashight.nghuy.link at the
+                    CloudFront distribution, which serves both the production and
+                    next.* aliases.
 
-    true (cutover):  aws_amplify_domain_association is removed. A Route 53 ALIAS record
-                     points cashight.nghuy.link at the CloudFront distribution directly.
-                     The Amplify app and branch remain intact for rollback via re-apply.
+    false:          DO NOT SET. This destroys aws_route53_record.frontend_prod and
+                    drops cashight.nghuy.link from the distribution's aliases, which
+                    takes the production domain offline. The original rollback path
+                    handed the record back to aws_amplify_domain_association, but the
+                    Amplify resources were removed in Phase 10 — nothing re-creates
+                    the record now.
 
-    To roll back: set this to false and re-apply. Amplify re-provisions its DNS record.
+    The default was false while the cutover was pending. That made an apply with no
+    tfvars silently destroy production DNS, so it was flipped once the cutover landed.
+    This variable is retained only so the existing count/conditional expressions keep
+    working; it should be removed along with them.
   EOT
-  default     = false
+  default     = true
 }

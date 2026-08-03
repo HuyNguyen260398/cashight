@@ -45,7 +45,33 @@ jobs:
       - name: Terraform init
         run: terraform init -input=false
 
+      # Every Terraform variable has a default, so a missing secret does not fail
+      # the plan — it silently plans against the wrong value. For these three that
+      # means destroying the production Route 53 record and blanking the Cognito
+      # IdP credentials and the auth-guard allowlist. Fail loudly instead.
+      - name: Verify required Terraform variables are present
+        env:
+          ALLOWED_EMAIL: ${{ secrets.TF_ALLOWED_EMAIL }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.TF_GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.TF_GOOGLE_OAUTH_CLIENT_SECRET }}
+        run: |
+          missing=""
+          [ -n "$ALLOWED_EMAIL" ]              || missing="$missing TF_ALLOWED_EMAIL"
+          [ -n "$GOOGLE_OAUTH_CLIENT_ID" ]     || missing="$missing TF_GOOGLE_OAUTH_CLIENT_ID"
+          [ -n "$GOOGLE_OAUTH_CLIENT_SECRET" ] || missing="$missing TF_GOOGLE_OAUTH_CLIENT_SECRET"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing"
+            echo "Planning without them would blank the Cognito Google IdP and the" >&2
+            echo "auth-guard allowlist. See docs/aws-cost-review-2026-07.md section 9." >&2
+            exit 1
+          fi
+          echo "All required Terraform variables are present."
+
       - name: Terraform plan
+        env:
+          TF_VAR_allowed_email: ${{ secrets.TF_ALLOWED_EMAIL }}
+          TF_VAR_google_oauth_client_id: ${{ secrets.TF_GOOGLE_OAUTH_CLIENT_ID }}
+          TF_VAR_google_oauth_client_secret: ${{ secrets.TF_GOOGLE_OAUTH_CLIENT_SECRET }}
         run: |
           terraform plan \
             -input=false \
@@ -96,6 +122,10 @@ jobs:
           name: tfplan-${{ github.sha }}
           path: terraform
 
+      # No TF_VAR_* here on purpose: applying a saved plan file uses the variable
+      # values already baked into it at plan time, and Terraform rejects variable
+      # input alongside a plan file. Keeping the secrets out of this job also keeps
+      # them off the approval-gated runner.
       - name: Terraform apply
         run: |
           terraform apply \
