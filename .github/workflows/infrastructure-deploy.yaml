@@ -23,6 +23,9 @@ jobs:
   plan:
     name: Terraform Plan
     runs-on: ubuntu-latest
+    # Required: cashight-github-infra trusts only subjects of the form
+    # repo:<repo>:environment:production, so a job without this cannot assume it.
+    environment: production
 
     steps:
       - name: Checkout

@@ -176,9 +176,70 @@ resource "aws_iam_role_policy" "terraform_state_read" {
   policy = data.aws_iam_policy_document.terraform_state_read.json
 }
 
+# ── Terraform CI role ─────────────────────────────────────────────────────────
+#
+# infrastructure-deploy.yaml referenced vars.AWS_INFRA_ROLE_ARN, which was never
+# set, and no matching role existed — the workflow had never run once. Every
+# apply to date came from a workstation, which is why the deployed state drifted
+# from what the repo could reproduce.
+#
+# Scope: Terraform here manages IAM roles and policies, so PowerUserAccess is not
+# enough (it denies iam:*). This role is effectively account-admin. Two things
+# keep that honest:
+#
+#   1. The trust condition below admits ONLY jobs that declare
+#      `environment: production` — not any job running on main. Both the plan and
+#      apply jobs declare it.
+#   2. That makes GitHub's environment protection the gate. The production
+#      environment currently has NO protection rules, so add required reviewers
+#      to it — otherwise this is admin-on-merge with no human in the loop.
+#
+# If tighter scoping is wanted later, split this into a read-only plan role and
+# an admin apply role, and give the plan job the read-only one.
+
+data "aws_iam_policy_document" "github_infra_trust" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    principals {
+      type        = "Federated"
+      identifiers = [data.aws_iam_openid_connect_provider.github.arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+    # Environment-scoped only — deliberately narrower than the deploy role, which
+    # also admits refs/heads/main.
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:${var.github_repository}:environment:production"]
+    }
+  }
+}
+
+resource "aws_iam_role" "github_infra" {
+  name                 = "${var.project_name}-github-infra"
+  description          = "Terraform plan/apply from GitHub Actions. Admin-equivalent; gated by the production environment."
+  assume_role_policy   = data.aws_iam_policy_document.github_infra_trust.json
+  max_session_duration = 3600
+}
+
+resource "aws_iam_role_policy_attachment" "github_infra_admin" {
+  role       = aws_iam_role.github_infra.name
+  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
+}
+
 # ── Outputs ───────────────────────────────────────────────────────────────────
 
 output "github_deploy_role_arn" {
   value       = aws_iam_role.github_deploy.arn
   description = "Set as the AWS_DEPLOY_ROLE_ARN GitHub Actions variable."
+}
+
+output "github_infra_role_arn" {
+  value       = aws_iam_role.github_infra.arn
+  description = "Set as the AWS_INFRA_ROLE_ARN GitHub Actions variable."
 }
