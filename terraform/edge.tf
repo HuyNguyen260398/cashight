@@ -144,9 +144,11 @@ resource "aws_cloudfront_distribution" "frontend" {
     "next.cashight.nghuy.link",
   ]
 
-  # Associate the existing CloudFront WAF ACL (shared with Amplify).
-  # Retains Amplify protection until cutover; both distributions are guarded.
-  web_acl_id = aws_wafv2_web_acl.cashight.arn
+  # No WAF ACL. The CloudFront ACL this once referenced was deleted out-of-band
+  # and its stated purpose ("retain Amplify protection until cutover") expired
+  # when the Amplify runtime was decommissioned on 2026-07-03. Re-creating it
+  # costs $5/mo for the ACL plus $1/mo per rule; the origin is a static S3
+  # bucket behind OAC, so managed rule groups buy very little here.
 
   viewer_certificate {
     acm_certificate_arn      = aws_acm_certificate_validation.frontend.certificate_arn

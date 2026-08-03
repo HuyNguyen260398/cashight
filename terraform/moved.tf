@@ -10,6 +10,5 @@
 #   module.auth        ← aws_cognito_user_pool.users, .domain, .client
 #   module.observability ← aws_cloudwatch_metric_alarm.*, aws_sns_topic.*
 #   module.cicd        ← aws_iam_role.github_deploy, aws_iam_role_policy.lambda_deploy
-#   module.edge        ← aws_wafv2_web_acl.cashight
 #
 # Amplify resources removed in Phase 10 (chore: remove legacy amplify runtime).

@@ -1,4 +1,4 @@
-# terraform/compute.tf — Secrets Manager, Lambda IAM roles, functions, log groups, aliases
+# terraform/compute.tf — SSM parameters, Lambda IAM roles, functions, log groups, aliases
 
 # ── Placeholder zip (real artifacts are uploaded by CI) ──────────────────────
 
@@ -11,25 +11,42 @@ data "archive_file" "placeholder" {
   }
 }
 
-# ── Secrets Manager (metadata only — no secret versions committed) ────────────
+# ── SSM Parameter Store (metadata only — real values set out of band) ─────────
+#
+# Standard-tier SecureString parameters are free; Secrets Manager charged $0.40
+# per secret per month for the same job. Neither value needs rotation, staging
+# labels, or cross-account sharing, so Parameter Store is the cheaper fit.
+#
+# `value` is a placeholder and is ignored on subsequent plans — the real values
+# are written out of band (see docs/aws-cost-review-2026-07.md §8) so they never
+# land in the repo or in Terraform state as a managed attribute.
 
-resource "aws_secretsmanager_secret" "pdf_password" {
-  name                    = "/cashight/prod/pdf-password"
-  description             = "PDF statement password for parser-worker"
-  recovery_window_in_days = 7
+resource "aws_ssm_parameter" "pdf_password" {
+  name        = "/cashight/prod/pdf-password"
+  description = "PDF statement password(s) for parser-worker; JSON map or plain string"
+  type        = "SecureString"
+  value       = "PLACEHOLDER — set out of band"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
 }
 
-resource "aws_secretsmanager_secret" "gemini_api_key" {
-  name                    = "/cashight/prod/gemini-api-key"
-  description             = "Gemini API key for summary-api"
-  recovery_window_in_days = 7
+resource "aws_ssm_parameter" "gemini_api_key" {
+  name        = "/cashight/prod/gemini-api-key"
+  description = "Gemini API key for summary-api"
+  type        = "SecureString"
+  value       = "PLACEHOLDER — set out of band"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
 }
 
-resource "aws_secretsmanager_secret" "google_oauth" {
-  name                    = "/cashight/prod/google-oauth"
-  description             = "Google OAuth client credentials for Cognito IdP"
-  recovery_window_in_days = 7
-}
+# NOTE: there is deliberately no google-oauth secret. Cognito's Google IdP takes
+# its credentials from var.google_oauth_client_id / _client_secret (cognito.tf),
+# so the secret that used to live here was never read by anything — no IAM grant
+# referenced it and its LastAccessedDate was never set.
 
 # ── Shared IAM building blocks ────────────────────────────────────────────────
 
@@ -341,8 +358,8 @@ data "aws_iam_policy_document" "lambda_parser_worker_permissions" {
   statement {
     sid       = "GetPdfPassword"
     effect    = "Allow"
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_secretsmanager_secret.pdf_password.arn]
+    actions   = ["ssm:GetParameter"]
+    resources = [aws_ssm_parameter.pdf_password.arn]
   }
   statement {
     sid    = "SQSConsume"
@@ -386,10 +403,10 @@ resource "aws_lambda_function" "parser_worker" {
 
   environment {
     variables = {
-      TABLE_NAME             = aws_dynamodb_table.cashight.name
-      UPLOAD_BUCKET          = aws_s3_bucket.uploads.bucket
-      STATEMENTS_BUCKET      = aws_s3_bucket.statements.bucket
-      PDF_PASSWORD_SECRET_ID = aws_secretsmanager_secret.pdf_password.arn
+      TABLE_NAME         = aws_dynamodb_table.cashight.name
+      UPLOAD_BUCKET      = aws_s3_bucket.uploads.bucket
+      STATEMENTS_BUCKET  = aws_s3_bucket.statements.bucket
+      PDF_PASSWORD_PARAM = aws_ssm_parameter.pdf_password.name
     }
   }
 
@@ -627,8 +644,8 @@ data "aws_iam_policy_document" "lambda_summary_api_permissions" {
   statement {
     sid       = "GetGeminiKey"
     effect    = "Allow"
-    actions   = ["secretsmanager:GetSecretValue"]
-    resources = [aws_secretsmanager_secret.gemini_api_key.arn]
+    actions   = ["ssm:GetParameter"]
+    resources = [aws_ssm_parameter.gemini_api_key.arn]
   }
 }
 
@@ -659,7 +676,7 @@ resource "aws_lambda_function" "summary_api" {
     variables = {
       TABLE_NAME        = aws_dynamodb_table.cashight.name
       STATEMENTS_BUCKET = aws_s3_bucket.statements.bucket
-      GEMINI_SECRET_ID  = aws_secretsmanager_secret.gemini_api_key.arn
+      GEMINI_PARAM      = aws_ssm_parameter.gemini_api_key.name
     }
   }
 

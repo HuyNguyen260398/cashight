@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
+import type { SSMClient } from '@aws-sdk/client-ssm';
 import { describe, expect, it, vi } from 'vitest';
 
 import { errorResponse } from '../shared/api-response';
@@ -194,18 +194,45 @@ describe('observability privacy', () => {
   });
 });
 
-describe('Secrets Manager adapter', () => {
-  it('retrieves and caches secret strings through an injected client', async () => {
+describe('SSM Parameter Store adapter', () => {
+  it('retrieves and caches parameter values through an injected client', async () => {
     clearSecretCache();
-    const send = vi.fn().mockResolvedValue({ SecretString: 'secret-value' });
-    const client = { send } as unknown as SecretsManagerClient;
+    const send = vi
+      .fn()
+      .mockResolvedValue({ Parameter: { Value: 'secret-value' } });
+    const client = { send } as unknown as SSMClient;
 
-    await expect(getSecretString('secret-id', client)).resolves.toBe(
+    await expect(getSecretString('/cashight/prod/x', client)).resolves.toBe(
       'secret-value',
     );
-    await expect(getSecretString('secret-id', client)).resolves.toBe(
+    await expect(getSecretString('/cashight/prod/x', client)).resolves.toBe(
       'secret-value',
     );
     expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('requests decryption so SecureString parameters resolve', async () => {
+    clearSecretCache();
+    const send = vi
+      .fn()
+      .mockResolvedValue({ Parameter: { Value: 'decrypted' } });
+    const client = { send } as unknown as SSMClient;
+
+    await getSecretString('/cashight/prod/pdf-password', client);
+
+    expect(send.mock.calls[0][0].input).toEqual({
+      Name: '/cashight/prod/pdf-password',
+      WithDecryption: true,
+    });
+  });
+
+  it('throws when the parameter has no value', async () => {
+    clearSecretCache();
+    const send = vi.fn().mockResolvedValue({ Parameter: {} });
+    const client = { send } as unknown as SSMClient;
+
+    await expect(getSecretString('/cashight/prod/y', client)).rejects.toThrow(
+      'Configured parameter has no string value',
+    );
   });
 });

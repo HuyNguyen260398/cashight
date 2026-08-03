@@ -115,7 +115,7 @@ export function createProcessJob(deps: ProcessJobDependencies) {
     // Parse PDF
     let statement: Statement;
     try {
-      const secret = await deps.getSecret(process.env.PDF_PASSWORD_SECRET_ID ?? '');
+      const secret = await deps.getSecret(process.env.PDF_PASSWORD_PARAM ?? '');
       const passwords = parsePdfPasswords(secret);
       const rawStatement = await deps.parsePdf(pdfBuffer, passwords);
       // Validate with Zod

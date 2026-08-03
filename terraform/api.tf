@@ -94,12 +94,16 @@ resource "aws_api_gateway_method_settings" "cashight" {
   }
 }
 
-# ── WAF association ───────────────────────────────────────────────────────────
-
-resource "aws_wafv2_web_acl_association" "api" {
-  resource_arn = aws_api_gateway_stage.prod.arn
-  web_acl_arn  = aws_wafv2_web_acl.api.arn
-}
+# ── WAF ───────────────────────────────────────────────────────────────────────
+#
+# Deliberately absent. The regional ACL that guarded this stage cost $9/mo
+# ($5 Web ACL + $1 per rule) — 78% of the project's entire AWS bill — to sit in
+# front of an API that is already gated by Cognito plus a single-email allowlist.
+# Its AWSManagedRulesCommonRuleSet also returned 403 to User-Agent-less requests,
+# which broke smoke tests and uptime monitors.
+#
+# If reinstating: prefer API Gateway usage-plan throttling (free) for rate
+# limiting, and add the ACL back with CommonRuleSet only.
 
 # ── Custom domain and Route 53 ────────────────────────────────────────────────
 

@@ -113,7 +113,7 @@ async function* defaultStream(prompt: string, apiKey: string): AsyncGenerator<st
 }
 
 async function defaultGetApiKey(): Promise<string | undefined> {
-  const secretId = requiredEnvironmentValue('GEMINI_SECRET_ID');
+  const secretId = requiredEnvironmentValue('GEMINI_PARAM');
   try {
     const key = await getSecretString(secretId);
     return key || undefined;
