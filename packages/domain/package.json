@@ -24,7 +24,7 @@
     "./parsers": "./src/parsers/index.ts"
   },
   "dependencies": {
-    "date-fns": "^4.3.0",
+    "date-fns": "^4.4.0",
     "pdf-parse": "^2.4.5",
     "zod": "^4.4.3"
   }
