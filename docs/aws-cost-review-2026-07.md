@@ -31,12 +31,11 @@ There is also a **Terraform drift landmine**: `cashight/terraform/waf.tf` declar
 CloudFront Web ACL that no longer exists in AWS. The next `terraform apply` will
 silently re-create it and add **+$9/mo** (§5).
 
-Sections **§8–§9 scope the same analysis to cashight specifically** and record the
-cleanup applied to it. **§9 is the most important thing in this document and is not a
-cost finding:** the cashight Terraform config cannot currently be applied — from a
-workstation or from CI — without destroying the production DNS record and breaking
-authentication, because the required variables are supplied by neither. Read it before
-running any apply.
+Sections **§8–§10 scope the same analysis to cashight specifically**. **§9 was the most
+important finding in this document and is not a cost issue:** the Terraform config could
+not be applied — from a workstation or from CI — without destroying the production DNS
+record and breaking authentication, because the required variables were supplied by
+neither. That is now fixed. **§10 records what was actually applied and verified.**
 
 ---
 
@@ -411,11 +410,15 @@ throttle settings costs nothing and covers it.
 
 ---
 
-## 9. Blocker — Terraform cannot currently be applied safely
+## 9. Blocker (RESOLVED) — Terraform could not be applied safely
 
-**The changes in §8.3 are committed but NOT applied.** Applying from this working copy —
-or from CI as currently written — would damage production. This is a pre-existing
-condition, not something the cost cleanup introduced.
+> **Status: resolved 2026-08-03.** Fixed in #112, and the cleanup in §8.3 was applied.
+> See §10 for what actually happened. The analysis below is kept as the record of
+> why the pipeline could not be trusted.
+
+Applying from a working copy — or from CI as then written — would have damaged
+production. This was a pre-existing condition, not something the cost cleanup
+introduced.
 
 `terraform/.gitignore` ignores `*.tfvars`, and the real `terraform.tfvars` is not on this
 machine. `.github/workflows/infrastructure-deploy.yaml` runs a bare `terraform plan` with
@@ -480,6 +483,81 @@ Between steps 1 and 3 the deployed code still expects `PDF_PASSWORD_SECRET_ID` /
 `GEMINI_SECRET_ID`, which no longer exist — PDF parsing and AI summaries will fail during
 that window. Everything else, including sign-in and the dashboard, is unaffected. Keep the
 window short, or apply step 1 from the feature branch just before merging.
+
+---
+
+## 10. Outcome — what was actually done
+
+Executed 2026-08-03. All figures below are verified against live AWS state, not planned.
+
+### 10.1 Applied
+
+| Change | PR | Verification |
+|---|---|---|
+| Regional WAF `cashight-api` + its association destroyed | #111 | `list-web-acls --scope REGIONAL` returns empty |
+| CloudFront WAF drift resolved (config no longer declares it) | #111 | plan is clean; nothing re-creates it |
+| `pdf-password` + `gemini-api-key` moved to SSM SecureString | #111 | values re-read from SSM match the originals byte-for-byte |
+| Orphaned `google-oauth` secret removed | #111 | scheduled for deletion |
+| All three Secrets Manager secrets deleted | #111 | 7-day recovery window, expires 2026-08-10 |
+| Terraform variable wiring + Cognito `provider_details` pinned | #112 | plan reduced to exactly the intended changes |
+
+Final apply: **`2 to add, 4 to change, 5 to destroy`** — no unintended changes.
+
+Verified after apply:
+
+- `https://cashight.nghuy.link` → **HTTP 200**; `dns_cutover_active = true`. The DNS
+  record the old defaults would have destroyed is intact.
+- `https://api.cashight.nghuy.link/statements` → **401**, and **401 without a
+  User-Agent header too**. Previously 403 — the `NoUserAgent_HEADER` rule that broke
+  smoke tests and monitors is gone.
+- IAM: both Lambda roles `allowed` for `ssm:GetParameter`; `implicitDeny` for
+  `secretsmanager:GetSecretValue`.
+- Deployed Lambda bundles contain `GetParameterCommand` and **zero**
+  `GetSecretValueCommand` references.
+- Application Deploy run: all six jobs green, including smoke tests.
+
+### 10.2 Savings realised
+
+| Item | $/mo |
+|---|---:|
+| Regional WAF `cashight-api` | 9.00 |
+| CloudFront WAF re-creation avoided (drift) | 9.00 avoided |
+| Secrets Manager → SSM (2 secrets) | 0.80 |
+| Orphaned `google-oauth` secret | 0.40 |
+| Resume-site CloudFront WAF (actioned separately, §4.2) | 8.00 |
+| **Total** | **~18.20/mo realised, plus 9.00 avoided** |
+
+cashight itself drops from ~$11.56/mo to **~$1.36/mo**. Account recurring baseline
+falls from ~$46/mo to roughly **$28/mo**, and to ~$20/mo once the eight
+pending-deletion KMS keys finish expiring on 2026-08-21..25.
+
+### 10.3 Notes worth keeping
+
+**The `google-oauth` secret was never populated.** `VersionIdsToStages` was `null` —
+no value was ever written to it. It was an empty shell from creation, which is a
+stronger finding than the "never accessed" one in §4.5.
+
+**Cognito returns the Google client secret in plaintext** via
+`DescribeIdentityProvider`. That is how the three GitHub secrets were sourced without
+access to the original tfvars. It also means anyone with
+`cognito-idp:DescribeIdentityProvider` in this account can read that credential —
+worth remembering when granting Cognito read access.
+
+**Plan against a moving target.** The first saved plan was captured while a CodeDeploy
+canary from the #112 merge was mid-flight at 10% traffic, and included removing a
+`routing_config` that vanished when the canary completed. It was discarded and re-planned
+after the deploy settled. When Terraform and application deploys share resources, plan
+after the deploy finishes, not during.
+
+### 10.4 Still open
+
+- **#113** — the Terraform CI role. `infrastructure-deploy.yaml` still cannot run:
+  `vars.AWS_INFRA_ROLE_ARN` is unset and the role does not exist. Terraform is still
+  applied from a workstation. **The `production` environment has no protection rules**,
+  so required reviewers must be added before an admin CI role is safe to merge.
+- **Account-wide items from §6** — the ~$19.70/mo `blog-api` logs VPC endpoint is the
+  single largest remaining line and lives in `devops-engineer-profile`, untouched here.
+- **Retired-project data** (§7) — `itp-poc` buckets and tables, pending a decision.
 
 ---
 
