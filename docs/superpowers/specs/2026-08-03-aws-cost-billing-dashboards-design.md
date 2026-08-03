@@ -111,6 +111,8 @@ interface AuthorizedUserRecord {
 
 The Cognito trigger derives `authProvider` only from trusted pre-token-generation event data. The browser cannot supply or override it. `authorizeRequest()` returns both access claims and the validated authorization record. All data APIs derive ownership keys from `authorization.workspaceId`, not from request input.
 
+During the authorization-record backfill only, a feature-flagged compatibility path may map a legacy record to workspace `primary` and derive the provider from API Gateway's signed Cognito access-token `username` claim. It fails closed for absent, ambiguous, or unsupported usernames, emits no identifier-bearing logs, and is removed after backfill validation; it never trusts browser-supplied provider or workspace values.
+
 Existing subject-keyed records and S3 objects receive a staged migration to `workspaceId = 'primary'`:
 
 1. Dry-run and inventory current subject prefixes and DynamoDB records.
@@ -157,7 +159,7 @@ The Lambda uses one dedicated IAM role with these read-only actions:
 
 The policy does not grant `ce:*`, Cost Explorer write actions, Billing write actions, Organizations write actions, or access to unrelated AWS services. `aws-portal:ViewBilling` is included because AWS documents it as a dependent read permission for the selected Cost Explorer operations. Where an action supports a billing-view resource ARN, Terraform scopes it to billing views in the deployment account; actions that do not support resource-level permissions use `Resource = "*"` only for that explicit action.
 
-Cost Explorer APIs are regional SDK endpoints backed by deployment-account billing data. The frontend cannot choose an account ID or role ARN.
+Cost Explorer and Billing SDK clients explicitly target `us-east-1`, the documented Cost Explorer API endpoint, while the Lambda remains deployed in `ap-southeast-1`. The APIs read deployment-account billing data; the frontend cannot choose an account ID, role ARN, or SDK region.
 
 ### AD-006: Pin full Cost Explorer parity to an explicit dated contract
 
@@ -246,14 +248,15 @@ A canonical serializer sorts commutative filter values and keys. Its SHA-256 dig
 
 ### AD-008: Cache paid Cost Explorer reads without hiding freshness
 
-AWS charges for paginated Cost Explorer API requests and refreshes source data less frequently than a typical interactive UI. The backend therefore caches normalized complete results in DynamoDB:
+AWS charges for paginated Cost Explorer API requests and refreshes source data less frequently than a typical interactive UI. The backend therefore caches normalized complete results in DynamoDB. Because one DynamoDB item is limited to 400 KiB, each result uses bounded payload chunks plus a manifest:
 
 - Queries containing the current or future period: one-hour TTL.
 - Queries containing only closed historical periods: 24-hour TTL.
 - Dimension/tag/cost-category value lists: one-hour TTL.
 - A manual refresh may bypass a result once per workspace per five minutes.
-- Concurrent requests for the same canonical query use one in-flight execution path.
-- A cache entry is returned only after all AWS pages succeed and the complete normalized response passes schema validation.
+- Concurrent Lambda instances coordinate through a conditional DynamoDB query-lock record with bounded expiry. One lock owner calls AWS; other callers wait for the complete manifest or receive a retryable busy response. The implementation never relies on process-local state or immediate TTL deletion.
+- Serialized payload chunks are at most 300 KiB. Chunks are written first; a manifest containing chunk count, schema version, payload SHA-256, `asOf`, and TTL is written last.
+- A cache entry is returned only after all AWS pages succeed, the complete normalized response passes schema validation, the manifest is present, every declared chunk is present, and the reconstructed payload hash matches.
 - Partial results are never cached or rendered as complete totals.
 - Every response reports `source: 'AWS' | 'CACHE'` and an ISO `asOf` timestamp.
 
@@ -401,6 +404,7 @@ The helper must not include raw PDF text, bill-to data, seller address, invoice 
 | `COGNITO_REAUTH_REQUIRED` | 403 | Show Cognito warning and return-to sign-in action; do not call AWS. |
 | `COST_EXPLORER_DISABLED` | 424 | Explain that Cost Explorer must be enabled; never render zero-cost charts. |
 | `AWS_COST_ACCESS_DENIED` | 403 | Explain deployment-role permissions; log only sanitized AWS error code/request ID. |
+| `AWS_COST_QUERY_BUSY` | 503 | Preserve report parameters and retry after the bounded shared-query wait; never start an uncoordinated duplicate AWS query. |
 | `AWS_COST_THROTTLED` | 503 | Retry with bounded jitter, then preserve parameters and offer retry. |
 | `GRANULARITY_NOT_AVAILABLE` | 422 | Disable unsupported hourly/resource combination with AWS rule explanation. |
 | `INVALID_COST_QUERY` | 400 | Highlight the invalid report parameter; no AWS request occurs. |
@@ -413,11 +417,11 @@ Logs, traces, metrics, and alarms may include error code, request ID, job ID, co
 
 ### AD-015: Gate paid granular data explicitly
 
-Cost Explorer programmatic requests and granular/resource data can incur charges. Terraform exposes `enable_cost_explorer_granular_data` with default `false`.
+Cost Explorer programmatic requests and granular/resource data can incur charges. Terraform exposes `enable_cost_explorer_granular_data` with default `false` as the application capability and operator-acknowledgement gate.
 
 - Full-parity controls are implemented regardless of the flag.
 - Hourly/resource controls remain disabled with an explanation until the operator deliberately enables the required AWS Cost Explorer data preference.
-- Enabling the preference is a separate apply-time decision documented with current AWS pricing and rollback/disable instructions.
+- Before setting the flag to `true`, an operator manually enables the required Cost Explorer account preference in the AWS Billing console and records a separate out-of-band confirmation variable. Terraform must not use `local-exec` or an untracked SDK mutation to change the account preference.
 - The application never changes Cost Explorer data preferences at runtime.
 
 ## 6. API surface
@@ -431,7 +435,7 @@ All routes require the existing Cognito User Pool authorizer and exact `cashight
 | `POST /aws/cost-explorer/comparisons` | read + native provider | Return normalized month comparison and drivers. |
 | `POST /aws/cost-explorer/dimensions` | read + native provider | Search/page dimension, tag, or cost-category values. |
 | `POST /aws/cost-explorer/forecast` | read + native provider | Return forecast values allowed by the active report. |
-| `POST /aws/cost-explorer/export` | read + native provider | Return complete active-query CSV without logging parameters. |
+| `POST /aws/cost-explorer/export` | read + native provider | Write complete active-query CSV to a private one-day-lifecycle export bucket and return a five-minute presigned GET URL without exposing the bucket/key. |
 | `GET /aws/cost-explorer/reports` | read + native provider | List saved Cashight report definitions. |
 | `POST /aws/cost-explorer/reports` | write + native provider | Create or replace a validated saved report definition. |
 | `DELETE /aws/cost-explorer/reports/{reportId}` | write + native provider | Delete an owned saved report definition. |
@@ -454,11 +458,13 @@ New DynamoDB item families:
 | `AUTHZ#{sub}` | `PROFILE` | Provider-to-workspace authorization record. |
 | `WORKSPACE#{workspaceId}` | `AWS_INVOICE#{yyyy-mm}` | Invoice metadata and owned S3 object key. |
 | `WORKSPACE#{workspaceId}` | `AWS_REPORT#{reportId}` | Saved Cost Explorer report definition. |
-| `WORKSPACE#{workspaceId}` | `AWS_QUERY_CACHE#{sha256}` | Complete normalized query result with TTL. |
+| `WORKSPACE#{workspaceId}` | `AWS_QUERY_CACHE#{sha256}#MANIFEST` | Complete-result manifest with chunk count, payload hash, schema version, freshness, and TTL. |
+| `WORKSPACE#{workspaceId}` | `AWS_QUERY_CACHE#{sha256}#CHUNK#{nnnnnn}` | Bounded serialized payload chunk with the same TTL as its manifest. |
+| `WORKSPACE#{workspaceId}` | `AWS_QUERY_LOCK#{sha256}` | Conditional distributed query owner and bounded expiry; correctness does not depend on TTL deletion. |
 | `WORKSPACE#{workspaceId}` | `AWS_REFRESH#{sha256}` | Manual-refresh cooldown record with TTL. |
 | `JOB#{jobId}` | `META` | Typed invoice upload job with workspace ownership and TTL. |
 
-No DynamoDB record stores raw PDF text, bill-to data, invoice IDs, full account IDs, transaction arrays, presigned URLs, OAuth tokens, or AWS credentials.
+No DynamoDB record stores raw PDF text, bill-to data, invoice IDs, full account IDs, transaction arrays, presigned URLs, OAuth tokens, or AWS credentials. CSV exports live only in a private encrypted S3 bucket under owner-scoped generated keys, have an exact-origin GET CORS policy, and expire after one day; export responses contain a five-minute presigned URL and generated filename only.
 
 ## 8. Observability
 
@@ -530,7 +536,7 @@ The user-supplied invoice remains local and uncommitted. A self-skipping local i
 7. Deploy both dashboards behind independently controlled feature flags.
 8. Run production smoke tests for Google and native Cognito sessions, cached/uncached cost queries, invoice upload, and AI privacy.
 9. Enable dashboard feature flags after alarms and rollback paths are confirmed.
-10. Enable granular/resource Cost Explorer data only through an explicit later Terraform apply after reviewing current charges.
+10. After reviewing current charges, manually enable the required account preference in the AWS Billing console, then explicitly apply both the Terraform capability flag and out-of-band confirmation variable.
 
 Rollback disables the two AWS dashboard feature flags and leaves existing bank functionality intact. It does not delete workspace-migrated or legacy financial objects.
 
