@@ -85,10 +85,22 @@ resource "aws_cognito_identity_provider" "google" {
   provider_name = "Google"
   provider_type = "Google"
 
+  # Cognito computes the endpoint metadata below for provider_type = "Google"
+  # and returns it on read. Declaring only client_id/client_secret/scopes made
+  # every plan show a diff that nulled all six, so they are pinned here to match
+  # what Cognito actually stores. Terraform cannot mark them computed, so the
+  # choice is to declare them or to ignore_changes the whole map — declaring is
+  # preferred, since it keeps the config a faithful description of the resource.
   provider_details = {
-    client_id        = var.google_oauth_client_id
-    client_secret    = var.google_oauth_client_secret
-    authorize_scopes = "openid email profile"
+    client_id                     = var.google_oauth_client_id
+    client_secret                 = var.google_oauth_client_secret
+    authorize_scopes              = "openid email profile"
+    attributes_url                = "https://people.googleapis.com/v1/people/me?personFields="
+    attributes_url_add_attributes = "true"
+    authorize_url                 = "https://accounts.google.com/o/oauth2/v2/auth"
+    oidc_issuer                   = "https://accounts.google.com"
+    token_request_method          = "POST"
+    token_url                     = "https://www.googleapis.com/oauth2/v4/token"
   }
 
   attribute_mapping = {
