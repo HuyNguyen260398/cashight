@@ -5,6 +5,7 @@ import {
   CreateUploadRequestSchema,
 } from '@cashight/domain/api';
 import { BANK_CODES } from '@cashight/domain/banks';
+import { SessionCapabilitiesSchema } from '@cashight/domain/workspace';
 
 // Re-export domain primitives for consumers of this module.
 export { UploadJobSchema, UploadJobStateSchema, CreateUploadRequestSchema };
@@ -71,6 +72,11 @@ export const DashboardResponseSchema = z.object({
   label: z.string(),
 }).passthrough();
 export type DashboardResponse = z.infer<typeof DashboardResponseSchema>;
+
+// ── GET /session/capabilities response ───────────────────────────────────────
+
+export { SessionCapabilitiesSchema };
+export type { SessionCapabilities } from '@cashight/domain/workspace';
 
 // ── Standard error envelope ──────────────────────────────────────────────────
 

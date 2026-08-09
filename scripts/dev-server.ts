@@ -252,6 +252,20 @@ async function route(
     return;
   }
 
+  // GET /session/capabilities
+  if (
+    method === 'GET' &&
+    segments[0] === 'session' &&
+    segments[1] === 'capabilities' &&
+    segments.length === 2
+  ) {
+    sendApiResponse(
+      response,
+      await handlers.sessionCapabilities(buildEvent(request, url, {}, null)),
+    );
+    return;
+  }
+
   // POST /summaries
   if (method === 'POST' && segments[0] === 'summaries' && segments.length === 1) {
     const body = (await readBody(request)).toString('utf8');

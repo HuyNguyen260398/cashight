@@ -29,6 +29,7 @@ import {
 } from '../../backend/functions/summary-api/handler';
 import { createUploadsApiHandler } from '../../backend/functions/uploads-api/handler';
 import { createUploadStatusApiHandler } from '../../backend/functions/upload-status-api/handler';
+import { createSessionCapabilitiesApiHandler } from '../../backend/functions/session-capabilities-api/handler';
 
 import { createLocalDynamoClient } from './dynamo';
 import {
@@ -146,7 +147,18 @@ export function createLocalHandlers(options: LocalPresignOptions) {
   const summaries = async (event: unknown): Promise<ApiResponse> =>
     collectResponse(await prepareSummary(event, createLocalSummaryDeps()));
 
-  return { uploads, uploadStatus, statements, dashboard, summaries };
+  const sessionCapabilities = createSessionCapabilitiesApiHandler({
+    getAuthorizedUser: authorizedUser,
+  });
+
+  return {
+    uploads,
+    uploadStatus,
+    statements,
+    dashboard,
+    summaries,
+    sessionCapabilities,
+  };
 }
 
 // ── Gemini: real when a key is configured, canned otherwise ───────────────────
