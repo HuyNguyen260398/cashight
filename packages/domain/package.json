@@ -15,6 +15,7 @@
     "./summary-payload": "./src/summary-payload.ts",
     "./upload-error": "./src/upload-error.ts",
     "./workspace": "./src/workspace.ts",
+    "./aws-cost-explorer": "./src/aws-cost-explorer.ts",
     "./security/*": "./src/security/*.ts",
     "./pdf-dom-polyfill": "./src/pdf-dom-polyfill.ts",
     "./parsers/tpbank": "./src/parsers/tpbank.ts",
