@@ -40,7 +40,7 @@ export function createUploadsApiHandler(deps: UploadsApiDependencies) {
       'unknown';
 
     try {
-      const { claims } = await authorizeRequest(event, 'cashight/write', {
+      const { claims, authorization } = await authorizeRequest(event, 'cashight/write', {
         getAuthorizedUser: deps.getAuthorizedUser,
       });
 
@@ -58,7 +58,7 @@ export function createUploadsApiHandler(deps: UploadsApiDependencies) {
       const timestamp = now.toISOString();
       const expiresAtEpoch = Math.floor(now.getTime() / 1000) + JOB_TTL_SECONDS;
 
-      const key = `uploads/${claims.sub}/${jobId}.pdf`;
+      const key = `uploads/statements/${authorization.workspaceId}/${jobId}.pdf`;
       const sha256Base64 = Buffer.from(sha256, 'hex').toString('base64');
 
       const presigned = await deps.presign({ key, sha256Base64, contentType, size });
@@ -66,7 +66,10 @@ export function createUploadsApiHandler(deps: UploadsApiDependencies) {
       const record: UploadJobRecord = {
         PK: `JOB#${jobId}`,
         SK: 'METADATA',
-        sub: claims.sub,
+        owner: {
+          workspaceId: authorization.workspaceId,
+          subject: claims.sub,
+        },
         state: 'PENDING_UPLOAD',
         sha256,
         force,

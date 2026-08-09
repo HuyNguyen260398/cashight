@@ -3,15 +3,18 @@ import type { Statement } from '@cashight/domain/schemas';
 
 import { ApiError, type ApiResponse } from '../../backend/shared/api-response';
 import {
-  deleteStatementMetadata,
+  deleteWorkspaceStatementMetadata,
   getAuthorizedUser,
   getStatementMetadataById,
+  getWorkspaceStatementMetadataById,
   getUploadJobRecord,
   putIdempotencyRecord,
   putStatementMetadata,
   putUploadJobRecord,
   queryUserStatements,
   queryUserStatementsForYear,
+  queryWorkspaceStatements,
+  queryWorkspaceStatementsForYear,
   transitionJobState,
   upsertAuthorizedUser,
 } from '../../backend/shared/metadata';
@@ -113,21 +116,31 @@ export function createLocalHandlers(options: LocalPresignOptions) {
 
   const statements = createStatementsApiHandler({
     getAuthorizedUser: authorizedUser,
-    queryStatements: (sub, cursor, limit) =>
+    queryStatements: (workspaceId, cursor, limit) =>
+      queryWorkspaceStatements(dynamo, TABLE_NAME, workspaceId, cursor, limit),
+    queryLegacyStatements: (sub, cursor, limit) =>
       queryUserStatements(dynamo, TABLE_NAME, sub, cursor, limit),
-    getStatementMetadata: (sub, id) =>
+    getStatementMetadata: (workspaceId, id) =>
+      getWorkspaceStatementMetadataById(dynamo, TABLE_NAME, workspaceId, id),
+    getLegacyStatementMetadata: (sub, id) =>
       getStatementMetadataById(dynamo, TABLE_NAME, sub, id),
     getStatementObject,
     deleteStatementObject: (objectKey) => deleteObject(STATEMENTS_BUCKET, objectKey),
-    deleteStatementMetadata: (sub, id) =>
-      deleteStatementMetadata(dynamo, TABLE_NAME, sub, id),
+    deleteStatementMetadata: (workspaceId, id) =>
+      deleteWorkspaceStatementMetadata(dynamo, TABLE_NAME, workspaceId, id),
+    enableLegacyWorkspaceFallback:
+      process.env.ENABLE_LEGACY_WORKSPACE_FALLBACK === 'true',
   });
 
   const dashboard = createDashboardApiHandler({
     getAuthorizedUser: authorizedUser,
-    queryStatementsForYear: (sub, year) =>
+    queryStatementsForYear: (workspaceId, year) =>
+      queryWorkspaceStatementsForYear(dynamo, TABLE_NAME, workspaceId, year),
+    queryLegacyStatementsForYear: (sub, year) =>
       queryUserStatementsForYear(dynamo, TABLE_NAME, sub, year),
     getStatementObject,
+    enableLegacyWorkspaceFallback:
+      process.env.ENABLE_LEGACY_WORKSPACE_FALLBACK === 'true',
   });
 
   const summaries = async (event: unknown): Promise<ApiResponse> =>
@@ -219,11 +232,11 @@ export const processUploadedPdf = createProcessJob({
   writeStatement: (key, statement) =>
     putObject(STATEMENTS_BUCKET, key, `${JSON.stringify(statement, null, 2)}\n`),
 
-  writeMetadata: async ({ sub, statement, objectKey, sha256, uploadedAt }) => {
+  writeMetadata: async ({ owner, statement, objectKey, sha256, uploadedAt }) => {
     const [year, month] = statement.statementDate.split('-').map(Number);
     const mm = String(month).padStart(2, '0');
     await putStatementMetadata(dynamo, TABLE_NAME, {
-      PK: `USER#${sub}`,
+      PK: `WORKSPACE#${owner.workspaceId}`,
       SK: `STATEMENT#${year}-${mm}#${statement.cardLast4}`,
       statementId: statementId(statement.cardLast4, year, month),
       objectKey,
@@ -239,4 +252,6 @@ export const processUploadedPdf = createProcessJob({
 
   computeSha256,
   now: () => new Date(),
+  enableLegacyWorkspaceFallback:
+    process.env.ENABLE_LEGACY_WORKSPACE_FALLBACK === 'true',
 });

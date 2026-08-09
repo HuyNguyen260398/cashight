@@ -1,4 +1,8 @@
 import { StatementSchema, type Statement } from '@cashight/domain/schemas';
+import {
+  WorkspaceIdSchema,
+  type WorkspaceId,
+} from '@cashight/domain/workspace';
 import { z } from 'zod';
 
 import { ApiError } from './api-response';
@@ -37,6 +41,18 @@ export function statementId(
 }
 
 export function statementObjectKey(
+  workspaceId: WorkspaceId,
+  cardLast4: string,
+  year: number,
+  month: number,
+): string {
+  WorkspaceIdSchema.parse(workspaceId);
+  validateStatementCoordinates(cardLast4, year, month);
+  const mm = String(month).padStart(2, '0');
+  return `users/${workspaceId}/statements/${cardLast4}/${year}/${year}-${mm}.json`;
+}
+
+export function legacyStatementObjectKey(
   sub: string,
   cardLast4: string,
   year: number,
@@ -48,6 +64,13 @@ export function statementObjectKey(
   validateStatementCoordinates(cardLast4, year, month);
   const mm = String(month).padStart(2, '0');
   return `users/${sub}/statements/${cardLast4}/${year}/${year}-${mm}.json`;
+}
+
+export function workspacePartition(
+  workspaceId: WorkspaceId,
+): 'WORKSPACE#primary' {
+  WorkspaceIdSchema.parse(workspaceId);
+  return `WORKSPACE#${workspaceId}`;
 }
 
 export function parseStatementObject(body: string | Uint8Array): Statement {

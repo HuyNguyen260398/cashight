@@ -12,10 +12,12 @@ import { BANK_CODES, type BankCode } from '@cashight/domain/banks';
 import {
   AuthorizedWorkspaceSchema,
   type AuthorizedWorkspace,
+  type WorkspaceId,
 } from '@cashight/domain/workspace';
 import { z } from 'zod';
 
 import { ApiError } from './api-response';
+import { workspacePartition } from './storage';
 
 export interface AuthorizedUserRecord extends AuthorizedWorkspace {
   PK: `AUTHZ#${string}`;
@@ -26,7 +28,7 @@ export interface AuthorizedUserRecord extends AuthorizedWorkspace {
 }
 
 export interface StatementMetadataRecord {
-  PK: `USER#${string}`;
+  PK: `WORKSPACE#${string}` | `USER#${string}`;
   SK: `STATEMENT#${string}#${string}`;
   statementId: string;
   objectKey: string;
@@ -57,7 +59,7 @@ const legacyAuthorizationRecordSchema = z.object({
 });
 
 const statementMetadataRecordSchema = z.object({
-  PK: z.string().regex(/^USER#[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+  PK: z.string().regex(/^(?:WORKSPACE#primary|USER#[A-Za-z0-9][A-Za-z0-9._:-]*)$/),
   SK: z.string().regex(/^STATEMENT#\d{4}-\d{2}#\d{4}$/),
   statementId: z.string().regex(/^\d{4}-\d{2}-\d{4}$/),
   objectKey: z.string().min(1),
@@ -101,6 +103,19 @@ export function parseStatementMetadataRecord(
 }
 
 export function assertRecordOwner(
+  workspaceId: WorkspaceId,
+  record: { PK: string; objectKey?: string },
+): void {
+  const ownsPartition = record.PK === workspacePartition(workspaceId);
+  const ownsObject =
+    record.objectKey === undefined ||
+    record.objectKey.startsWith(`users/${workspaceId}/statements/`);
+  if (!ownsPartition || !ownsObject) {
+    throw new ApiError('FORBIDDEN', 403, 'Access denied.');
+  }
+}
+
+export function assertLegacyRecordOwner(
   sub: string,
   record: { PK: string; objectKey?: string },
 ): void {
@@ -128,10 +143,9 @@ export async function getAuthorizedUser(
   return result.Item;
 }
 
-export interface UploadJobRecord {
+interface UploadJobRecordBase {
   PK: `JOB#${string}`;
   SK: 'METADATA';
-  sub: string;
   state: UploadJobState;
   sha256: string;
   force: boolean;
@@ -142,6 +156,19 @@ export interface UploadJobRecord {
   statementId?: string;
   conflict?: { cardLast4: string; year: number; month: number };
 }
+
+export type UploadJobRecord = UploadJobRecordBase &
+  (
+    | {
+        owner: { workspaceId: WorkspaceId; subject: string };
+        sub?: never;
+      }
+    | {
+        /** Legacy jobs remain readable only during the compatibility window. */
+        sub: string;
+        owner?: never;
+      }
+  );
 
 export async function putUploadJobRecord(
   client: DynamoDBDocumentClient,
@@ -291,6 +318,32 @@ export async function queryUserStatements(
   };
 }
 
+export async function queryWorkspaceStatements(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  workspaceId: WorkspaceId,
+  cursor: Record<string, unknown> | null,
+  limit = 50,
+): Promise<StatementQueryResult> {
+  const result = await client.send(
+    new QueryCommand({
+      TableName: tableName,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :prefix)',
+      ExpressionAttributeValues: {
+        ':pk': workspacePartition(workspaceId),
+        ':prefix': 'STATEMENT#',
+      },
+      Limit: limit,
+      ExclusiveStartKey: cursor ?? undefined,
+      ScanIndexForward: false,
+    }),
+  );
+  return {
+    items: (result.Items ?? []) as StatementMetadataRecord[],
+    nextCursor: result.LastEvaluatedKey ?? null,
+  };
+}
+
 export async function queryUserStatementsForYear(
   client: DynamoDBDocumentClient,
   tableName: string,
@@ -304,6 +357,27 @@ export async function queryUserStatementsForYear(
       KeyConditionExpression: 'PK = :pk AND begins_with(SK, :prefix)',
       ExpressionAttributeValues: {
         ':pk': `USER#${sub}`,
+        ':prefix': `STATEMENT#${mm}`,
+      },
+      ScanIndexForward: true,
+    }),
+  );
+  return (result.Items ?? []) as StatementMetadataRecord[];
+}
+
+export async function queryWorkspaceStatementsForYear(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  workspaceId: WorkspaceId,
+  year: number,
+): Promise<StatementMetadataRecord[]> {
+  const mm = `${year}-`;
+  const result = await client.send(
+    new QueryCommand({
+      TableName: tableName,
+      KeyConditionExpression: 'PK = :pk AND begins_with(SK, :prefix)',
+      ExpressionAttributeValues: {
+        ':pk': workspacePartition(workspaceId),
         ':prefix': `STATEMENT#${mm}`,
       },
       ScanIndexForward: true,
@@ -333,6 +407,28 @@ export async function getStatementMetadataById(
   return result.Item as StatementMetadataRecord;
 }
 
+export async function getWorkspaceStatementMetadataById(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  workspaceId: WorkspaceId,
+  statementId: string,
+): Promise<StatementMetadataRecord | undefined> {
+  const parts = statementId.match(/^(\d{4}-\d{2})-(\d{4})$/);
+  if (!parts) return undefined;
+  const result = await client.send(
+    new GetCommand({
+      TableName: tableName,
+      Key: {
+        PK: workspacePartition(workspaceId),
+        SK: `STATEMENT#${parts[1]}#${parts[2]}`,
+      },
+      ConsistentRead: true,
+    }),
+  );
+  if (!result.Item) return undefined;
+  return result.Item as StatementMetadataRecord;
+}
+
 export async function deleteStatementMetadata(
   client: DynamoDBDocumentClient,
   tableName: string,
@@ -346,6 +442,25 @@ export async function deleteStatementMetadata(
     new DeleteCommand({
       TableName: tableName,
       Key: { PK: `USER#${sub}`, SK: sk },
+    }),
+  );
+}
+
+export async function deleteWorkspaceStatementMetadata(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  workspaceId: WorkspaceId,
+  statementId: string,
+): Promise<void> {
+  const parts = statementId.match(/^(\d{4}-\d{2})-(\d{4})$/);
+  if (!parts) return;
+  await client.send(
+    new DeleteCommand({
+      TableName: tableName,
+      Key: {
+        PK: workspacePartition(workspaceId),
+        SK: `STATEMENT#${parts[1]}#${parts[2]}`,
+      },
     }),
   );
 }

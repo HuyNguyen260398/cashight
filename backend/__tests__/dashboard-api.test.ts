@@ -11,15 +11,17 @@ const mockAuthorizedRecord = {
   PK: 'AUTHZ#user-123' as const,
   SK: 'PROFILE' as const,
   active: true as const,
+  workspaceId: 'primary' as const,
+  authProvider: 'COGNITO' as const,
   createdAt: '2026-06-27T00:00:00.000Z',
   updatedAt: '2026-06-27T00:00:00.000Z',
 };
 
 const mockMetaRecord: StatementMetadataRecord = {
-  PK: 'USER#user-123',
+  PK: 'WORKSPACE#primary',
   SK: 'STATEMENT#2026-05#9674',
   statementId: '2026-05-9674',
-  objectKey: 'users/user-123/statements/9674/2026/2026-05.json',
+  objectKey: 'users/primary/statements/9674/2026/2026-05.json',
   cardLast4: '9674',
   statementDate: '2026-05-01',
   totalSpend: 26986712,
@@ -62,7 +64,10 @@ function makeDeps(overrides: Partial<DashboardApiDependencies> = {}): DashboardA
   return {
     getAuthorizedUser: vi.fn().mockResolvedValue(mockAuthorizedRecord),
     queryStatementsForYear: vi.fn().mockResolvedValue([mockMetaRecord]),
+    queryLegacyStatementsForYear: vi.fn().mockResolvedValue([]),
     getStatementObject: vi.fn().mockResolvedValue(mockStatement),
+    enableLegacyWorkspaceFallback: false,
+    onLegacyFallback: vi.fn(),
     ...overrides,
   };
 }
@@ -118,6 +123,76 @@ describe('GET /dashboard', () => {
     expect(body).toHaveProperty('transactions');
     expect(body).toHaveProperty('byCategory');
     expect(body).toHaveProperty('topMerchants');
+    expect(deps.queryStatementsForYear).toHaveBeenCalledWith('primary', 2026);
+  });
+
+  it('reads legacy subject data only when the workspace result is empty and fallback is enabled', async () => {
+    const legacyRecord: StatementMetadataRecord = {
+      ...mockMetaRecord,
+      PK: 'USER#user-123',
+      objectKey: 'users/user-123/statements/9674/2026/2026-05.json',
+    };
+    const onLegacyFallback = vi.fn();
+    const localDeps = makeDeps({
+      queryStatementsForYear: vi.fn().mockResolvedValue([]),
+      queryLegacyStatementsForYear: vi.fn().mockResolvedValue([legacyRecord]),
+      enableLegacyWorkspaceFallback: true,
+      onLegacyFallback,
+    });
+
+    const res = await createDashboardApiHandler(localDeps)(
+      makeEvent({ period: 'month', year: '2026', month: '5' }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(localDeps.queryLegacyStatementsForYear).toHaveBeenCalledWith(
+      'user-123',
+      2026,
+    );
+    expect(onLegacyFallback).toHaveBeenCalledOnce();
+  });
+
+  it('never merges duplicate legacy results into workspace results', async () => {
+    const queryLegacyStatementsForYear = vi.fn().mockResolvedValue([
+      {
+        ...mockMetaRecord,
+        PK: 'USER#user-123',
+        objectKey: 'users/user-123/statements/9674/2026/2026-05.json',
+      },
+    ]);
+    const localDeps = makeDeps({
+      queryLegacyStatementsForYear,
+      enableLegacyWorkspaceFallback: true,
+    });
+
+    const res = await createDashboardApiHandler(localDeps)(
+      makeEvent({ period: 'month', year: '2026', month: '5' }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).statementCount).toBe(1);
+    expect(queryLegacyStatementsForYear).not.toHaveBeenCalled();
+  });
+
+  it('rejects a foreign workspace record before reading its object', async () => {
+    const getStatementObject = vi.fn().mockResolvedValue(mockStatement);
+    const localDeps = makeDeps({
+      queryStatementsForYear: vi.fn().mockResolvedValue([
+        {
+          ...mockMetaRecord,
+          PK: 'WORKSPACE#other',
+          objectKey: 'users/other/statements/9674/2026/2026-05.json',
+        },
+      ]),
+      getStatementObject,
+    });
+
+    const res = await createDashboardApiHandler(localDeps)(
+      makeEvent({ period: 'month', year: '2026', month: '5' }),
+    );
+
+    expect(res.statusCode).toBe(403);
+    expect(getStatementObject).not.toHaveBeenCalled();
   });
 
   it('returns empty aggregation for a period with no statements', async () => {
@@ -141,8 +216,8 @@ describe('GET /dashboard', () => {
 
   it('returns quarter aggregation spanning all months in quarter', async () => {
     // Provide statements for months 4, 5, 6 (Q2)
-    const meta4: StatementMetadataRecord = { ...mockMetaRecord, SK: 'STATEMENT#2026-04#9674', statementId: '2026-04-9674', statementDate: '2026-04-01', objectKey: 'users/user-123/statements/9674/2026/2026-04.json' };
-    const meta6: StatementMetadataRecord = { ...mockMetaRecord, SK: 'STATEMENT#2026-06#9674', statementId: '2026-06-9674', statementDate: '2026-06-01', objectKey: 'users/user-123/statements/9674/2026/2026-06.json' };
+    const meta4: StatementMetadataRecord = { ...mockMetaRecord, SK: 'STATEMENT#2026-04#9674', statementId: '2026-04-9674', statementDate: '2026-04-01', objectKey: 'users/primary/statements/9674/2026/2026-04.json' };
+    const meta6: StatementMetadataRecord = { ...mockMetaRecord, SK: 'STATEMENT#2026-06#9674', statementId: '2026-06-9674', statementDate: '2026-06-01', objectKey: 'users/primary/statements/9674/2026/2026-06.json' };
     const stmt4: Statement = { ...mockStatement, statementDate: '2026-04-01' };
     const stmt6: Statement = { ...mockStatement, statementDate: '2026-06-01' };
 
@@ -169,7 +244,7 @@ describe('GET /dashboard', () => {
     // Create 10 metadata records and verify they all get fetched
     const records: StatementMetadataRecord[] = Array.from({ length: 10 }, (_, i) => {
       const m = String(i + 1).padStart(2, '0');
-      return { ...mockMetaRecord, SK: `STATEMENT#2026-${m}#9674` as `STATEMENT#${string}#${string}`, statementDate: `2026-${m}-01`, statementId: `2026-${m}-9674`, objectKey: `users/user-123/statements/9674/2026/2026-${m}.json` };
+      return { ...mockMetaRecord, SK: `STATEMENT#2026-${m}#9674` as `STATEMENT#${string}#${string}`, statementDate: `2026-${m}-01`, statementId: `2026-${m}-9674`, objectKey: `users/primary/statements/9674/2026/2026-${m}.json` };
     });
     const stmts: Statement[] = records.map((r) => ({ ...mockStatement, statementDate: r.statementDate }));
     let idx = 0;
@@ -191,7 +266,7 @@ describe('GET /dashboard — bank filter', () => {
     ...mockMetaRecord,
     SK: 'STATEMENT#2026-05#4550',
     statementId: '2026-05-4550',
-    objectKey: 'users/user-123/statements/4550/2026/2026-05.json',
+    objectKey: 'users/primary/statements/4550/2026/2026-05.json',
     cardLast4: '4550',
     bank: 'VIB',
   };

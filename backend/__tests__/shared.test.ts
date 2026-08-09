@@ -15,9 +15,11 @@ import {
 import { sanitizeForLog } from '../shared/observability';
 import { clearSecretCache, getSecretString } from '../shared/secrets';
 import {
+  legacyStatementObjectKey,
   parseStatementObject,
   statementId,
   statementObjectKey,
+  workspacePartition,
 } from '../shared/storage';
 
 function eventWithClaims(claims: Record<string, unknown>): unknown {
@@ -208,17 +210,17 @@ describe('access-token authorization', () => {
 });
 
 describe('metadata and storage boundaries', () => {
-  it('rejects records owned by another subject', () => {
+  it('rejects records owned by another workspace', () => {
     expect(() =>
-      assertRecordOwner('user-123', { PK: 'USER#different-user' }),
+      assertRecordOwner('primary', { PK: 'WORKSPACE#other' }),
     ).toThrowError(expect.objectContaining({ code: 'FORBIDDEN' }));
   });
 
-  it('rejects records whose object key belongs to another subject', () => {
+  it('rejects records whose object key belongs to another workspace', () => {
     expect(() =>
-      assertRecordOwner('user-123', {
-        PK: 'USER#user-123',
-        objectKey: 'users/different-user/statements/9674/2026/2026-05.json',
+      assertRecordOwner('primary', {
+        PK: 'WORKSPACE#primary',
+        objectKey: 'users/other/statements/9674/2026/2026-05.json',
       }),
     ).toThrowError(expect.objectContaining({ code: 'FORBIDDEN' }));
   });
@@ -237,15 +239,19 @@ describe('metadata and storage boundaries', () => {
 
   it('builds validated deterministic statement identifiers and keys', () => {
     expect(statementId('9674', 2026, 5)).toBe('2026-05-9674');
-    expect(statementObjectKey('user-123', '9674', 2026, 5)).toBe(
+    expect(workspacePartition('primary')).toBe('WORKSPACE#primary');
+    expect(statementObjectKey('primary', '9674', 2026, 5)).toBe(
+      'users/primary/statements/9674/2026/2026-05.json',
+    );
+    expect(legacyStatementObjectKey('user-123', '9674', 2026, 5)).toBe(
       'users/user-123/statements/9674/2026/2026-05.json',
     );
   });
 
   it.each(['../user', 'user/other', ' user-123', 'user-123 '])(
-    'rejects unsafe subject values: %s',
+    'rejects unsafe legacy subject values: %s',
     (sub) => {
-      expect(() => statementObjectKey(sub, '9674', 2026, 5)).toThrow(
+      expect(() => legacyStatementObjectKey(sub, '9674', 2026, 5)).toThrow(
         'Invalid subject',
       );
     },
