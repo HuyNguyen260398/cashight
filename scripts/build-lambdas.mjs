@@ -41,11 +41,11 @@ export async function buildLambdas({ projectRoot = defaultProjectRoot } = {}) {
   for (const { functionName, handlerPath } of handlers) {
     const outputDirectory = path.join(outputRoot, functionName);
     await mkdir(outputDirectory, { recursive: true });
-    const workerSource = path.join(
-      projectRoot,
-      'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
-    );
     if (functionName === 'parser-worker') {
+      const workerSource = path.join(
+        projectRoot,
+        'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+      );
       try {
         await copyFile(workerSource, path.join(outputDirectory, 'pdf.worker.mjs'));
       } catch (error) {

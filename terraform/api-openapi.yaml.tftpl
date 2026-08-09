@@ -3,7 +3,8 @@ info:
   title: cashight-api
   version: "2026-06-29"
   description: >
-    Cashight REST API — statements, dashboard, uploads, and AI summaries.
+    Cashight REST API — session capabilities, statements, dashboard, uploads,
+    and AI summaries.
     All endpoints (except /health) require a Cognito access token with the
     appropriate cashight/read or cashight/write scope.
 
@@ -86,6 +87,55 @@ paths:
               method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
             responseTemplates:
               application/json: '{"status":"ok"}'
+
+  # ── /session/capabilities ─────────────────────────────────────────────────
+
+  /session/capabilities:
+    get:
+      operationId: getSessionCapabilities
+      summary: Get server-derived capabilities for the authenticated session
+      security:
+        - CognitoAuth: ["cashight/read"]
+      x-amazon-apigateway-request-validator: all
+      responses:
+        "200":
+          description: SessionCapabilities JSON
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${session_capabilities_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsSessionCapabilities
+      summary: CORS preflight
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
 
   # ── /statements ───────────────────────────────────────────────────────────
 

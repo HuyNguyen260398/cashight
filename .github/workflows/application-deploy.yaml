@@ -150,7 +150,7 @@ jobs:
         run: |
           set -euo pipefail
           ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-          FUNCTIONS=(auth-guard uploads-api upload-status-api parser-worker statements-api dashboard-api summary-api)
+          FUNCTIONS=(auth-guard session-capabilities-api uploads-api upload-status-api parser-worker statements-api dashboard-api summary-api)
           DEPLOY_IDS=()
 
           for fn in "${FUNCTIONS[@]}"; do

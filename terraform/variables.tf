@@ -38,6 +38,18 @@ variable "allowed_email" {
   default     = ""
 }
 
+variable "enable_legacy_authz_fallback" {
+  type        = bool
+  description = "Temporary migration flag allowing strict, signed-username compatibility for legacy authorization records. Set false after authorization backfill validation."
+  default     = true
+}
+
+variable "enable_legacy_workspace_fallback" {
+  type        = bool
+  description = "Temporary migration flag allowing reads from legacy subject-scoped statement data. Set false after object and metadata backfill validation."
+  default     = true
+}
+
 variable "cutover_dns_to_cloudfront" {
   type        = bool
   description = <<-EOT

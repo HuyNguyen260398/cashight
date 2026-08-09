@@ -151,6 +151,84 @@ resource "aws_lambda_alias" "auth_guard_live" {
   }
 }
 
+# ── session-capabilities-api ─────────────────────────────────────────────────
+
+resource "aws_iam_role" "lambda_session_capabilities_api" {
+  name               = "cashight-session-capabilities-api-role"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
+  tags               = { Project = var.project_name }
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_session_capabilities_api_basic" {
+  role       = aws_iam_role.lambda_session_capabilities_api.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "lambda_session_capabilities_api_xray" {
+  name   = "xray-write"
+  role   = aws_iam_role.lambda_session_capabilities_api.id
+  policy = data.aws_iam_policy_document.xray_write.json
+}
+
+data "aws_iam_policy_document" "lambda_session_capabilities_api_permissions" {
+  statement {
+    sid       = "ReadAuthorizationRecord"
+    effect    = "Allow"
+    actions   = ["dynamodb:GetItem"]
+    resources = [aws_dynamodb_table.cashight.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_session_capabilities_api_permissions" {
+  name   = "permissions"
+  role   = aws_iam_role.lambda_session_capabilities_api.id
+  policy = data.aws_iam_policy_document.lambda_session_capabilities_api_permissions.json
+}
+
+resource "aws_cloudwatch_log_group" "lambda_session_capabilities_api" {
+  name              = "/aws/lambda/cashight-session-capabilities-api"
+  retention_in_days = 30
+}
+
+resource "aws_lambda_function" "session_capabilities_api" {
+  function_name    = "cashight-session-capabilities-api"
+  role             = aws_iam_role.lambda_session_capabilities_api.arn
+  handler          = "index.handler"
+  runtime          = "nodejs22.x"
+  timeout          = 10
+  memory_size      = 256
+  publish          = true
+  filename         = data.archive_file.placeholder.output_path
+  source_code_hash = data.archive_file.placeholder.output_base64sha256
+
+  environment {
+    variables = {
+      TABLE_NAME                   = aws_dynamodb_table.cashight.name
+      ENABLE_LEGACY_AUTHZ_FALLBACK = tostring(var.enable_legacy_authz_fallback)
+    }
+  }
+
+  tracing_config {
+    mode = "Active"
+  }
+
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
+  }
+
+  depends_on = [aws_cloudwatch_log_group.lambda_session_capabilities_api]
+}
+
+resource "aws_lambda_alias" "session_capabilities_api_live" {
+  name             = "live"
+  function_name    = aws_lambda_function.session_capabilities_api.function_name
+  function_version = aws_lambda_function.session_capabilities_api.version
+
+  lifecycle {
+    ignore_changes = [function_version]
+  }
+}
+
 # ── uploads-api ───────────────────────────────────────────────────────────────
 
 resource "aws_iam_role" "lambda_uploads_api" {
@@ -209,8 +287,9 @@ resource "aws_lambda_function" "uploads_api" {
 
   environment {
     variables = {
-      TABLE_NAME    = aws_dynamodb_table.cashight.name
-      UPLOAD_BUCKET = aws_s3_bucket.uploads.bucket
+      TABLE_NAME                   = aws_dynamodb_table.cashight.name
+      UPLOAD_BUCKET                = aws_s3_bucket.uploads.bucket
+      ENABLE_LEGACY_AUTHZ_FALLBACK = tostring(var.enable_legacy_authz_fallback)
     }
   }
 
@@ -287,7 +366,9 @@ resource "aws_lambda_function" "upload_status_api" {
 
   environment {
     variables = {
-      TABLE_NAME = aws_dynamodb_table.cashight.name
+      TABLE_NAME                       = aws_dynamodb_table.cashight.name
+      ENABLE_LEGACY_AUTHZ_FALLBACK     = tostring(var.enable_legacy_authz_fallback)
+      ENABLE_LEGACY_WORKSPACE_FALLBACK = tostring(var.enable_legacy_workspace_fallback)
     }
   }
 
@@ -403,10 +484,11 @@ resource "aws_lambda_function" "parser_worker" {
 
   environment {
     variables = {
-      TABLE_NAME         = aws_dynamodb_table.cashight.name
-      UPLOAD_BUCKET      = aws_s3_bucket.uploads.bucket
-      STATEMENTS_BUCKET  = aws_s3_bucket.statements.bucket
-      PDF_PASSWORD_PARAM = aws_ssm_parameter.pdf_password.name
+      TABLE_NAME                       = aws_dynamodb_table.cashight.name
+      UPLOAD_BUCKET                    = aws_s3_bucket.uploads.bucket
+      STATEMENTS_BUCKET                = aws_s3_bucket.statements.bucket
+      PDF_PASSWORD_PARAM               = aws_ssm_parameter.pdf_password.name
+      ENABLE_LEGACY_WORKSPACE_FALLBACK = tostring(var.enable_legacy_workspace_fallback)
     }
   }
 
@@ -499,8 +581,10 @@ resource "aws_lambda_function" "statements_api" {
 
   environment {
     variables = {
-      TABLE_NAME        = aws_dynamodb_table.cashight.name
-      STATEMENTS_BUCKET = aws_s3_bucket.statements.bucket
+      TABLE_NAME                       = aws_dynamodb_table.cashight.name
+      STATEMENTS_BUCKET                = aws_s3_bucket.statements.bucket
+      ENABLE_LEGACY_AUTHZ_FALLBACK     = tostring(var.enable_legacy_authz_fallback)
+      ENABLE_LEGACY_WORKSPACE_FALLBACK = tostring(var.enable_legacy_workspace_fallback)
     }
   }
 
@@ -583,8 +667,10 @@ resource "aws_lambda_function" "dashboard_api" {
 
   environment {
     variables = {
-      TABLE_NAME        = aws_dynamodb_table.cashight.name
-      STATEMENTS_BUCKET = aws_s3_bucket.statements.bucket
+      TABLE_NAME                       = aws_dynamodb_table.cashight.name
+      STATEMENTS_BUCKET                = aws_s3_bucket.statements.bucket
+      ENABLE_LEGACY_AUTHZ_FALLBACK     = tostring(var.enable_legacy_authz_fallback)
+      ENABLE_LEGACY_WORKSPACE_FALLBACK = tostring(var.enable_legacy_workspace_fallback)
     }
   }
 
@@ -674,9 +760,10 @@ resource "aws_lambda_function" "summary_api" {
 
   environment {
     variables = {
-      TABLE_NAME        = aws_dynamodb_table.cashight.name
-      STATEMENTS_BUCKET = aws_s3_bucket.statements.bucket
-      GEMINI_PARAM      = aws_ssm_parameter.gemini_api_key.name
+      TABLE_NAME                   = aws_dynamodb_table.cashight.name
+      STATEMENTS_BUCKET            = aws_s3_bucket.statements.bucket
+      GEMINI_PARAM                 = aws_ssm_parameter.gemini_api_key.name
+      ENABLE_LEGACY_AUTHZ_FALLBACK = tostring(var.enable_legacy_authz_fallback)
     }
   }
 
@@ -714,7 +801,7 @@ resource "aws_lambda_permission" "cognito_auth_guard" {
   source_arn    = aws_cognito_user_pool.users.arn
 }
 
-# API Gateway invoke permissions for the remaining 5 API functions will be
+# API Gateway invoke permissions for the API functions are
 # added in Task 12 once aws_apigatewayv2_api.cashight is provisioned and its
 # execution ARN is known.
 
@@ -749,6 +836,30 @@ resource "aws_codedeploy_app" "auth_guard" {
 resource "aws_codedeploy_deployment_group" "auth_guard" {
   app_name              = aws_codedeploy_app.auth_guard.name
   deployment_group_name = "cashight-auth-guard-live"
+  service_role_arn      = aws_iam_role.codedeploy.arn
+
+  deployment_config_name = "CodeDeployDefault.LambdaCanary10Percent5Minutes"
+
+  deployment_style {
+    deployment_option = "WITH_TRAFFIC_CONTROL"
+    deployment_type   = "BLUE_GREEN"
+  }
+
+  auto_rollback_configuration {
+    enabled = true
+    events  = ["DEPLOYMENT_FAILURE"]
+  }
+}
+
+# session-capabilities-api
+resource "aws_codedeploy_app" "session_capabilities_api" {
+  name             = "cashight-session-capabilities-api"
+  compute_platform = "Lambda"
+}
+
+resource "aws_codedeploy_deployment_group" "session_capabilities_api" {
+  app_name              = aws_codedeploy_app.session_capabilities_api.name
+  deployment_group_name = "cashight-session-capabilities-api-live"
   service_role_arn      = aws_iam_role.codedeploy.arn
 
   deployment_config_name = "CodeDeployDefault.LambdaCanary10Percent5Minutes"

@@ -1,3 +1,9 @@
 project_name           = "cashight"
 statements_bucket_name = "cashight-statements"
 bucket_suffix          = "cashight-2026" # Used by the Cognito Hosted UI domain; must be region-unique.
+
+# Temporary Step 30 migration controls. Keep both enabled for the migration
+# deployment. Set each to false only after the matching authorization-record or
+# statement-object backfill has been validated using the migration runbook.
+enable_legacy_authz_fallback     = true
+enable_legacy_workspace_fallback = true

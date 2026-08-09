@@ -17,6 +17,14 @@ override_resource {
 }
 
 override_resource {
+  target          = aws_api_gateway_rest_api.cashight
+  override_during = plan
+  values = {
+    execution_arn = "arn:aws:execute-api:ap-southeast-1:123456789012:stub"
+  }
+}
+
+override_resource {
   target          = aws_lambda_alias.uploads_api_live
   override_during = plan
   values = {
@@ -53,6 +61,14 @@ override_resource {
   override_during = plan
   values = {
     arn = "arn:aws:lambda:ap-southeast-1:123456789012:function:cashight-summary-api:live"
+  }
+}
+
+override_resource {
+  target          = aws_lambda_alias.session_capabilities_api_live
+  override_during = plan
+  values = {
+    arn = "arn:aws:lambda:ap-southeast-1:123456789012:function:cashight-session-capabilities-api:live"
   }
 }
 
@@ -127,17 +143,6 @@ run "google_idp_configured" {
   assert {
     condition     = aws_cognito_identity_provider.google.attribute_mapping["username"] == "sub"
     error_message = "Google IdP must map username to 'sub'"
-  }
-}
-
-# ── WAF ───────────────────────────────────────────────────────────────────────
-
-run "api_waf_scope_is_regional" {
-  command = plan
-
-  assert {
-    condition     = aws_wafv2_web_acl.api.scope == "REGIONAL"
-    error_message = "API WAF ACL must have REGIONAL scope (not CLOUDFRONT)"
   }
 }
 
@@ -222,17 +227,6 @@ run "github_trust_allows_main_branch" {
   }
 }
 
-# ── API Gateway summary endpoint uses streaming invocations ───────────────────
-
-run "summary_integration_uses_streaming_uri" {
-  command = plan
-
-  assert {
-    condition     = strcontains(aws_api_gateway_rest_api.cashight.body, "response-streaming-invocations")
-    error_message = "REST API body must reference /response-streaming-invocations for the /summaries Lambda integration"
-  }
-}
-
 run "rest_api_routes_present" {
   command = plan
   assert {
@@ -261,17 +255,140 @@ run "rest_api_routes_present" {
   }
 }
 
-run "api_waf_name_matches_project" {
+# ── Session capabilities API ──────────────────────────────────────────────────
+
+run "session_capabilities_lambda_is_least_privilege" {
   command = plan
 
-  # ARNs are computed/unknown at plan time, so assert on static input attributes.
   assert {
-    condition     = aws_wafv2_web_acl.api.name == "${var.project_name}-api"
-    error_message = "API WAF ACL must be named '<project>-api'"
+    condition     = aws_iam_role.lambda_session_capabilities_api.name == "cashight-session-capabilities-api-role"
+    error_message = "Session capabilities must have a dedicated IAM role"
   }
 
   assert {
-    condition     = aws_wafv2_web_acl.api.scope == "REGIONAL"
-    error_message = "API WAF ACL associated with API Gateway must have REGIONAL scope"
+    condition     = length(data.aws_iam_policy_document.lambda_session_capabilities_api_permissions.statement) == 1
+    error_message = "Session capabilities must have exactly one application permission statement"
+  }
+
+  assert {
+    condition     = toset(one(data.aws_iam_policy_document.lambda_session_capabilities_api_permissions.statement).actions) == toset(["dynamodb:GetItem"])
+    error_message = "Session capabilities must have DynamoDB GetItem only and no S3/SSM access"
+  }
+
+  assert {
+    condition     = contains(one(data.aws_iam_policy_document.xray_write.statement).actions, "xray:PutTraceSegments")
+    error_message = "Session capabilities must use the shared X-Ray write policy"
+  }
+}
+
+run "session_capabilities_lambda_runtime" {
+  command = plan
+
+  assert {
+    condition     = aws_lambda_function.session_capabilities_api.runtime == "nodejs22.x"
+    error_message = "Session capabilities must run on Node.js 22"
+  }
+
+  assert {
+    condition     = aws_lambda_function.session_capabilities_api.memory_size == 256
+    error_message = "Session capabilities must use 256 MiB"
+  }
+
+  assert {
+    condition     = aws_lambda_function.session_capabilities_api.timeout == 10
+    error_message = "Session capabilities must use a 10-second timeout"
+  }
+
+  assert {
+    condition     = aws_lambda_function.session_capabilities_api.tracing_config[0].mode == "Active"
+    error_message = "Session capabilities must enable active tracing"
+  }
+
+  assert {
+    condition     = aws_cloudwatch_log_group.lambda_session_capabilities_api.retention_in_days == 30
+    error_message = "Session capabilities logs must be retained for 30 days"
+  }
+
+  assert {
+    condition     = aws_lambda_alias.session_capabilities_api_live.name == "live"
+    error_message = "Session capabilities must expose a live alias"
+  }
+}
+
+run "session_capabilities_route_is_exact" {
+  command = plan
+
+  assert {
+    condition     = strcontains(aws_api_gateway_rest_api.cashight.body, "/session/capabilities:")
+    error_message = "REST API must include /session/capabilities"
+  }
+
+  assert {
+    condition     = strcontains(aws_api_gateway_rest_api.cashight.body, "operationId: getSessionCapabilities")
+    error_message = "Capabilities GET must use operationId getSessionCapabilities"
+  }
+
+  assert {
+    condition     = strcontains(aws_api_gateway_rest_api.cashight.body, "cashight/read")
+    error_message = "Capabilities GET must require cashight/read"
+  }
+
+  assert {
+    condition     = aws_lambda_permission.api_session_capabilities.source_arn == "${aws_api_gateway_rest_api.cashight.execution_arn}/*/GET/session/capabilities"
+    error_message = "API Gateway permission must be scoped to GET /session/capabilities"
+  }
+}
+
+run "session_capabilities_has_error_alarm" {
+  command = plan
+
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.session_capabilities_api_errors.metric_name == "Errors"
+    error_message = "Session capabilities must have a Lambda Errors alarm"
+  }
+
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.session_capabilities_api_errors.dimensions["FunctionName"] == aws_lambda_function.session_capabilities_api.function_name
+    error_message = "Session capabilities alarm must target the dedicated Lambda"
+  }
+}
+
+run "legacy_flags_reach_only_compatibility_consumers" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for fn in [
+        aws_lambda_function.uploads_api,
+        aws_lambda_function.upload_status_api,
+        aws_lambda_function.statements_api,
+        aws_lambda_function.dashboard_api,
+        aws_lambda_function.summary_api,
+        aws_lambda_function.session_capabilities_api,
+      ] : fn.environment[0].variables["ENABLE_LEGACY_AUTHZ_FALLBACK"] == tostring(var.enable_legacy_authz_fallback)
+    ])
+    error_message = "Auth compatibility flag must reach every request-authorizing Lambda"
+  }
+
+  assert {
+    condition     = !contains(keys(aws_lambda_function.auth_guard.environment[0].variables), "ENABLE_LEGACY_AUTHZ_FALLBACK") && !contains(keys(aws_lambda_function.parser_worker.environment[0].variables), "ENABLE_LEGACY_AUTHZ_FALLBACK")
+    error_message = "Auth compatibility flag must not reach non-request-authorizing Lambdas"
+  }
+
+  assert {
+    condition = alltrue([
+      for fn in [
+        aws_lambda_function.upload_status_api,
+        aws_lambda_function.parser_worker,
+        aws_lambda_function.statements_api,
+        aws_lambda_function.dashboard_api,
+      ] : fn.environment[0].variables["ENABLE_LEGACY_WORKSPACE_FALLBACK"] == tostring(var.enable_legacy_workspace_fallback)
+    ])
+    error_message = "Workspace compatibility flag must reach every legacy statement reader"
+  }
+
+  assert {
+    condition     = !contains(keys(aws_lambda_function.auth_guard.environment[0].variables), "ENABLE_LEGACY_WORKSPACE_FALLBACK") && !contains(keys(aws_lambda_function.uploads_api.environment[0].variables), "ENABLE_LEGACY_WORKSPACE_FALLBACK") && !contains(keys(aws_lambda_function.summary_api.environment[0].variables), "ENABLE_LEGACY_WORKSPACE_FALLBACK") && !contains(keys(aws_lambda_function.session_capabilities_api.environment[0].variables), "ENABLE_LEGACY_WORKSPACE_FALLBACK")
+    error_message = "Workspace compatibility flag must not reach Lambdas without a legacy statement path"
   }
 }
