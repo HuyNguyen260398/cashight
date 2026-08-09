@@ -266,6 +266,24 @@ async function route(
     return;
   }
 
+  // Cost Explorer handler owns exact method/subpath dispatch and validation.
+  if (
+    segments[0] === 'aws' &&
+    segments[1] === 'cost-explorer' &&
+    segments.length >= 3
+  ) {
+    const body = method === 'POST' ? (await readBody(request)).toString('utf8') : null;
+    const pathParameters: Record<string, string> =
+      segments[2] === 'reports' && segments[3]
+        ? { reportId: decodeURIComponent(segments[3]) }
+        : {};
+    sendApiResponse(
+      response,
+      await handlers.costExplorer(buildEvent(request, url, pathParameters, body)),
+    );
+    return;
+  }
+
   // POST /summaries
   if (method === 'POST' && segments[0] === 'summaries' && segments.length === 1) {
     const body = (await readBody(request)).toString('utf8');

@@ -1,7 +1,21 @@
 import { parseStatementPdf } from '@cashight/domain/parsers';
 import type { Statement } from '@cashight/domain/schemas';
+import type {
+  CostExplorerReportRequest,
+  SavedCostReport,
+} from '@cashight/domain/aws-cost-explorer';
 
 import { ApiError, type ApiResponse } from '../../backend/shared/api-response';
+import {
+  createCostExplorerApiHandler,
+  type CostExplorerApiDependencies,
+} from '../../backend/functions/cost-explorer-api/handler';
+import type {
+  CompleteCostExplorerResult,
+  CostDimensionValue,
+} from '../../backend/functions/cost-explorer-api/aws-adapter';
+import { createCostCsv } from '../../backend/functions/cost-explorer-api/csv';
+import { SavedReportError } from '../../backend/functions/cost-explorer-api/reports';
 import {
   deleteWorkspaceStatementMetadata,
   getAuthorizedUser,
@@ -49,6 +63,7 @@ import {
 
 /** The fixed table name; there is only one local "table". */
 const TABLE_NAME = 'cashight-local';
+const COST_EXPORT_BUCKET = 'cost-exports';
 
 /** The subject the local stack acts as. Seeded as an authorized user on boot. */
 export const DEV_SUB = process.env.DEV_AUTH_SUB ?? 'local-dev-user';
@@ -102,6 +117,231 @@ function createLocalPresign({ apiBaseUrl }: LocalPresignOptions) {
   });
 }
 
+function monthlyPeriods(request: CostExplorerReportRequest) {
+  if (request.granularity !== 'MONTHLY') {
+    return [{
+      start: request.timePeriod.start,
+      end: request.timePeriod.end,
+      estimated: false,
+    }];
+  }
+  const periods: Array<{ start: string; end: string; estimated: boolean }> = [];
+  let cursor = request.timePeriod.start;
+  while (cursor < request.timePeriod.end) {
+    const date = new Date(`${cursor}T00:00:00.000Z`);
+    const next = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1))
+      .toISOString()
+      .slice(0, 10);
+    periods.push({
+      start: cursor,
+      end: next < request.timePeriod.end ? next : request.timePeriod.end,
+      estimated: false,
+    });
+    cursor = next;
+  }
+  return periods;
+}
+
+function fixedCostResult(
+  request: CostExplorerReportRequest,
+  asOf: Date,
+): CompleteCostExplorerResult {
+  const periods = monthlyPeriods(request);
+  const computeValues = periods.map((_, index) => `${10 + index}.25`);
+  const storageValues = periods.map((_, index) => `${2 + index}.50`);
+  const computeTotal = computeValues.reduce((sum, value) => sum + Number(value), 0);
+  const storageTotal = storageValues.reduce((sum, value) => sum + Number(value), 0);
+  const total = computeTotal + storageTotal;
+  const totalValues = periods.map((_, index) =>
+    (Number(computeValues[index]) + Number(storageValues[index])).toFixed(2),
+  );
+  const grouped = request.groupBy.length > 0;
+  return {
+    source: 'AWS',
+    asOf: asOf.toISOString(),
+    currencyOrUnit: 'USD',
+    estimated: false,
+    overview: {
+      total: total.toFixed(2),
+      average: (total / periods.length).toFixed(2),
+    },
+    periods,
+    series: grouped
+      ? [
+          {
+            key: 'Example Compute',
+            label: 'Example Compute',
+            values: computeValues,
+            total: computeTotal.toFixed(2),
+          },
+          {
+            key: 'Example Storage',
+            label: 'Example Storage',
+            values: storageValues,
+            total: storageTotal.toFixed(2),
+          },
+        ]
+      : [{ key: 'Total', label: 'Total', values: totalValues, total: total.toFixed(2) }],
+    breakdown: grouped
+      ? [
+          {
+            groupValues: ['Example Compute'],
+            values: computeValues,
+            total: computeTotal.toFixed(2),
+            estimated: false,
+          },
+          {
+            groupValues: ['Example Storage'],
+            values: storageValues,
+            total: storageTotal.toFixed(2),
+            estimated: false,
+          },
+        ]
+      : [{ groupValues: [], values: totalValues, total: total.toFixed(2), estimated: false }],
+    comparisonDrivers: [],
+    pageCount: 2,
+  };
+}
+
+function compareSavedReports(left: SavedCostReport, right: SavedCostReport): number {
+  const leftName = left.name.normalize('NFKC').toLowerCase();
+  const rightName = right.name.normalize('NFKC').toLowerCase();
+  if (leftName < rightName) return -1;
+  if (leftName > rightName) return 1;
+  return left.reportId < right.reportId ? -1 : left.reportId > right.reportId ? 1 : 0;
+}
+
+export function createLocalCostExplorerDependencies(
+  { apiBaseUrl }: LocalPresignOptions,
+): CostExplorerApiDependencies {
+  const cache = new Map<string, CompleteCostExplorerResult>();
+  const refreshClaims = new Map<string, number>();
+  const queryLocks = new Set<string>();
+  const savedReports = new Map<string, SavedCostReport>();
+  let reportSequence = 0;
+
+  const adapter = {
+    query: async (request: CostExplorerReportRequest) => fixedCostResult(request, new Date()),
+    forecast: async () => ({
+      total: '21.75',
+      unit: 'USD',
+      periods: [
+        {
+          start: '2026-03-01',
+          end: '2026-04-01',
+          mean: '21.75',
+          lowerBound: '18.00',
+          upperBound: '25.50',
+        },
+      ],
+    }),
+    compare: async () => ({
+      comparisons: [],
+      total: {
+        UnblendedCost: {
+          baseline: '16.50',
+          comparison: '18.01',
+          difference: '1.51',
+          unit: 'USD',
+        },
+      },
+      drivers: [
+        {
+          groupValues: ['Example Compute'],
+          type: 'SERVICE',
+          name: 'Example Compute',
+          metrics: {},
+        },
+      ],
+      pageCount: 2,
+    }),
+    listValues: async (): Promise<CostDimensionValue[]> =>
+      Array.from({ length: 60 }, (_, index) => ({
+        value: `Example Service ${String(index + 1).padStart(2, '0')}`,
+      })),
+    listBillingViews: async () => [
+      { arn: 'arn:aws:billing::000000000000:billingview/local-primary', name: 'Local primary' },
+      { arn: 'arn:aws:billing::000000000000:billingview/local-team', name: 'Local team' },
+    ],
+  };
+
+  return {
+    getAuthorizedUser: authorizedUser,
+    createAwsAdapter: () => adapter,
+    cache: {
+      getCachedCostResult: async (_workspaceId, digest) => {
+        const result = cache.get(digest);
+        return result ? { ...result, source: 'CACHE' as const } : undefined;
+      },
+      putCachedCostResult: async (_workspaceId, digest, result) => {
+        cache.set(digest, result);
+      },
+      claimManualRefresh: async (_workspaceId, digest, claimedAt) => {
+        const epoch = Math.floor(claimedAt.getTime() / 1_000);
+        const expiresAt = refreshClaims.get(digest) ?? 0;
+        if (expiresAt > epoch) return false;
+        refreshClaims.set(digest, epoch + 300);
+        return true;
+      },
+      getManualRefreshCooldown: async (_workspaceId, digest) => refreshClaims.get(digest),
+      claimQueryExecution: async (_workspaceId, digest) => {
+        if (queryLocks.has(digest)) return 'wait' as const;
+        queryLocks.add(digest);
+        return 'owner' as const;
+      },
+      releaseQueryExecution: async (_workspaceId, digest) => {
+        queryLocks.delete(digest);
+      },
+      waitForCachedCostResult: async (_workspaceId, digest) => {
+        const result = cache.get(digest);
+        return result ? { ...result, source: 'CACHE' as const } : undefined;
+      },
+    },
+    reports: {
+      listSavedReports: async () => [...savedReports.values()].sort(compareSavedReports),
+      putSavedReport: async (_workspaceId, input) => {
+        const duplicate = [...savedReports.values()].some(
+          (report) =>
+            report.reportId !== input.reportId &&
+            report.name.normalize('NFKC').toLowerCase() ===
+              input.name.normalize('NFKC').toLowerCase(),
+        );
+        if (duplicate) throw new SavedReportError('DUPLICATE_REPORT_NAME');
+        const existing = input.reportId ? savedReports.get(input.reportId) : undefined;
+        reportSequence += 1;
+        const reportId = input.reportId ??
+          `00000000-0000-4000-8000-${String(reportSequence).padStart(12, '0')}`;
+        const timestamp = new Date().toISOString();
+        const report = {
+          reportId,
+          name: input.name,
+          request: input.request,
+          createdAt: existing?.createdAt ?? timestamp,
+          updatedAt: timestamp,
+        };
+        savedReports.set(reportId, report);
+        return report;
+      },
+      deleteSavedReport: async (_workspaceId, reportId) => savedReports.delete(reportId),
+    },
+    exporter: {
+      exportCsv: async (workspaceId, digest, result, request) => {
+        const createdAt = new Date();
+        const exportId = crypto.randomUUID();
+        const fileName = `cashight-cost-explorer-${createdAt.toISOString().slice(0, 10)}.csv`;
+        const key = `exports/${workspaceId}/${digest}/${exportId}.csv`;
+        await putObject(COST_EXPORT_BUCKET, key, Buffer.from(createCostCsv(result, request)));
+        return {
+          downloadUrl: `${apiBaseUrl}/_local/objects/${COST_EXPORT_BUCKET}/${key}`,
+          expiresAt: new Date(createdAt.getTime() + 300_000).toISOString(),
+          fileName,
+        };
+      },
+    },
+    granularDataEnabled: false,
+  };
+}
+
 export function createLocalHandlers(options: LocalPresignOptions) {
   const uploads = createUploadsApiHandler({
     getAuthorizedUser: authorizedUser,
@@ -151,6 +391,10 @@ export function createLocalHandlers(options: LocalPresignOptions) {
     getAuthorizedUser: authorizedUser,
   });
 
+  const costExplorer = createCostExplorerApiHandler(
+    createLocalCostExplorerDependencies(options),
+  );
+
   return {
     uploads,
     uploadStatus,
@@ -158,6 +402,7 @@ export function createLocalHandlers(options: LocalPresignOptions) {
     dashboard,
     summaries,
     sessionCapabilities,
+    costExplorer,
   };
 }
 
