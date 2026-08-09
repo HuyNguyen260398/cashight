@@ -44,6 +44,10 @@ The command performs no writes. Confirm:
 Stop if any validation fails. Correct the source object or legacy metadata
 instead of bypassing validation.
 
+Record the sanitized summary alongside the deployment change. The dry run is
+an operator action because `CASHIGHT_SOURCE_SUB` is intentionally never stored
+in CI, Terraform variables, repository files, or application logs.
+
 ## 2. Apply the copy
 
 The apply command requires the exact confirmation flag:
@@ -82,6 +86,22 @@ enable_legacy_workspace_fallback = false
 
 Repeat the native and Google dashboard checks after deployment. Keep the
 legacy data unchanged during the observation window.
+
+## Deployment smoke check
+
+Create a short-lived Cognito-native access token out of band, then run:
+
+```bash
+APP_URL=https://cashight.nghuy.link \
+API_URL=https://api.cashight.nghuy.link \
+SMOKE_NATIVE_ACCESS_TOKEN="$SMOKE_NATIVE_ACCESS_TOKEN" \
+pnpm smoke:serverless
+```
+
+The authenticated check must return exactly `{ "canViewAwsCosts": true }`.
+The script never prints the token. Without the optional token it still verifies
+that the capabilities route rejects unauthenticated requests, and explicitly
+reports the authenticated check as skipped.
 
 ## Rollback
 

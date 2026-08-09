@@ -3,12 +3,16 @@
  * smoke-serverless.mjs
  *
  * Smoke tests for the serverless deployment at next.cashight.nghuy.link and
- * api.cashight.nghuy.link. All checks are unauthenticated or check that auth
- * is correctly enforced — no credentials are required.
+ * api.cashight.nghuy.link. Baseline checks are unauthenticated. When a short-
+ * lived native Cognito access token is supplied, the suite also verifies the
+ * server-derived session capabilities response.
  *
  * Required environment variables:
  *   APP_URL  — base URL of the frontend (e.g. https://next.cashight.nghuy.link)
  *   API_URL  — base URL of the API    (e.g. https://api.cashight.nghuy.link)
+ *
+ * Optional environment variables:
+ *   SMOKE_NATIVE_ACCESS_TOKEN — short-lived Cognito-native access token
  *
  * Exit 0 = all checks passed
  * Exit 1 = one or more checks failed
@@ -19,6 +23,7 @@ import http from 'node:http';
 
 const APP_URL = (process.env.APP_URL ?? '').replace(/\/$/, '');
 const API_URL = (process.env.API_URL ?? '').replace(/\/$/, '');
+const NATIVE_ACCESS_TOKEN = process.env.SMOKE_NATIVE_ACCESS_TOKEN ?? '';
 
 if (!APP_URL) throw new Error('APP_URL env var is required');
 if (!API_URL) throw new Error('API_URL env var is required');
@@ -33,10 +38,8 @@ function request(url, options = {}) {
       url,
       {
         method: options.method ?? 'GET',
-        // The API sits behind AWS WAF (AWSManagedRulesCommonRuleSet), whose
-        // NoUserAgent_HEADER rule blocks requests without a User-Agent with a
-        // 403. Real clients are browsers, which always send one — so send a
-        // realistic User-Agent here to represent an actual consumer.
+        // Send the same identifying header a real HTTP client supplies. It also
+        // keeps the smoke request useful if an edge filter is reintroduced.
         headers: { 'User-Agent': 'cashight-smoke-tests/1.0', ...(options.headers ?? {}) },
         timeout: 15000,
       },
@@ -107,6 +110,37 @@ async function main() {
     assert(res.status === 401, `Expected 401, got ${res.status}`);
   });
 
+  await check('GET /session/capabilities without auth returns 401', async () => {
+    const res = await request(`${API_URL}/session/capabilities`);
+    assert(res.status === 401, `Expected 401, got ${res.status}`);
+  });
+
+  if (NATIVE_ACCESS_TOKEN) {
+    await check(
+      'GET /session/capabilities returns native AWS capability only',
+      async () => {
+        const res = await request(`${API_URL}/session/capabilities`, {
+          headers: { Authorization: `Bearer ${NATIVE_ACCESS_TOKEN}` },
+        });
+        assert(res.status === 200, `Expected 200, got ${res.status}`);
+        const body = JSON.parse(res.body);
+        assert(
+          JSON.stringify(Object.keys(body).sort()) ===
+            JSON.stringify(['canViewAwsCosts']),
+          'Capabilities response contained unexpected keys',
+        );
+        assert(
+          body.canViewAwsCosts === true,
+          'Native session must receive canViewAwsCosts: true',
+        );
+      },
+    );
+  } else {
+    console.log(
+      '  - authenticated capabilities check skipped (SMOKE_NATIVE_ACCESS_TOKEN not set)',
+    );
+  }
+
   await check('POST /uploads without auth returns 401', async () => {
     const res = await request(`${API_URL}/uploads`, {
       method: 'POST',
@@ -152,6 +186,17 @@ async function main() {
       'Response is not HTML',
     );
   });
+
+  for (const route of ['/aws/cost-explorer/', '/aws/billing-invoice/']) {
+    await check(`GET ${route} returns 200 with HTML`, async () => {
+      const res = await request(`${APP_URL}${route}`);
+      assert(res.status === 200, `Expected 200, got ${res.status}`);
+      assert(
+        res.body.includes('<!DOCTYPE html') || res.body.includes('<html'),
+        'Response is not HTML',
+      );
+    });
+  }
 
   // Auth deep-link: /auth/callback/ should return HTML (not 404)
   await check('GET /auth/callback/ returns 200 with HTML', async () => {

@@ -297,6 +297,7 @@ jobs:
         env:
           APP_URL: https://next.cashight.nghuy.link
           API_URL: https://api.cashight.nghuy.link
+          SMOKE_NATIVE_ACCESS_TOKEN: ${{ secrets.SMOKE_NATIVE_ACCESS_TOKEN }}
 
   # ── Release manifest ─────────────────────────────────────────────────────────
   release-manifest:

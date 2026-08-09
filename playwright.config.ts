@@ -1,6 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
-const localBaseUrl = 'http://127.0.0.1:3000';
+const localBaseUrl = 'http://localhost:3000';
+const localApiUrl = 'http://localhost:8787';
 const baseURL = process.env.BASE_URL ?? localBaseUrl;
 const storageState = process.env.E2E_STORAGE_STATE;
 
@@ -22,10 +23,18 @@ export default defineConfig({
   },
   webServer: process.env.BASE_URL
     ? undefined
-    : {
-        command: 'pnpm dev',
-        url: localBaseUrl,
-        reuseExistingServer: !process.env.CI,
-        timeout: 120_000,
-      },
+    : [
+        {
+          command: `LOCAL_ALLOWED_ORIGIN=${localBaseUrl} LOCAL_API_BASE_URL=${localApiUrl} node --import tsx scripts/dev-server.ts`,
+          url: `${localApiUrl}/health`,
+          reuseExistingServer: !process.env.CI,
+          timeout: 120_000,
+        },
+        {
+          command: `NEXT_PUBLIC_DEV_AUTH_BYPASS=true NEXT_PUBLIC_API_BASE_URL=${localApiUrl} NODE_OPTIONS=--disable-warning=DEP0205 ./node_modules/.bin/next dev`,
+          url: localBaseUrl,
+          reuseExistingServer: !process.env.CI,
+          timeout: 120_000,
+        },
+      ],
 });
