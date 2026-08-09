@@ -1,5 +1,6 @@
 import { dynamoDocumentClient } from '../../shared/clients';
 import { requiredEnvironmentValue } from '../../shared/config';
+import type { AuthProvider } from '@cashight/domain/workspace';
 import {
   upsertAuthorizedUser as writeAuthorizedUser,
   type AuthorizedUserRecord,
@@ -23,6 +24,30 @@ const COGNITO_SUBJECT_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 
 function normalizeEmail(value: string | undefined): string {
   return value?.trim().toLowerCase() ?? '';
+}
+
+export function deriveAuthProvider(
+  attributes: Record<string, string | undefined>,
+): AuthProvider {
+  if (attributes.identities === undefined) return 'COGNITO';
+
+  try {
+    const identities: unknown = JSON.parse(attributes.identities);
+    if (!Array.isArray(identities) || identities.length !== 1) {
+      throw new Error('AccessDenied');
+    }
+    const identity = identities[0];
+    if (
+      typeof identity !== 'object' ||
+      identity === null ||
+      (identity as { providerName?: unknown }).providerName !== 'Google'
+    ) {
+      throw new Error('AccessDenied');
+    }
+    return 'GOOGLE';
+  } catch {
+    throw new Error('AccessDenied');
+  }
 }
 
 export function createAuthGuardHandler({
@@ -57,6 +82,8 @@ export function createAuthGuardHandler({
         PK: `AUTHZ#${sub}`,
         SK: 'PROFILE',
         active: true,
+        workspaceId: 'primary',
+        authProvider: deriveAuthProvider(attributes),
         createdAt: timestamp,
         updatedAt: timestamp,
       });

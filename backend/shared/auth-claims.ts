@@ -1,21 +1,29 @@
+import { MetricUnit } from '@aws-lambda-powertools/metrics';
+import type { AuthProvider } from '@cashight/domain/workspace';
+
 import { ApiError } from './api-response';
 import { dynamoDocumentClient } from './clients';
 import { requiredEnvironmentValue } from './config';
 import {
   getAuthorizedUser,
+  parseLegacyAuthorizedUserRecord,
   parseAuthorizedUserRecord,
   type AuthorizedUserRecord,
 } from './metadata';
+import { metrics } from './observability';
 
 export type RequiredScope = 'cashight/read' | 'cashight/write';
 
 export interface AccessClaims {
   sub: string;
+  username?: string;
   scopes: ReadonlySet<string>;
 }
 
 interface AuthorizeDependencies {
   getAuthorizedUser: (sub: string) => Promise<unknown>;
+  enableLegacyAuthzFallback?: boolean;
+  onLegacyFallback?: () => void;
 }
 
 function authorizerClaims(event: unknown): Record<string, unknown> | undefined {
@@ -49,7 +57,30 @@ export function extractAccessClaims(
   if (!scopes.has(requiredScope)) {
     throw new ApiError('FORBIDDEN', 403, 'Access denied.');
   }
-  return { sub, scopes };
+  const username =
+    typeof claims.username === 'string' ? claims.username.trim() : '';
+  return { sub, ...(username ? { username } : {}), scopes };
+}
+
+function providerFromSignedUsername(username: string | undefined): AuthProvider | undefined {
+  if (!username) return undefined;
+  if (/^Google_[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(username)) return 'GOOGLE';
+  if (/^[A-Za-z0-9][A-Za-z0-9.@:-]{0,127}$/.test(username)) return 'COGNITO';
+  return undefined;
+}
+
+function legacyAuthorization(
+  value: unknown,
+  username: string | undefined,
+): AuthorizedUserRecord | undefined {
+  const record = parseLegacyAuthorizedUserRecord(value);
+  const authProvider = providerFromSignedUsername(username);
+  if (!record || !authProvider) return undefined;
+  return {
+    ...record,
+    workspaceId: 'primary',
+    authProvider,
+  };
 }
 
 function defaultDependencies(): AuthorizeDependencies {
@@ -66,9 +97,19 @@ export async function authorizeRequest(
   dependencies: AuthorizeDependencies = defaultDependencies(),
 ): Promise<{ claims: AccessClaims; authorization: AuthorizedUserRecord }> {
   const claims = extractAccessClaims(event, requiredScope);
-  const authorization = parseAuthorizedUserRecord(
-    await dependencies.getAuthorizedUser(claims.sub),
-  );
+  const rawAuthorization = await dependencies.getAuthorizedUser(claims.sub);
+  let authorization = parseAuthorizedUserRecord(rawAuthorization);
+  const enableLegacyAuthzFallback =
+    dependencies.enableLegacyAuthzFallback ??
+    process.env.ENABLE_LEGACY_AUTHZ_FALLBACK === 'true';
+  if (!authorization && enableLegacyAuthzFallback) {
+    authorization = legacyAuthorization(rawAuthorization, claims.username);
+    if (authorization) {
+      (dependencies.onLegacyFallback ?? (() => {
+        metrics.addMetric('LegacyAuthzFallback', MetricUnit.Count, 1);
+      }))();
+    }
+  }
   if (!authorization) {
     throw new ApiError('FORBIDDEN', 403, 'Access denied.');
   }

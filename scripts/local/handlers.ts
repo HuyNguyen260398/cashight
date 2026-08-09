@@ -60,6 +60,8 @@ export async function seedAuthorizedUser(sub: string = DEV_SUB): Promise<void> {
     PK: `AUTHZ#${sub}`,
     SK: 'PROFILE',
     active: true,
+    workspaceId: 'primary',
+    authProvider: 'COGNITO',
     createdAt: now,
     updatedAt: now,
   });

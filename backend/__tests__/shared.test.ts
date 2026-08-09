@@ -9,6 +9,7 @@ import {
 } from '../shared/auth-claims';
 import {
   assertRecordOwner,
+  parseAuthorizedUserRecord,
   parseStatementMetadataRecord,
 } from '../shared/metadata';
 import { sanitizeForLog } from '../shared/observability';
@@ -27,6 +28,8 @@ const validAuthorizationRecord = {
   PK: 'AUTHZ#user-123',
   SK: 'PROFILE',
   active: true,
+  workspaceId: 'primary',
+  authProvider: 'COGNITO',
   createdAt: '2026-06-27T12:00:00.000Z',
   updatedAt: '2026-06-27T12:00:00.000Z',
 } as const;
@@ -85,6 +88,123 @@ describe('access-token authorization', () => {
       ),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
+
+  it('returns trusted workspace authorization with signed access claims', async () => {
+    const getAuthorizedUser = vi.fn().mockResolvedValue(validAuthorizationRecord);
+
+    await expect(
+      authorizeRequest(
+        eventWithClaims({
+          sub: 'user-123',
+          username: 'native-user-123',
+          token_use: 'access',
+          scope: 'cashight/read cashight/write',
+        }),
+        'cashight/read',
+        { getAuthorizedUser },
+      ),
+    ).resolves.toEqual({
+      claims: {
+        sub: 'user-123',
+        username: 'native-user-123',
+        scopes: new Set(['cashight/read', 'cashight/write']),
+      },
+      authorization: validAuthorizationRecord,
+    });
+  });
+
+  it('strictly rejects legacy authorization records by default', async () => {
+    const legacyRecord = {
+      PK: 'AUTHZ#user-123',
+      SK: 'PROFILE',
+      active: true,
+      createdAt: '2026-06-27T12:00:00.000Z',
+      updatedAt: '2026-06-27T12:00:00.000Z',
+    };
+
+    expect(parseAuthorizedUserRecord(legacyRecord)).toBeUndefined();
+    await expect(
+      authorizeRequest(
+        eventWithClaims({
+          sub: 'user-123',
+          username: 'native-user-123',
+          token_use: 'access',
+          scope: 'cashight/read',
+        }),
+        'cashight/read',
+        { getAuthorizedUser: vi.fn().mockResolvedValue(legacyRecord) },
+      ),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it.each([
+    ['native-user-123', 'COGNITO'],
+    ['Google_123456789', 'GOOGLE'],
+  ] as const)(
+    'bridges a legacy authorization record from signed username %s',
+    async (username, authProvider) => {
+      const onLegacyFallback = vi.fn();
+      const legacyRecord = {
+        PK: 'AUTHZ#user-123',
+        SK: 'PROFILE',
+        active: true,
+        createdAt: '2026-06-27T12:00:00.000Z',
+        updatedAt: '2026-06-27T12:00:00.000Z',
+      };
+
+      const result = await authorizeRequest(
+        eventWithClaims({
+          sub: 'user-123',
+          username,
+          token_use: 'access',
+          scope: 'cashight/read',
+        }),
+        'cashight/read',
+        {
+          getAuthorizedUser: vi.fn().mockResolvedValue(legacyRecord),
+          enableLegacyAuthzFallback: true,
+          onLegacyFallback,
+        },
+      );
+
+      expect(result.authorization).toEqual({
+        ...legacyRecord,
+        workspaceId: 'primary',
+        authProvider,
+      });
+      expect(onLegacyFallback).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([undefined, '', 'Google_', 'Facebook_123', 'OIDC_123'])(
+    'rejects unsafe signed usernames during legacy fallback: %s',
+    async (username) => {
+      const legacyRecord = {
+        PK: 'AUTHZ#user-123',
+        SK: 'PROFILE',
+        active: true,
+        createdAt: '2026-06-27T12:00:00.000Z',
+        updatedAt: '2026-06-27T12:00:00.000Z',
+      };
+
+      await expect(
+        authorizeRequest(
+          eventWithClaims({
+            sub: 'user-123',
+            username,
+            authProvider: 'GOOGLE',
+            token_use: 'access',
+            scope: 'cashight/read',
+          }),
+          'cashight/read',
+          {
+            getAuthorizedUser: vi.fn().mockResolvedValue(legacyRecord),
+            enableLegacyAuthzFallback: true,
+          },
+        ),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    },
+  );
 });
 
 describe('metadata and storage boundaries', () => {

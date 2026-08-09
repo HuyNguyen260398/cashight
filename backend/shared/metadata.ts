@@ -9,11 +9,15 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 import type { UploadJobState } from '@cashight/domain/api';
 import { BANK_CODES, type BankCode } from '@cashight/domain/banks';
+import {
+  AuthorizedWorkspaceSchema,
+  type AuthorizedWorkspace,
+} from '@cashight/domain/workspace';
 import { z } from 'zod';
 
 import { ApiError } from './api-response';
 
-export interface AuthorizedUserRecord {
+export interface AuthorizedUserRecord extends AuthorizedWorkspace {
   PK: `AUTHZ#${string}`;
   SK: 'PROFILE';
   active: true;
@@ -42,6 +46,14 @@ const authorizationRecordSchema = z.object({
   active: z.boolean(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
+}).extend(AuthorizedWorkspaceSchema.shape);
+
+const legacyAuthorizationRecordSchema = z.object({
+  PK: z.string().regex(/^AUTHZ#[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+  SK: z.literal('PROFILE'),
+  active: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
 });
 
 const statementMetadataRecordSchema = z.object({
@@ -64,6 +76,14 @@ export function parseAuthorizedUserRecord(
   const parsed = authorizationRecordSchema.safeParse(value);
   if (!parsed.success || parsed.data.active !== true) return undefined;
   return parsed.data as AuthorizedUserRecord;
+}
+
+export function parseLegacyAuthorizedUserRecord(
+  value: unknown,
+): Omit<AuthorizedUserRecord, keyof AuthorizedWorkspace> | undefined {
+  const parsed = legacyAuthorizationRecordSchema.safeParse(value);
+  if (!parsed.success || parsed.data.active !== true) return undefined;
+  return parsed.data as Omit<AuthorizedUserRecord, keyof AuthorizedWorkspace>;
 }
 
 export function parseStatementMetadataRecord(
@@ -340,9 +360,11 @@ export async function upsertAuthorizedUser(
       TableName: tableName,
       Key: { PK: record.PK, SK: record.SK },
       UpdateExpression:
-        'SET active = :active, createdAt = if_not_exists(createdAt, :createdAt), updatedAt = :updatedAt',
+        'SET active = :active, workspaceId = :workspaceId, authProvider = :authProvider, createdAt = if_not_exists(createdAt, :createdAt), updatedAt = :updatedAt',
       ExpressionAttributeValues: {
         ':active': true,
+        ':workspaceId': record.workspaceId,
+        ':authProvider': record.authProvider,
         ':createdAt': record.createdAt,
         ':updatedAt': record.updatedAt,
       },
