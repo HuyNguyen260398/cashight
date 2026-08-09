@@ -16,6 +16,7 @@
     "cleanup:legacy-buckets:dry-run": "tsx scripts/delete-legacy-s3-buckets.ts --dry-run",
     "security:scan-logs": "tsx scripts/security-scan-logs.ts",
     "migrate:statements": "tsx scripts/migrate-statements.ts",
+    "migrate:workspace": "tsx scripts/migrate-workspace-ownership.ts",
     "reconcile:statements": "tsx scripts/reconcile-statements.ts",
     "deploy:frontend": "node scripts/deploy-frontend.mjs",
     "release:manifest": "node scripts/create-release-manifest.mjs",
