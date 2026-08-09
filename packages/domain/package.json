@@ -14,6 +14,7 @@
     "./format": "./src/format.ts",
     "./summary-payload": "./src/summary-payload.ts",
     "./upload-error": "./src/upload-error.ts",
+    "./workspace": "./src/workspace.ts",
     "./security/*": "./src/security/*.ts",
     "./pdf-dom-polyfill": "./src/pdf-dom-polyfill.ts",
     "./parsers/tpbank": "./src/parsers/tpbank.ts",
