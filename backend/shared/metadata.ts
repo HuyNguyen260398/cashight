@@ -42,6 +42,47 @@ export interface StatementMetadataRecord {
   uploadedAt: string;
 }
 
+export interface CostQueryCacheManifestRecord {
+  PK: `WORKSPACE#${string}`;
+  SK: `AWS_QUERY_CACHE#${string}#MANIFEST`;
+  recordType: 'AWS_QUERY_CACHE_MANIFEST';
+  schemaVersion: 1;
+  chunkCount: number;
+  payloadSha256: string;
+  asOf: string;
+  publishedAtEpoch: number;
+  expiresAtEpoch: number;
+}
+
+export interface CostQueryCacheChunkRecord {
+  PK: `WORKSPACE#${string}`;
+  SK: `AWS_QUERY_CACHE#${string}#CHUNK#${string}`;
+  recordType: 'AWS_QUERY_CACHE_CHUNK';
+  schemaVersion: 1;
+  chunkIndex: number;
+  payload: string;
+  expiresAtEpoch: number;
+}
+
+export function costQueryCachePrefix(
+  digest: string,
+): `AWS_QUERY_CACHE#${string}#` {
+  return `AWS_QUERY_CACHE#${digest}#`;
+}
+
+export function costQueryCacheManifestKey(
+  digest: string,
+): `AWS_QUERY_CACHE#${string}#MANIFEST` {
+  return `${costQueryCachePrefix(digest)}MANIFEST`;
+}
+
+export function costQueryCacheChunkKey(
+  digest: string,
+  index: number,
+): `AWS_QUERY_CACHE#${string}#CHUNK#${string}` {
+  return `${costQueryCachePrefix(digest)}CHUNK#${String(index).padStart(6, '0')}`;
+}
+
 const authorizationRecordSchema = z.object({
   PK: z.string().regex(/^AUTHZ#[A-Za-z0-9][A-Za-z0-9._:-]*$/),
   SK: z.literal('PROFILE'),
