@@ -2,12 +2,17 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   BarChart3,
   ChevronDown,
   FileText,
-  LayoutDashboard,
   LogOut,
   MoreHorizontal,
   ShieldCheck,
@@ -18,14 +23,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from './theme-toggle';
+import { DashboardNav } from './dashboard-nav';
 
 const navItems = [
-  {
-    href: '/',
-    label: 'Dashboard',
-    description: 'Spend overview',
-    icon: LayoutDashboard,
-  },
   {
     href: '/upload',
     label: 'Upload',
@@ -115,6 +115,13 @@ function SidebarContent({
 
       <nav className="flex-1 overflow-y-auto px-4 py-6">
         <ul className="flex flex-col gap-2">
+          <Suspense fallback={null}>
+            <DashboardNav
+              pathname={pathname}
+              collapsed={collapsed}
+              onNavigate={onNavigate}
+            />
+          </Suspense>
           {navItems.map((item) => {
             const active = isActive(pathname, item.href);
             const Icon = item.icon;
