@@ -25,6 +25,7 @@ import {
   createDefaultCostReportRequest,
   serializeCostReportSearch,
 } from '@/frontend/lib/aws-cost-explorer-url';
+import { cn } from '@/lib/utils';
 
 type DateRangePreset =
   | 'CURRENT_MONTH'
@@ -56,6 +57,7 @@ export interface ReportParametersProps {
     reportId?: string,
   ) => Promise<SavedCostReport>;
   onDeleteReport?: (reportId: string) => Promise<void>;
+  compact?: boolean;
 }
 
 const selectClassName =
@@ -289,6 +291,7 @@ export function ReportParameters({
   reportsError = null,
   onSaveReport,
   onDeleteReport,
+  compact = false,
 }: ReportParametersProps) {
   const [draft, setDraft] = useState<CostExplorerReportRequest>(initialRequest);
   const [datePreset, setDatePreset] = useState<DateRangePreset>(() =>
@@ -403,7 +406,13 @@ export function ReportParameters({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Date and report mode">
+        <section
+          className={cn(
+            'grid gap-4',
+            compact ? 'sm:grid-cols-2 xl:grid-cols-1' : 'sm:grid-cols-2 lg:grid-cols-4',
+          )}
+          aria-label="Date and report mode"
+        >
           <Field label="Date range">
             <select
               aria-label="Date range"
@@ -550,7 +559,13 @@ export function ReportParameters({
           </section>
         )}
 
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Cost calculation">
+        <section
+          className={cn(
+            'grid gap-4',
+            compact ? 'sm:grid-cols-2 xl:grid-cols-1' : 'sm:grid-cols-2 lg:grid-cols-4',
+          )}
+          aria-label="Cost calculation"
+        >
           <Field label="Billing view">
             <select
               aria-label="Billing view"
@@ -627,7 +642,10 @@ export function ReportParameters({
           </Field>
         </section>
 
-        <section className="grid gap-3 lg:grid-cols-2" aria-label="Group definitions">
+        <section
+          className={cn('grid gap-3', compact ? 'sm:grid-cols-2 xl:grid-cols-1' : 'lg:grid-cols-2')}
+          aria-label="Group definitions"
+        >
           <GroupControl index={0} group={draft.groupBy[0] ?? null} onChange={(group) => updateGroup(0, group)} />
           <GroupControl index={1} group={draft.groupBy[1] ?? null} onChange={(group) => updateGroup(1, group)} />
         </section>
@@ -645,7 +663,7 @@ export function ReportParameters({
           <h3 id="advanced-options-heading" className="text-sm font-semibold text-gray-900 dark:text-white/90">
             Advanced options
           </h3>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className={cn('grid gap-3', compact ? 'sm:grid-cols-2 xl:grid-cols-1' : 'sm:grid-cols-3')}>
             {[
               {
                 label: 'Show forecast',

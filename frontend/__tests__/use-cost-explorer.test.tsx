@@ -5,6 +5,7 @@ import type { CostExplorerReportRequest } from '@cashight/domain/aws-cost-explor
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useCostExplorer } from '../hooks/use-cost-explorer';
+import { ApiRequestError } from '../api/client';
 
 const REPORT_ID = '11111111-1111-4111-8111-111111111111';
 const API_BASE_URL = 'https://api.example.com';
@@ -239,6 +240,63 @@ describe('useCostExplorer report state', () => {
       request: reportRequest,
       refresh: true,
     });
+  });
+
+  it('keeps a successful cost query when AWS rejects only the forecast combination', async () => {
+    const forecastRequest: CostExplorerReportRequest = {
+      ...reportRequest,
+      groupBy: [],
+      showForecast: true,
+    };
+    mockApiFetch.mockImplementation(async (url: string) => {
+      if (url.endsWith('/reports')) return response({ items: [] });
+      if (url.endsWith('/query')) return response(queryBody());
+      if (url.endsWith('/forecast')) {
+        throw new ApiRequestError(422, {
+          error: {
+            code: 'INVALID_COST_QUERY',
+            message: 'Forecast is unavailable for this range.',
+            retryable: false,
+          },
+        });
+      }
+      throw new Error(`Unexpected API request: ${url}`);
+    });
+    const { result } = renderHook(() => useCostExplorer());
+
+    act(() => result.current.run(forecastRequest));
+
+    await waitFor(() => expect(result.current.state.status).toBe('success'));
+    expect(result.current.state.result?.overview.total).toBe('3.30');
+    expect(result.current.state.forecast).toBeNull();
+  });
+
+  it('does not hide a forecast authorization denial behind unavailable UI', async () => {
+    const forecastRequest: CostExplorerReportRequest = {
+      ...reportRequest,
+      groupBy: [],
+      showForecast: true,
+    };
+    mockApiFetch.mockImplementation(async (url: string) => {
+      if (url.endsWith('/reports')) return response({ items: [] });
+      if (url.endsWith('/query')) return response(queryBody());
+      if (url.endsWith('/forecast')) {
+        throw new ApiRequestError(403, {
+          error: {
+            code: 'COGNITO_REAUTH_REQUIRED',
+            message: 'A native Cognito session is required.',
+            retryable: false,
+          },
+        });
+      }
+      throw new Error(`Unexpected API request: ${url}`);
+    });
+    const { result } = renderHook(() => useCostExplorer());
+
+    act(() => result.current.run(forecastRequest));
+
+    await waitFor(() => expect(result.current.state.status).toBe('error'));
+    expect(result.current.state.error?.code).toBe('COGNITO_REAUTH_REQUIRED');
   });
 });
 

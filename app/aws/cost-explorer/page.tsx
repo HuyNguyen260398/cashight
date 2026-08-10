@@ -1,15 +1,29 @@
-import { AwsDashboardPlaceholder } from '../components/aws-dashboard-placeholder';
+'use client';
 
-export default function AwsCostExplorerPage() {
+import { Suspense } from 'react';
+
+import { CostExplorerDashboard } from '@/app/components/aws-cost-explorer/cost-explorer-dashboard';
+import { ProtectedRoute } from '@/frontend/auth/protected-route';
+
+function CostExplorerPageLoading() {
   return (
-    <AwsDashboardPlaceholder
-      eyebrow="AWS budget"
-      title="AWS Cost Explorer"
-      description="Explore deployment-account AWS costs without exposing AWS credentials to the browser."
+    <main
+      className="surface-card min-h-80 animate-pulse p-6 motion-reduce:animate-none"
+      aria-label="Loading AWS Cost Explorer"
+      aria-busy="true"
     >
-      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-        Cost Explorer reporting arrives in Step 31.
-      </p>
-    </AwsDashboardPlaceholder>
+      <div className="h-6 w-48 rounded bg-gray-100 dark:bg-gray-800" />
+      <div className="mt-6 h-52 rounded-xl bg-gray-100 dark:bg-gray-800" />
+    </main>
+  );
+}
+
+export default function CostExplorerPage() {
+  return (
+    <ProtectedRoute>
+      <Suspense fallback={<CostExplorerPageLoading />}>
+        <CostExplorerDashboard />
+      </Suspense>
+    </ProtectedRoute>
   );
 }

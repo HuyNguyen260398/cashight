@@ -75,6 +75,11 @@ function isAbort(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
 }
 
+function isForecastUnavailable(error: unknown): boolean {
+  const code = clientError(error).code;
+  return code === 'INVALID_COST_QUERY' || code === 'GRANULARITY_NOT_AVAILABLE';
+}
+
 function sortReports(reports: SavedCostReport[]): SavedCostReport[] {
   return [...reports].sort((left, right) =>
     left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }),
@@ -225,9 +230,14 @@ export function useCostExplorer(): {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ request }),
                 signal: controller.signal,
-              }).then((response) =>
-                parsedJson(response, CostExplorerForecastResponseSchema),
-              )
+              })
+                .then((response) =>
+                  parsedJson(response, CostExplorerForecastResponseSchema),
+                )
+                .catch((error: unknown) => {
+                  if (isForecastUnavailable(error)) return null;
+                  throw error;
+                })
             : Promise.resolve(null);
           const [query, forecastResponse] = await Promise.all([
             queryPromise,

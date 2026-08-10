@@ -233,6 +233,24 @@ describe('AuthCallbackPage', () => {
     expect(mockSigninRedirectCallback).toHaveBeenCalledOnce();
   });
 
+  it('returns to Cost Explorer only when the callback state contains the exact allowlisted route', async () => {
+    mockSigninRedirectCallback.mockResolvedValue({
+      state: { returnTo: '/aws/cost-explorer/' },
+    });
+    const first = render(<CallbackPage />);
+    await waitFor(() =>
+      expect(window.location.href).toBe('/aws/cost-explorer/'),
+    );
+
+    first.unmount();
+    window.location.href = '';
+    mockSigninRedirectCallback.mockResolvedValue({
+      state: { returnTo: 'https://attacker.example/callback' },
+    });
+    render(<CallbackPage />);
+    await waitFor(() => expect(window.location.href).toBe('/'));
+  });
+
   it('redirects to /signin?error=callback when callback fails', async () => {
     mockSigninRedirectCallback.mockRejectedValue(new Error('callback error'));
     render(<CallbackPage />);

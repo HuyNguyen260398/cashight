@@ -53,6 +53,12 @@ function dimensionLabel(key: string): string {
   return COST_FILTER_DIMENSIONS.find((item) => item.key === key)?.label ?? key;
 }
 
+function displayFilterValue(card: FilterCardState, value: string): string {
+  if (card.type !== 'DIMENSION' || card.key !== 'LINKED_ACCOUNT') return value;
+  const digits = value.match(/\d{4,}/)?.[0];
+  return `Linked account •••• ${digits?.slice(-4) ?? '••••'}`;
+}
+
 function expressionLeaf(card: FilterCardState): CostExplorerExpression | null {
   if (!card.key || card.values.length === 0) return null;
   const leaf = {
@@ -214,12 +220,15 @@ function ValueSelector({
         </label>
         {card.values.length > 0 && (
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Selected: {card.values.join(', ')}
+            Selected:{' '}
+            {card.values
+              .map((value) => displayFilterValue(card, value))
+              .join(', ')}
           </p>
         )}
         <div className="max-h-48 space-y-1 overflow-y-auto" aria-live="polite">
-          {visibleValues.map((value) => {
-            const id = `cost-filter-${card.id}-${value.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+          {visibleValues.map((value, index) => {
+            const id = `cost-filter-${card.id}-${index}`;
             return (
               <label
                 key={value}
@@ -231,7 +240,9 @@ function ValueSelector({
                   checked={card.values.includes(value)}
                   onCheckedChange={(checked) => toggleValue(value, checked === true)}
                 />
-                <span className="break-all">{value}</span>
+                <span className="break-all">
+                  {displayFilterValue(card, value)}
+                </span>
               </label>
             );
           })}
