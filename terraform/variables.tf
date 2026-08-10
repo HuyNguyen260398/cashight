@@ -50,6 +50,18 @@ variable "enable_legacy_workspace_fallback" {
   default     = true
 }
 
+variable "enable_cost_explorer_granular_data" {
+  type        = bool
+  description = "Expose Cost Explorer resource/hourly queries after the matching AWS account preference has been enabled out of band. Programmatic granular queries may incur additional charges."
+  default     = false
+}
+
+variable "cost_explorer_granular_data_enabled_out_of_band" {
+  type        = bool
+  description = "Operator acknowledgement that the required Cost Explorer granular-data preference was already enabled manually in the AWS Billing console. Terraform never changes that account preference."
+  default     = false
+}
+
 variable "cutover_dns_to_cloudfront" {
   type        = bool
   description = <<-EOT

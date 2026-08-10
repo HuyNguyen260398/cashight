@@ -72,6 +72,14 @@ override_resource {
   }
 }
 
+override_resource {
+  target          = aws_lambda_alias.cost_explorer_api_live
+  override_during = plan
+  values = {
+    arn = "arn:aws:lambda:ap-southeast-1:123456789012:function:cashight-cost-explorer-api:live"
+  }
+}
+
 # ── Cognito SPA client ────────────────────────────────────────────────────────
 
 run "spa_client_has_no_secret" {
@@ -353,6 +361,109 @@ run "session_capabilities_has_error_alarm" {
   }
 }
 
+# ── Cost Explorer API ─────────────────────────────────────────────────────────
+
+run "cost_explorer_routes_have_exact_methods_and_scopes" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for route in [
+        "/aws/cost-explorer/query",
+        "/aws/cost-explorer/comparisons",
+        "/aws/cost-explorer/dimensions",
+        "/aws/cost-explorer/forecast",
+        "/aws/cost-explorer/export",
+      ] : toset(keys(yamldecode(aws_api_gateway_rest_api.cashight.body).paths[route])) == toset(["post", "options"])
+    ])
+    error_message = "Each Cost Explorer operation route must expose POST and OPTIONS only"
+  }
+
+  assert {
+    condition     = toset(keys(yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/cost-explorer/reports"])) == toset(["get", "post", "options"])
+    error_message = "Saved reports collection must expose GET, POST, and OPTIONS only"
+  }
+
+  assert {
+    condition     = toset(keys(yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/cost-explorer/reports/{reportId}"])) == toset(["delete", "options"])
+    error_message = "Saved report item must expose DELETE and OPTIONS only"
+  }
+
+  assert {
+    condition = alltrue([
+      for route in [
+        "/aws/cost-explorer/query",
+        "/aws/cost-explorer/comparisons",
+        "/aws/cost-explorer/dimensions",
+        "/aws/cost-explorer/forecast",
+        "/aws/cost-explorer/export",
+      ] : yamldecode(aws_api_gateway_rest_api.cashight.body).paths[route].post.security[0].CognitoAuth == ["cashight/read"]
+    ])
+    error_message = "Cost query routes must require cashight/read"
+  }
+
+  assert {
+    condition     = yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/cost-explorer/reports"].get.security[0].CognitoAuth == ["cashight/read"] && yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/cost-explorer/reports"].post.security[0].CognitoAuth == ["cashight/write"] && yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/cost-explorer/reports/{reportId}"].delete.security[0].CognitoAuth == ["cashight/write"]
+    error_message = "Saved-report reads and mutations must use exact read/write scopes"
+  }
+}
+
+run "cost_explorer_routes_validate_and_share_one_alias" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for route in [
+        "/aws/cost-explorer/query",
+        "/aws/cost-explorer/comparisons",
+        "/aws/cost-explorer/dimensions",
+        "/aws/cost-explorer/forecast",
+        "/aws/cost-explorer/export",
+      ] : yamldecode(aws_api_gateway_rest_api.cashight.body).paths[route].post["x-amazon-apigateway-request-validator"] == "all"
+    ])
+    error_message = "Every Cost Explorer POST route must enable API Gateway request validation"
+  }
+
+  assert {
+    condition = alltrue([
+      for route in [
+        "/aws/cost-explorer/query",
+        "/aws/cost-explorer/comparisons",
+        "/aws/cost-explorer/dimensions",
+        "/aws/cost-explorer/forecast",
+        "/aws/cost-explorer/export",
+      ] : strcontains(yamldecode(aws_api_gateway_rest_api.cashight.body).paths[route].post["x-amazon-apigateway-integration"].uri, "cashight-cost-explorer-api:live")
+    ])
+    error_message = "Every Cost Explorer operation must integrate with the one live Lambda alias"
+  }
+
+  assert {
+    condition     = strcontains(yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/cost-explorer/reports"].get["x-amazon-apigateway-integration"].uri, "cashight-cost-explorer-api:live") && strcontains(yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/cost-explorer/reports"].post["x-amazon-apigateway-integration"].uri, "cashight-cost-explorer-api:live") && strcontains(yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/cost-explorer/reports/{reportId}"].delete["x-amazon-apigateway-integration"].uri, "cashight-cost-explorer-api:live")
+    error_message = "Every saved-report route must integrate with the one live Lambda alias"
+  }
+
+  assert {
+    condition     = aws_lambda_permission.api_cost_explorer.source_arn == "${aws_api_gateway_rest_api.cashight.execution_arn}/*/*/aws/cost-explorer/*"
+    error_message = "API Gateway may invoke Cost Explorer only under /aws/cost-explorer/*"
+  }
+
+  assert {
+    condition = alltrue([
+      for route, methods in {
+        "/aws/cost-explorer/query"              = "'POST,OPTIONS'"
+        "/aws/cost-explorer/comparisons"        = "'POST,OPTIONS'"
+        "/aws/cost-explorer/dimensions"         = "'POST,OPTIONS'"
+        "/aws/cost-explorer/forecast"           = "'POST,OPTIONS'"
+        "/aws/cost-explorer/export"             = "'POST,OPTIONS'"
+        "/aws/cost-explorer/reports"            = "'GET,POST,OPTIONS'"
+        "/aws/cost-explorer/reports/{reportId}" = "'DELETE,OPTIONS'"
+      } : yamldecode(aws_api_gateway_rest_api.cashight.body).paths[route].options["x-amazon-apigateway-integration"].responses.default.responseParameters["method.response.header.Access-Control-Allow-Methods"] == methods &&
+      yamldecode(aws_api_gateway_rest_api.cashight.body).paths[route].options["x-amazon-apigateway-integration"].responses.default.responseParameters["method.response.header.Access-Control-Allow-Origin"] == "'https://cashight.nghuy.link'"
+    ])
+    error_message = "Every Cost Explorer preflight must expose only its route methods to the production origin"
+  }
+}
+
 run "legacy_flags_reach_only_compatibility_consumers" {
   command = plan
 
@@ -365,6 +476,7 @@ run "legacy_flags_reach_only_compatibility_consumers" {
         aws_lambda_function.dashboard_api,
         aws_lambda_function.summary_api,
         aws_lambda_function.session_capabilities_api,
+        aws_lambda_function.cost_explorer_api,
       ] : fn.environment[0].variables["ENABLE_LEGACY_AUTHZ_FALLBACK"] == tostring(var.enable_legacy_authz_fallback)
     ])
     error_message = "Auth compatibility flag must reach every request-authorizing Lambda"
@@ -388,7 +500,7 @@ run "legacy_flags_reach_only_compatibility_consumers" {
   }
 
   assert {
-    condition     = !contains(keys(aws_lambda_function.auth_guard.environment[0].variables), "ENABLE_LEGACY_WORKSPACE_FALLBACK") && !contains(keys(aws_lambda_function.uploads_api.environment[0].variables), "ENABLE_LEGACY_WORKSPACE_FALLBACK") && !contains(keys(aws_lambda_function.summary_api.environment[0].variables), "ENABLE_LEGACY_WORKSPACE_FALLBACK") && !contains(keys(aws_lambda_function.session_capabilities_api.environment[0].variables), "ENABLE_LEGACY_WORKSPACE_FALLBACK")
+    condition     = !contains(keys(aws_lambda_function.auth_guard.environment[0].variables), "ENABLE_LEGACY_WORKSPACE_FALLBACK") && !contains(keys(aws_lambda_function.uploads_api.environment[0].variables), "ENABLE_LEGACY_WORKSPACE_FALLBACK") && !contains(keys(aws_lambda_function.summary_api.environment[0].variables), "ENABLE_LEGACY_WORKSPACE_FALLBACK") && !contains(keys(aws_lambda_function.session_capabilities_api.environment[0].variables), "ENABLE_LEGACY_WORKSPACE_FALLBACK") && !contains(keys(aws_lambda_function.cost_explorer_api.environment[0].variables), "ENABLE_LEGACY_WORKSPACE_FALLBACK")
     error_message = "Workspace compatibility flag must not reach Lambdas without a legacy statement path"
   }
 }

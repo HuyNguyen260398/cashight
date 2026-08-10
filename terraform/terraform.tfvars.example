@@ -7,3 +7,9 @@ bucket_suffix          = "cashight-2026" # Used by the Cognito Hosted UI domain;
 # statement-object backfill has been validated using the migration runbook.
 enable_legacy_authz_fallback     = true
 enable_legacy_workspace_fallback = true
+
+# Paid Cost Explorer resource/hourly data stays disabled by default. Terraform
+# never changes the AWS account preference. Set both values to true only after
+# enabling it manually in the Billing console and reviewing the query cost.
+enable_cost_explorer_granular_data              = false
+cost_explorer_granular_data_enabled_out_of_band = false

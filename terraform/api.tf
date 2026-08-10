@@ -7,6 +7,7 @@ locals {
     region                       = var.region
     user_pool_arn                = aws_cognito_user_pool.users.arn
     session_capabilities_api_arn = aws_lambda_alias.session_capabilities_api_live.arn
+    cost_explorer_api_arn        = aws_lambda_alias.cost_explorer_api_live.arn
     uploads_api_arn              = aws_lambda_alias.uploads_api_live.arn
     upload_status_api_arn        = aws_lambda_alias.upload_status_api_live.arn
     statements_api_arn           = aws_lambda_alias.statements_api_live.arn
@@ -19,7 +20,7 @@ locals {
 
 resource "aws_api_gateway_rest_api" "cashight" {
   name        = "${var.project_name}-api"
-  description = "Cashight REST API — session capabilities, statements, dashboard, uploads, summaries"
+  description = "Cashight REST API — session capabilities, statements, dashboard, uploads, summaries, AWS costs"
 
   body = templatefile("${path.module}/api-openapi.yaml.tftpl", local.api_template_vars)
 
@@ -146,6 +147,15 @@ resource "aws_lambda_permission" "api_session_capabilities" {
   qualifier     = aws_lambda_alias.session_capabilities_api_live.name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.cashight.execution_arn}/*/GET/session/capabilities"
+}
+
+resource "aws_lambda_permission" "api_cost_explorer" {
+  statement_id  = "AllowAPIGatewayCostExplorer"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.cost_explorer_api.function_name
+  qualifier     = aws_lambda_alias.cost_explorer_api_live.name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.cashight.execution_arn}/*/*/aws/cost-explorer/*"
 }
 
 resource "aws_lambda_permission" "api_uploads" {
