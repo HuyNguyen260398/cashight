@@ -261,6 +261,23 @@ describe('Cost Explorer query coordination', () => {
     expect(createAwsAdapter).not.toHaveBeenCalled();
   });
 
+  it('returns the cooldown time after a successful manual refresh claim', async () => {
+    const { deps, cache } = dependencies();
+    cache.getManualRefreshCooldown.mockResolvedValue(1786233900);
+
+    const response = await createCostExplorerApiHandler(deps)(
+      event('POST', '/aws/cost-explorer/query', {
+        request: reportRequest,
+        refresh: true,
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(bodyOf(response).refreshCooldownUntil).toBe(
+      '2026-08-09T00:05:00.000Z',
+    );
+  });
+
   it('waits for the lock owner and never starts a duplicate AWS query', async () => {
     const { deps, cache, createAwsAdapter } = dependencies();
     cache.claimQueryExecution.mockResolvedValue('wait');

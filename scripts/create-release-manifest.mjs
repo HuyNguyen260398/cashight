@@ -51,6 +51,7 @@ const lambda = new LambdaClient({ region: REGION });
 
 const FUNCTION_NAMES = [
   'auth-guard',
+  'cost-explorer-api',
   'session-capabilities-api',
   'uploads-api',
   'upload-status-api',

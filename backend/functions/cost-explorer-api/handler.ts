@@ -411,7 +411,15 @@ export function createCostExplorerApiHandler(dependencies: CostExplorerApiDepend
         result,
         selectCostResultExpiry(request, requestedAt),
       );
-      return { digest, result };
+      const refreshCooldownUntil = refresh
+        ? cooldownIso(
+            await dependencies.cache.getManualRefreshCooldown(
+              workspaceId,
+              digest,
+            ),
+          )
+        : undefined;
+      return { digest, result, refreshCooldownUntil };
     } finally {
       await dependencies.cache.releaseQueryExecution(workspaceId, digest, requestId);
     }

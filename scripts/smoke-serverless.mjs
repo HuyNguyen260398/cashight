@@ -13,6 +13,7 @@
  *
  * Optional environment variables:
  *   SMOKE_NATIVE_ACCESS_TOKEN — short-lived Cognito-native access token
+ *   SMOKE_REQUIRE_NATIVE_AUTH — set to true for production verification
  *
  * Exit 0 = all checks passed
  * Exit 1 = one or more checks failed
@@ -20,13 +21,12 @@
 
 import https from 'node:https';
 import http from 'node:http';
+import { pathToFileURL } from 'node:url';
 
 const APP_URL = (process.env.APP_URL ?? '').replace(/\/$/, '');
 const API_URL = (process.env.API_URL ?? '').replace(/\/$/, '');
 const NATIVE_ACCESS_TOKEN = process.env.SMOKE_NATIVE_ACCESS_TOKEN ?? '';
-
-if (!APP_URL) throw new Error('APP_URL env var is required');
-if (!API_URL) throw new Error('API_URL env var is required');
+const REQUIRE_NATIVE_AUTH = process.env.SMOKE_REQUIRE_NATIVE_AUTH === 'true';
 
 // ── HTTP client ───────────────────────────────────────────────────────────────
 
@@ -67,6 +67,8 @@ function request(url, options = {}) {
 
 const results = [];
 
+class SmokeSkip extends Error {}
+
 async function check(name, fn) {
   try {
     await fn();
@@ -74,6 +76,11 @@ async function check(name, fn) {
     results.push({ name, passed: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    if (err instanceof SmokeSkip) {
+      console.log(`  - ${name} skipped (${msg})`);
+      results.push({ name, passed: false, skipped: true, reason: msg });
+      return;
+    }
     console.error(`  ✗ ${name}: ${msg}`);
     results.push({ name, passed: false, error: msg });
   }
@@ -83,9 +90,122 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+export function requireNativeAccessToken(nativeToken, required) {
+  if (required && !nativeToken) {
+    throw new Error(
+      'SMOKE_NATIVE_ACCESS_TOKEN is required when SMOKE_REQUIRE_NATIVE_AUTH=true',
+    );
+  }
+  return nativeToken;
+}
+
+function isoDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+export function buildHistoricalCostExplorerRequest(now = new Date()) {
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const start = new Date(
+    Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - 1, 1),
+  );
+  return {
+    mode: 'STANDARD',
+    timePeriod: { start: isoDate(start), end: isoDate(end) },
+    granularity: 'MONTHLY',
+    metric: 'UnblendedCost',
+    groupBy: [{ type: 'DIMENSION', key: 'SERVICE' }],
+    chartStyle: 'STACK',
+    showForecast: false,
+    showOnlyUntagged: false,
+    showOnlyUncategorized: false,
+  };
+}
+
+function parsedBody(response, label) {
+  try {
+    return JSON.parse(response.body);
+  } catch {
+    throw new Error(`${label} did not return JSON`);
+  }
+}
+
+function costExplorerDisabledReason(response) {
+  if (response.status !== 424) return null;
+  const body = parsedBody(response, 'Cost Explorer query');
+  return body?.error?.code === 'COST_EXPLORER_DISABLED'
+    ? 'AWS Cost Explorer is not enabled in the target account.'
+    : null;
+}
+
+function containsSensitiveCostData(value, nativeToken) {
+  const sensitiveKeys = new Set([
+    'accesstoken',
+    'token',
+    'credentials',
+    'secret',
+    'password',
+    'accesskey',
+    'secretaccesskey',
+    'accountid',
+    'linkedaccount',
+    'billingviewarn',
+    'request',
+    'filter',
+  ]);
+  const visit = (current) => {
+    if (typeof current === 'string') {
+      return (
+        (nativeToken.length > 0 && current.includes(nativeToken)) ||
+        /(?:^|\D)\d{12}(?:\D|$)/.test(current)
+      );
+    }
+    if (Array.isArray(current)) return current.some(visit);
+    if (!current || typeof current !== 'object') return false;
+    return Object.entries(current).some(([key, child]) => {
+      const normalized = key.toLowerCase().replace(/[^a-z]/g, '');
+      return sensitiveKeys.has(normalized) || visit(child);
+    });
+  };
+  return visit(value);
+}
+
+export function inspectCostExplorerSmokeResponses(
+  firstResponse,
+  secondResponse,
+  nativeToken,
+) {
+  const disabledReason = costExplorerDisabledReason(firstResponse);
+  if (disabledReason) return { status: 'SKIPPED', reason: disabledReason };
+
+  assert(firstResponse.status === 200, `Expected first query 200, got ${firstResponse.status}`);
+  assert(secondResponse, 'Expected a second Cost Explorer query response');
+  assert(secondResponse.status === 200, `Expected second query 200, got ${secondResponse.status}`);
+
+  const first = parsedBody(firstResponse, 'First Cost Explorer query');
+  const second = parsedBody(secondResponse, 'Second Cost Explorer query');
+  assert(
+    !containsSensitiveCostData(first, nativeToken) &&
+      !containsSensitiveCostData(second, nativeToken),
+    'Cost Explorer responses contained sensitive fields',
+  );
+  assert(first?.result?.source === 'AWS', 'Expected first query source AWS');
+  assert(second?.result?.source === 'CACHE', 'Expected second query source CACHE');
+  const firstTotal = first?.result?.overview?.total;
+  const secondTotal = second?.result?.overview?.total;
+  assert(
+    typeof firstTotal === 'string' && firstTotal === secondTotal,
+    'Expected identical overview totals',
+  );
+  return { status: 'PASSED', total: firstTotal };
+}
+
 // ── Smoke tests ───────────────────────────────────────────────────────────────
 
 async function main() {
+  if (!APP_URL) throw new Error('APP_URL env var is required');
+  if (!API_URL) throw new Error('API_URL env var is required');
+  requireNativeAccessToken(NATIVE_ACCESS_TOKEN, REQUIRE_NATIVE_AUTH);
+
   console.log(`\nSmoke tests`);
   console.log(`  APP: ${APP_URL}`);
   console.log(`  API: ${API_URL}\n`);
@@ -135,9 +255,40 @@ async function main() {
         );
       },
     );
+
+    await check(
+      'Cost Explorer bounded query returns AWS then identical CACHE totals',
+      async () => {
+        const reportRequest = buildHistoricalCostExplorerRequest();
+        const headers = {
+          Authorization: `Bearer ${NATIVE_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        };
+        const first = await request(`${API_URL}/aws/cost-explorer/query`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ request: reportRequest, refresh: true }),
+        });
+        const disabledReason = costExplorerDisabledReason(first);
+        if (disabledReason) throw new SmokeSkip(disabledReason);
+        const second = await request(`${API_URL}/aws/cost-explorer/query`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ request: reportRequest, refresh: false }),
+        });
+        inspectCostExplorerSmokeResponses(
+          first,
+          second,
+          NATIVE_ACCESS_TOKEN,
+        );
+      },
+    );
   } else {
     console.log(
       '  - authenticated capabilities check skipped (SMOKE_NATIVE_ACCESS_TOKEN not set)',
+    );
+    console.log(
+      '  - authenticated Cost Explorer check skipped (SMOKE_NATIVE_ACCESS_TOKEN not set)',
     );
   }
 
@@ -224,8 +375,11 @@ async function main() {
 
   // Results
   const passed = results.filter((r) => r.passed).length;
-  const failed = results.filter((r) => !r.passed).length;
-  console.log(`\n${passed}/${results.length} checks passed`);
+  const skipped = results.filter((r) => r.skipped).length;
+  const failed = results.filter((r) => !r.passed && !r.skipped).length;
+  console.log(
+    `\n${passed}/${results.length - skipped} checks passed${skipped ? ` (${skipped} skipped)` : ''}`,
+  );
 
   if (failed > 0) {
     console.error(`${failed} check(s) failed — deployment is unhealthy`);
@@ -235,9 +389,14 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(
-    `Smoke test runner failed: ${err instanceof Error ? err.message : String(err)}`,
-  );
-  process.exitCode = 1;
-});
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  main().catch((err) => {
+    console.error(
+      `Smoke test runner failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    process.exitCode = 1;
+  });
+}
