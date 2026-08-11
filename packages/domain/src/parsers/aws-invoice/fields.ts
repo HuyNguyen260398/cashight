@@ -21,6 +21,8 @@ export class AwsInvoiceParseError extends Error {
 export type ReconciliationLabel =
   | 'SERVICE_TOTAL'
   | 'LINKED_ACCOUNT_TOTAL'
+  | 'LINKED_ACCOUNT_CHARGES'
+  | 'LINKED_ACCOUNT_TAX'
   | 'CONSOLIDATED_CHARGES'
   | 'CONSOLIDATED_TAX'
   | 'LINKED_ACCOUNT_SUM'
