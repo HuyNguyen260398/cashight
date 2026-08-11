@@ -647,7 +647,15 @@ describe('Cost Explorer panel states', () => {
 
     expect(screen.getByRole('button', { name: 'Refresh from AWS' })).toBeDisabled();
     expect(screen.getByText(/Manual refresh available/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+
+    // Export belongs to the breakdown panel, not the page header.
+    const exportButton = screen.getByRole('button', { name: 'Export CSV' });
+    const breakdownCard = screen
+      .getByRole('heading', { name: 'Cost and usage breakdown' })
+      .closest('[data-slot="card"]');
+    expect(breakdownCard).toContainElement(exportButton);
+
+    await userEvent.click(exportButton);
     await waitFor(() => expect(mockExportCsv).toHaveBeenCalledWith(request));
   });
 });

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { CostExplorerReportRequest } from '@cashight/domain/aws-cost-explorer';
-import { AlertTriangle, Cloud, Download, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Cloud, Loader2, RefreshCw } from 'lucide-react';
 
 import { ReportParameters } from './report-parameters';
 import { CostBreakdown } from './cost-breakdown';
@@ -106,8 +106,6 @@ function NativeCostExplorerDashboard() {
     deleteReport,
     exportCsv,
   } = useCostExplorer();
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
   const cooldownActive = useRefreshCooldown(state.refreshCooldownUntil);
 
   /**
@@ -162,20 +160,6 @@ function NativeCostExplorerDashboard() {
     }).toString();
     window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
   };
-  const exportReport = async () => {
-    setExporting(true);
-    setExportError(null);
-    try {
-      await exportCsv(activeRequest);
-    } catch (cause) {
-      setExportError(
-        cause instanceof Error ? cause.message : 'Could not export this report.',
-      );
-    } finally {
-      setExporting(false);
-    }
-  };
-
   if (
     state.status === 'error' &&
     state.error?.code === 'COGNITO_REAUTH_REQUIRED'
@@ -239,25 +223,7 @@ function NativeCostExplorerDashboard() {
               </p>
             ) : null}
           </div>
-          <Button
-            type="button"
-            className="min-h-11"
-            disabled={exporting || state.status !== 'success'}
-            onClick={() => void exportReport()}
-          >
-            {exporting ? (
-              <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden />
-            ) : (
-              <Download aria-hidden />
-            )}
-            {exporting ? 'Preparing CSV…' : 'Export CSV'}
-          </Button>
         </div>
-        {exportError ? (
-          <p role="alert" className="text-sm text-error-700 dark:text-error-400">
-            {exportError}
-          </p>
-        ) : null}
       </header>
 
       {state.status === 'error' ? (
@@ -308,6 +274,7 @@ function NativeCostExplorerDashboard() {
                 request={activeRequest}
                 result={state.result}
                 comparison={state.comparison}
+                onExportCsv={() => exportCsv(activeRequest)}
               />
             </div>
           </>

@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from 'react';
 import type { CostExplorerReportRequest } from '@cashight/domain/aws-cost-explorer';
-import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronsUpDown, Download, Loader2 } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Pagination } from '@/components/ui/pagination';
 import {
@@ -90,14 +91,19 @@ export function CostBreakdown({
   request,
   result,
   comparison,
+  onExportCsv,
 }: {
   request: CostExplorerReportRequest;
   result: CostExplorerCompleteResult | null;
   comparison: CostExplorerComparison | null;
+  /** Omit to render the panel without the CSV export action. */
+  onExportCsv?: () => Promise<void>;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('group');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const comparisonMetricName = comparison
     ? Object.keys(comparison.total)[0]
     : undefined;
@@ -153,6 +159,21 @@ export function CostBreakdown({
     safePage * PAGE_SIZE,
   );
 
+  const exportReport = async () => {
+    if (!onExportCsv) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      await onExportCsv();
+    } catch (cause) {
+      setExportError(
+        cause instanceof Error ? cause.message : 'Could not export this report.',
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const sortBy = (nextKey: SortKey) => {
     if (sortKey === nextKey) {
       setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
@@ -166,12 +187,36 @@ export function CostBreakdown({
   return (
     <Card className="min-w-0 overflow-hidden">
       <CardHeader className="border-b border-gray-100 dark:border-gray-800">
-        <CardTitle>
-          <h2>Cost and usage breakdown</h2>
-        </CardTitle>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Complete grouped results. Values retain AWS precision in CSV exports.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <CardTitle>
+              <h2>Cost and usage breakdown</h2>
+            </CardTitle>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Complete grouped results. Values retain AWS precision in CSV exports.
+            </p>
+          </div>
+          {onExportCsv ? (
+            <Button
+              type="button"
+              className="min-h-11"
+              disabled={exporting}
+              onClick={() => void exportReport()}
+            >
+              {exporting ? (
+                <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden />
+              ) : (
+                <Download aria-hidden />
+              )}
+              {exporting ? 'Preparing CSV…' : 'Export CSV'}
+            </Button>
+          ) : null}
+        </div>
+        {exportError ? (
+          <p role="alert" className="text-sm text-error-700 dark:text-error-400">
+            {exportError}
+          </p>
+        ) : null}
       </CardHeader>
       <CardContent className="p-0">
         {rows.length === 0 ? (
