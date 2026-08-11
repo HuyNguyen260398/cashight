@@ -24,7 +24,8 @@
     "test": "NODE_OPTIONS=--disable-warning=DEP0205 vitest run",
     "test:e2e": "playwright test",
     "test:e2e:current": "playwright test tests/e2e/current-production.spec.ts",
-    "test:watch": "NODE_OPTIONS=--disable-warning=DEP0205 vitest"
+    "test:watch": "NODE_OPTIONS=--disable-warning=DEP0205 vitest",
+    "test:aws-invoice-parser": "tsx scripts/test-aws-invoice-parser.ts"
   },
   "dependencies": {
     "@aws-lambda-powertools/logger": "^2.33.1",

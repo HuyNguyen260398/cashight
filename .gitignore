@@ -48,6 +48,7 @@ yarn-error.log*
 
 # local PDF fixtures (never commit real statements)
 /test-pdfs/
+/test-pdfs/aws-invoices/
 
 # Statement PDFs are real financial documents and carry a full PAN, so they are
 # ignored wherever they land — not just under /test-pdfs/. No PDF has ever been

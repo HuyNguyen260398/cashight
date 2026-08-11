@@ -1,5 +1,5 @@
 import type { AwsInvoice } from '../../aws-invoices';
-import type { LayoutPage } from '../pdf-layout';
+import { extractPdfLayout, type LayoutPage } from '../pdf-layout';
 import {
   KNOWN_AWS_INVOICE_PARSER_ID,
   KNOWN_AWS_INVOICE_PARSER_VERSION,
@@ -36,4 +36,12 @@ export function parseAwsInvoiceDocument(document: {
   const parser = parsers.find((candidate) => candidate.canParse(extracted));
   if (!parser) throw new UnsupportedAwsInvoiceError();
   return parser.parse(document);
+}
+
+export async function parseAwsInvoicePdf(
+  buffer: Buffer,
+  source: { sha256: string; uploadedAt: string },
+): Promise<AwsInvoice> {
+  const pages = await extractPdfLayout(buffer);
+  return parseAwsInvoiceDocument({ pages, ...source });
 }

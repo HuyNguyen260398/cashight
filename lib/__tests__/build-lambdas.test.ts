@@ -36,9 +36,10 @@ afterEach(async () => {
 });
 
 describe('buildLambdas', () => {
-  it('bundles discovered handlers and copies the parser worker', async () => {
+  it('bundles handlers and copies the pdfjs worker only to PDF parsers', async () => {
     const projectRoot = await temporaryProject();
     await writeHandler(projectRoot, 'health');
+    await writeHandler(projectRoot, 'invoice-parser-worker');
     await writeHandler(projectRoot, 'parser-worker');
     await writeHandler(projectRoot, 'session-capabilities-api');
     const workerPath = path.join(
@@ -52,6 +53,7 @@ describe('buildLambdas', () => {
 
     expect(result.functionNames).toEqual([
       'health',
+      'invoice-parser-worker',
       'parser-worker',
       'session-capabilities-api',
     ]);
@@ -68,15 +70,17 @@ describe('buildLambdas', () => {
         await readFile(path.join(outputDirectory, 'index.js.map'), 'utf8'),
       ).toContain('handler.ts');
     }
-    expect(
-      await readFile(
-        path.join(
-          projectRoot,
-          'dist/lambdas/parser-worker/pdf.worker.mjs',
+    for (const functionName of ['invoice-parser-worker', 'parser-worker']) {
+      expect(
+        await readFile(
+          path.join(
+            projectRoot,
+            `dist/lambdas/${functionName}/pdf.worker.mjs`,
+          ),
+          'utf8',
         ),
-        'utf8',
-      ),
-    ).toBe('worker fixture');
+      ).toBe('worker fixture');
+    }
     await expect(
       readFile(
         path.join(
