@@ -55,6 +55,43 @@ test.describe('AWS Cost Explorer browser parity', () => {
     }
     await expect(page.getByText(/Live AWS data|Cached AWS data/)).toBeVisible();
     await expect(page.getByRole('img', { name: /stacked bar chart/i })).toBeVisible();
+
+    // Overview headline tiles, matching the AWS console panel.
+    for (const tile of ['Total cost', 'Average monthly cost', 'Service count']) {
+      await expect(page.getByText(tile, { exact: true })).toBeVisible();
+    }
+    // The breakdown table sits directly under its graph, not below the sidebar.
+    const graphBox = await page
+      .getByRole('heading', { name: 'Cost and usage graph' })
+      .boundingBox();
+    const breakdownBox = await page
+      .getByRole('heading', { name: 'Cost and usage breakdown' })
+      .boundingBox();
+    const parametersBox = await page
+      .getByRole('heading', { name: 'Report parameters' })
+      .boundingBox();
+    expect(breakdownBox!.y).toBeGreaterThan(graphBox!.y);
+    expect(breakdownBox!.x).toBeLessThan(parametersBox!.x);
+
+    // The graph's own toggle restyles the chart with no further AWS query.
+    const chartType = page.getByRole('group', { name: 'Chart type' });
+    let queried = false;
+    const countQuery = () => {
+      queried = true;
+    };
+    page.on('request', (request) => {
+      if (request.url().includes('/aws/cost-explorer/query')) countQuery();
+    });
+    await chartType.getByRole('button', { name: 'Line' }).click();
+    await expect(page.getByRole('img', { name: /line chart/i })).toBeVisible();
+    await expect(page).toHaveURL(/chart=LINE/);
+    await chartType.getByRole('button', { name: 'Bar', exact: true }).click();
+    await expect(page.getByRole('img', { name: /^Bar chart/i })).toBeVisible();
+    await chartType.getByRole('button', { name: 'Stacked bar' }).click();
+    await expect(page.getByRole('img', { name: /stacked bar chart/i })).toBeVisible();
+    expect(queried).toBe(false);
+    // The parameters select follows the toggle.
+    await expect(page.getByLabel('Chart style')).toHaveValue('STACK');
     await expect(
       page
         .getByLabel('Report mode', { exact: true })

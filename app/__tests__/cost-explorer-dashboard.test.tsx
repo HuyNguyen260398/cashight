@@ -308,6 +308,76 @@ describe('Cost Explorer panel states', () => {
     expect(screen.getByText('$1,234.56')).toBeInTheDocument();
   });
 
+  it('summarises the range as total cost, average, and distinct service count', () => {
+    render(<CostExplorerDashboard />);
+
+    expect(screen.getByText('Total cost')).toBeInTheDocument();
+    expect(screen.getByText('$1,234.56')).toBeInTheDocument();
+    expect(screen.getByText('Average monthly cost')).toBeInTheDocument();
+    expect(screen.getByText('$411.52')).toBeInTheDocument();
+    // 12 breakdown rows, one distinct service each — not the 10 capped series.
+    expect(screen.getByText('Service count')).toBeInTheDocument();
+    expect(screen.getByText('12')).toBeInTheDocument();
+  });
+
+  it('labels the average by granularity and only counts a SERVICE grouping', () => {
+    const daily = render(
+      <CostOverview
+        request={{ ...request, granularity: 'DAILY' }}
+        result={result}
+        forecast={null}
+        comparison={null}
+      />,
+    );
+    expect(screen.getByText('Average daily cost')).toBeInTheDocument();
+    daily.unmount();
+
+    render(
+      <CostOverview
+        request={{
+          ...request,
+          groupBy: [{ type: 'DIMENSION', key: 'REGION' }],
+        }}
+        result={result}
+        forecast={null}
+        comparison={null}
+      />,
+    );
+    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(
+      screen.getByText('Group by service to count services'),
+    ).toBeInTheDocument();
+  });
+
+  it('switches chart style from the graph toggle without re-running the query', async () => {
+    render(<CostExplorerDashboard />);
+    await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
+
+    const toggle = within(screen.getByRole('group', { name: 'Chart type' }));
+    expect(toggle.getByRole('button', { name: 'Stacked bar' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(
+      screen.getByRole('img', { name: /stacked bar chart/i }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(toggle.getByRole('button', { name: 'Line' }));
+    expect(screen.getByRole('img', { name: /line chart/i })).toBeInTheDocument();
+    expect(toggle.getByRole('button', { name: 'Line' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(window.location.search).toContain('chart=LINE');
+
+    await userEvent.click(toggle.getByRole('button', { name: 'Bar' }));
+    expect(screen.getByRole('img', { name: /^Bar chart/i })).toBeInTheDocument();
+    // Presentational only: no extra AWS round trip.
+    expect(mockRun).toHaveBeenCalledTimes(1);
+    // The parameters select follows the toggle, so Apply cannot revert it.
+    expect(screen.getByLabelText('Chart style')).toHaveValue('BAR');
+  });
+
   it('renders graph styles, top-nine-plus-Other, legend toggles, and exact tooltips', async () => {
     const view = render(
       <CostUsageGraph request={request} result={result} forecast={null} comparison={null} />,
@@ -395,7 +465,12 @@ describe('Cost Explorer panel states', () => {
     };
     render(
       <>
-        <CostOverview result={emptyResult} forecast={null} comparison={null} />
+        <CostOverview
+          request={request}
+          result={emptyResult}
+          forecast={null}
+          comparison={null}
+        />
         <CostUsageGraph
           request={{ ...request, showForecast: true }}
           result={emptyResult}

@@ -58,6 +58,12 @@ export interface ReportParametersProps {
   ) => Promise<SavedCostReport>;
   onDeleteReport?: (reportId: string) => Promise<void>;
   compact?: boolean;
+  /**
+   * Chart style owned by the dashboard, so the graph's own toggle and this
+   * select never disagree. Omit to keep the style purely local to the draft.
+   */
+  chartStyle?: CostExplorerReportRequest['chartStyle'];
+  onChartStyleChange?: (style: CostExplorerReportRequest['chartStyle']) => void;
 }
 
 const selectClassName =
@@ -292,6 +298,8 @@ export function ReportParameters({
   onSaveReport,
   onDeleteReport,
   compact = false,
+  chartStyle,
+  onChartStyleChange,
 }: ReportParametersProps) {
   const [draft, setDraft] = useState<CostExplorerReportRequest>(initialRequest);
   const [datePreset, setDatePreset] = useState<DateRangePreset>(() =>
@@ -305,6 +313,14 @@ export function ReportParameters({
   const [billingViewsLoaded, setBillingViewsLoaded] = useState(false);
   const [billingViewsError, setBillingViewsError] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
+
+  /**
+   * The graph's own toggle can change the style without an Apply. When the
+   * dashboard owns the value, it wins over the draft — otherwise applying an
+   * unrelated edit here would silently revert the chart.
+   */
+  const effectiveDraft = chartStyle ? { ...draft, chartStyle } : draft;
+
   const validation = useMemo(
     () =>
       validateCostExplorerSemantics(draft, {
@@ -365,14 +381,14 @@ export function ReportParameters({
   };
 
   const apply = () => {
-    const parsed = CostExplorerReportRequestSchema.safeParse(draft);
+    const parsed = CostExplorerReportRequestSchema.safeParse(effectiveDraft);
     if (!parsed.success || !validation.valid) return;
     writeReportUrl(parsed.data);
     onApply(parsed.data);
   };
 
   const copyLink = async () => {
-    const parsed = CostExplorerReportRequestSchema.safeParse(draft);
+    const parsed = CostExplorerReportRequestSchema.safeParse(effectiveDraft);
     if (!parsed.success || !validation.valid) {
       setCopyStatus('Fix report errors before copying a link.');
       return;
@@ -627,13 +643,13 @@ export function ReportParameters({
             <select
               aria-label="Chart style"
               className={selectClassName}
-              value={draft.chartStyle}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  chartStyle: event.target.value as CostExplorerReportRequest['chartStyle'],
-                }))
-              }
+              value={effectiveDraft.chartStyle}
+              onChange={(event) => {
+                const next = event.target
+                  .value as CostExplorerReportRequest['chartStyle'];
+                setDraft((current) => ({ ...current, chartStyle: next }));
+                onChartStyleChange?.(next);
+              }}
             >
               <option value="BAR">Bar</option>
               <option value="STACK">Stacked bar</option>
@@ -716,7 +732,7 @@ export function ReportParameters({
         {savedReports && onSaveReport && onDeleteReport && (
           <SavedReports
             reports={savedReports}
-            currentRequest={draft}
+            currentRequest={effectiveDraft}
             loading={reportsLoading}
             error={reportsError}
             onLoad={setLoadedReport}

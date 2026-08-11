@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import type { CostExplorerReportRequest } from '@cashight/domain/aws-cost-explorer';
 import { AlertTriangle, Cloud, Download, Loader2, RefreshCw } from 'lucide-react';
 
 import { ReportParameters } from './report-parameters';
@@ -17,6 +18,7 @@ import { useSessionCapabilities } from '@/frontend/hooks/use-session-capabilitie
 import {
   createDefaultCostReportRequest,
   parseCostReportSearch,
+  serializeCostReportSearch,
 } from '@/frontend/lib/aws-cost-explorer-url';
 
 function PanelSkeleton({ label }: { label: string }) {
@@ -108,11 +110,58 @@ function NativeCostExplorerDashboard() {
   const [exportError, setExportError] = useState<string | null>(null);
   const cooldownActive = useRefreshCooldown(state.refreshCooldownUntil);
 
+  /**
+   * Everything in the request except `chartStyle` decides what AWS is asked for.
+   * `chartStyle` is presentational, but it still travels in the URL — and Next's
+   * router observes `replaceState` — so keying the run on the full request would
+   * spend a fresh AWS round trip every time the chart toggle is clicked.
+   */
+  const queryKey = useMemo(
+    () => JSON.stringify({ ...initialRequest, chartStyle: undefined }),
+    [initialRequest],
+  );
+  const lastQueryKey = useRef<string | null>(null);
+
+  // Clear on unmount only: the hook aborts its in-flight query when it unmounts,
+  // so a remount (StrictMode does one in dev) has to be free to query again.
+  useEffect(() => () => {
+    lastQueryKey.current = null;
+  }, []);
+
   useEffect(() => {
+    if (lastQueryKey.current === queryKey) return;
+    lastQueryKey.current = queryKey;
     run(initialRequest);
-  }, [initialRequest, run]);
+  }, [initialRequest, queryKey, run]);
 
   const activeRequest = state.request ?? initialRequest;
+  const [chartStyle, setChartStyle] = useState<
+    CostExplorerReportRequest['chartStyle']
+  >(activeRequest.chartStyle);
+  const [styleSource, setStyleSource] = useState(activeRequest);
+
+  // Adjust during render rather than in an effect: a newly applied report brings
+  // its own style, which must replace whatever the toggle was last set to.
+  if (styleSource !== activeRequest) {
+    setStyleSource(activeRequest);
+    setChartStyle(activeRequest.chartStyle);
+  }
+
+  /**
+   * Chart style is presentational, but it is part of the canonical query digest,
+   * so re-running the report to change it would cost a fresh AWS round trip.
+   * Keep it client-side and only rewrite the URL, which `useSearchParams` does
+   * not observe — so no re-query is triggered.
+   */
+  const changeChartStyle = (next: CostExplorerReportRequest['chartStyle']) => {
+    setChartStyle(next);
+    const url = new URL(window.location.href);
+    url.search = serializeCostReportSearch({
+      ...activeRequest,
+      chartStyle: next,
+    }).toString();
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+  };
   const exportReport = async () => {
     setExporting(true);
     setExportError(null);
@@ -229,24 +278,35 @@ function NativeCostExplorerDashboard() {
               <p className="sr-only">Loading cost and usage…</p>
               <PanelSkeleton label="Loading cost and usage overview" />
             </div>
-            <div className="col-span-12 xl:col-span-8">
+            <div className="col-span-12 space-y-4 md:space-y-6 xl:col-span-8">
               <PanelSkeleton label="Loading cost and usage graph" />
+              <PanelSkeleton label="Loading cost and usage breakdown" />
             </div>
           </>
         ) : state.status === 'success' ? (
           <>
             <div className="col-span-12">
               <CostOverview
+                request={activeRequest}
                 result={state.result}
                 forecast={state.forecast}
                 comparison={state.comparison}
               />
             </div>
-            <div className="col-span-12 xl:col-span-8">
+            {/* Graph and breakdown share the left column so the table stays
+                directly under its chart instead of below the tall sidebar. */}
+            <div className="col-span-12 space-y-4 md:space-y-6 xl:col-span-8">
               <CostUsageGraph
                 request={activeRequest}
                 result={state.result}
                 forecast={state.forecast}
+                comparison={state.comparison}
+                chartStyle={chartStyle}
+                onChartStyleChange={changeChartStyle}
+              />
+              <CostBreakdown
+                request={activeRequest}
+                result={state.result}
                 comparison={state.comparison}
               />
             </div>
@@ -264,18 +324,10 @@ function NativeCostExplorerDashboard() {
             reportsError={reportsError}
             onSaveReport={saveReport}
             onDeleteReport={deleteReport}
+            chartStyle={chartStyle}
+            onChartStyleChange={changeChartStyle}
           />
         </aside>
-
-        {state.status === 'success' ? (
-          <div className="col-span-12">
-            <CostBreakdown
-              request={activeRequest}
-              result={state.result}
-              comparison={state.comparison}
-            />
-          </div>
-        ) : null}
       </div>
     </main>
   );

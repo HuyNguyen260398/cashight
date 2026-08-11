@@ -1,5 +1,6 @@
 'use client';
 
+import type { CostExplorerReportRequest } from '@cashight/domain/aws-cost-explorer';
 import { ArrowDownRight, ArrowUpRight, Clock3, Database, Radio } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -17,9 +18,41 @@ import {
 } from './cost-format';
 
 export interface CostOverviewProps {
+  request: CostExplorerReportRequest;
   result: CostExplorerCompleteResult | null;
   forecast: CostExplorerForecast | null;
   comparison: CostExplorerComparison | null;
+}
+
+const AVERAGE_LABELS: Record<CostExplorerReportRequest['granularity'], string> = {
+  MONTHLY: 'Average monthly cost',
+  DAILY: 'Average daily cost',
+  HOURLY: 'Average hourly cost',
+};
+
+/**
+ * Distinct services in the complete breakdown.
+ *
+ * `series` is capped at the top nine plus "Other" (REQ-3104), so the count has
+ * to come from `breakdown`, which keeps every group. Only the SERVICE group
+ * slot is counted — a report grouped by region or account carries no service
+ * dimension, and inventing one from another dimension would be a wrong number
+ * under a right-looking label.
+ */
+export function serviceCount(
+  request: CostExplorerReportRequest,
+  result: CostExplorerCompleteResult | null,
+): number | null {
+  const slot = request.groupBy.findIndex(
+    (group) => group.type === 'DIMENSION' && group.key === 'SERVICE',
+  );
+  if (slot === -1 || !result) return null;
+  const services = new Set<string>();
+  for (const row of result.breakdown) {
+    const value = row.groupValues[slot];
+    if (value) services.add(value);
+  }
+  return services.size;
 }
 
 function OverviewMetric({
@@ -48,10 +81,16 @@ function OverviewMetric({
   );
 }
 
-export function CostOverview({ result, forecast, comparison }: CostOverviewProps) {
+export function CostOverview({
+  request,
+  result,
+  forecast,
+  comparison,
+}: CostOverviewProps) {
   const comparisonMetric = comparison
     ? Object.values(comparison.total)[0]
     : undefined;
+  const services = serviceCount(request, result);
 
   return (
     <Card className="min-w-0">
@@ -85,63 +124,83 @@ export function CostOverview({ result, forecast, comparison }: CostOverviewProps
       </CardHeader>
       <CardContent>
         {result ? (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <OverviewMetric
-              label="Selected range"
-              value={formatCostValue(result.overview.total, result.currencyOrUnit)}
-              detail={result.estimated ? 'Includes estimated values' : 'Final values'}
-            />
-            <OverviewMetric
-              label="Average"
-              value={formatCostValue(result.overview.average, result.currencyOrUnit)}
-              detail="Per selected granularity"
-            />
-            {result.overview.currentMonthToDate !== undefined ? (
+          <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-3">
               <OverviewMetric
-                label="Month to date"
-                value={formatCostValue(
-                  result.overview.currentMonthToDate,
-                  result.currencyOrUnit,
-                )}
-                detail="Estimated current month"
+                label="Total cost"
+                value={formatCostValue(result.overview.total, result.currencyOrUnit)}
+                detail={result.estimated ? 'Includes estimated values' : 'Final values'}
               />
-            ) : null}
-            {forecast ? (
               <OverviewMetric
-                label="Forecast total"
-                value={formatCostValue(forecast.total, forecast.unit)}
-                detail="AWS forecast"
+                label={AVERAGE_LABELS[request.granularity]}
+                value={formatCostValue(result.overview.average, result.currencyOrUnit)}
+                detail={`Across ${result.periods.length} ${
+                  result.periods.length === 1 ? 'period' : 'periods'
+                }`}
               />
-            ) : result.overview.forecastTotal !== undefined ? (
               <OverviewMetric
-                label="Forecast total"
-                value={formatCostValue(
-                  result.overview.forecastTotal,
-                  result.currencyOrUnit,
-                )}
-              />
-            ) : null}
-            {result.overview.absoluteChange !== undefined ? (
-              <OverviewMetric
-                label="Previous period change"
-                value={formatCostValue(
-                  result.overview.absoluteChange,
-                  result.currencyOrUnit,
-                  { signDisplay: 'exceptZero' },
-                )}
+                label="Service count"
+                value={services === null ? '—' : services.toLocaleString('en-US')}
                 detail={
-                  <span className="inline-flex items-center gap-1">
-                    {decimalNumber(result.overview.absoluteChange) >= 0 ? (
-                      <ArrowUpRight className="size-3.5" aria-hidden />
-                    ) : (
-                      <ArrowDownRight className="size-3.5" aria-hidden />
-                    )}
-                    {result.overview.percentageChange !== undefined
-                      ? `${decimalNumber(result.overview.percentageChange).toFixed(1)}%`
-                      : 'Compared with previous period'}
-                  </span>
+                  services === null
+                    ? 'Group by service to count services'
+                    : 'Distinct services in range'
                 }
               />
+            </div>
+            {result.overview.currentMonthToDate !== undefined ||
+            forecast ||
+            result.overview.forecastTotal !== undefined ||
+            result.overview.absoluteChange !== undefined ? (
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {result.overview.currentMonthToDate !== undefined ? (
+                  <OverviewMetric
+                    label="Month to date"
+                    value={formatCostValue(
+                      result.overview.currentMonthToDate,
+                      result.currencyOrUnit,
+                    )}
+                    detail="Estimated current month"
+                  />
+                ) : null}
+                {forecast ? (
+                  <OverviewMetric
+                    label="Forecast total"
+                    value={formatCostValue(forecast.total, forecast.unit)}
+                    detail="AWS forecast"
+                  />
+                ) : result.overview.forecastTotal !== undefined ? (
+                  <OverviewMetric
+                    label="Forecast total"
+                    value={formatCostValue(
+                      result.overview.forecastTotal,
+                      result.currencyOrUnit,
+                    )}
+                  />
+                ) : null}
+                {result.overview.absoluteChange !== undefined ? (
+                  <OverviewMetric
+                    label="Previous period change"
+                    value={formatCostValue(
+                      result.overview.absoluteChange,
+                      result.currencyOrUnit,
+                      { signDisplay: 'exceptZero' },
+                    )}
+                    detail={
+                      <span className="inline-flex items-center gap-1">
+                        {decimalNumber(result.overview.absoluteChange) >= 0 ? (
+                          <ArrowUpRight className="size-3.5" aria-hidden />
+                        ) : (
+                          <ArrowDownRight className="size-3.5" aria-hidden />
+                        )}
+                        {result.overview.percentageChange !== undefined
+                          ? `${decimalNumber(result.overview.percentageChange).toFixed(1)}%`
+                          : 'Compared with previous period'}
+                      </span>
+                    }
+                  />
+                ) : null}
+              </div>
             ) : null}
           </div>
         ) : comparisonMetric ? (

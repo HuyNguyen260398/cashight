@@ -3,6 +3,12 @@
 import { useMemo, useState } from 'react';
 import type { CostExplorerReportRequest } from '@cashight/domain/aws-cost-explorer';
 import {
+  BarChart3,
+  Layers,
+  LineChart as LineChartIcon,
+  type LucideIcon,
+} from 'lucide-react';
+import {
   Bar,
   CartesianGrid,
   ComposedChart,
@@ -92,10 +98,55 @@ export function CostGraphTooltip({
   );
 }
 
-function chartName(style: CostExplorerReportRequest['chartStyle']): string {
+type ChartStyle = CostExplorerReportRequest['chartStyle'];
+
+function chartName(style: ChartStyle): string {
   if (style === 'STACK') return 'Stacked bar chart';
   if (style === 'LINE') return 'Line chart';
   return 'Bar chart';
+}
+
+const CHART_STYLES: ReadonlyArray<{ value: ChartStyle; label: string; Icon: LucideIcon }> = [
+  { value: 'BAR', label: 'Bar', Icon: BarChart3 },
+  { value: 'STACK', label: 'Stacked bar', Icon: Layers },
+  { value: 'LINE', label: 'Line', Icon: LineChartIcon },
+];
+
+function ChartStyleToggle({
+  value,
+  onChange,
+}: {
+  value: ChartStyle;
+  onChange: (style: ChartStyle) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Chart type"
+      className="inline-flex rounded-lg border border-gray-200 p-1 dark:border-gray-700"
+    >
+      {CHART_STYLES.map(({ value: style, label, Icon }) => {
+        const active = style === value;
+        return (
+          <button
+            key={style}
+            type="button"
+            aria-pressed={active}
+            className={cn(
+              'inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-xs font-medium outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50',
+              active
+                ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300'
+                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200',
+            )}
+            onClick={() => onChange(style)}
+          >
+            <Icon className="size-3.5" aria-hidden />
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function internalSeriesKey(value: string): string {
@@ -112,12 +163,19 @@ export function CostUsageGraph({
   result,
   forecast,
   comparison,
+  chartStyle,
+  onChartStyleChange,
 }: {
   request: CostExplorerReportRequest;
   result: CostExplorerCompleteResult | null;
   forecast: CostExplorerForecast | null;
   comparison: CostExplorerComparison | null;
+  /** Presentational override; falls back to the request's own style. */
+  chartStyle?: ChartStyle;
+  /** Omit to render the panel without the style toggle. */
+  onChartStyleChange?: (style: ChartStyle) => void;
 }) {
+  const activeChartStyle = chartStyle ?? request.chartStyle;
   const comparisonMetricName = comparison
     ? Object.keys(comparison.total)[0]
     : undefined;
@@ -226,7 +284,7 @@ export function CostUsageGraph({
   );
   const forecastVisible = forecast && !hiddenSeries.has('forecast');
   const dataUnit = comparison ? 'group' : 'period';
-  const label = `${chartName(request.chartStyle)} of ${request.metric} across ${data.length} ${data.length === 1 ? dataUnit : `${dataUnit}s`}`;
+  const label = `${chartName(activeChartStyle)} of ${request.metric} across ${data.length} ${data.length === 1 ? dataUnit : `${dataUnit}s`}`;
 
   const toggleSeries = (key: string) => {
     setLegendState((current) => {
@@ -242,12 +300,19 @@ export function CostUsageGraph({
   return (
     <Card className="min-w-0 overflow-hidden">
       <CardHeader className="border-b border-gray-100 dark:border-gray-800">
-        <CardTitle>
-          <h2>Cost and usage graph</h2>
-        </CardTitle>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {request.granularity.toLowerCase()} {request.metric} trend with exact AWS values.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <CardTitle>
+              <h2>Cost and usage graph</h2>
+            </CardTitle>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {request.granularity.toLowerCase()} {request.metric} trend with exact AWS values.
+            </p>
+          </div>
+          {onChartStyleChange ? (
+            <ChartStyleToggle value={activeChartStyle} onChange={onChartStyleChange} />
+          ) : null}
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {data.length === 0 || graphSeries.length === 0 ? (
@@ -269,7 +334,7 @@ export function CostUsageGraph({
               className="cost-explorer-chart h-[320px] min-w-0"
             >
               <ResponsiveContainer width="100%" height={320}>
-                {request.chartStyle === 'LINE' ? (
+                {activeChartStyle === 'LINE' ? (
                   <LineChart data={data} margin={{ top: 12, right: 12, left: 4, bottom: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.25} />
                     <XAxis dataKey="period" tick={{ fill: CHART_AXIS_COLOR, fontSize: 11 }} />
@@ -320,8 +385,8 @@ export function CostUsageGraph({
                         dataKey={series.key}
                         name={series.label}
                         fill={series.color}
-                        stackId={request.chartStyle === 'STACK' ? 'cost' : undefined}
-                        radius={request.chartStyle === 'STACK' ? 0 : [4, 4, 0, 0]}
+                        stackId={activeChartStyle === 'STACK' ? 'cost' : undefined}
+                        radius={activeChartStyle === 'STACK' ? 0 : [4, 4, 0, 0]}
                         isAnimationActive={false}
                       />
                     ))}
