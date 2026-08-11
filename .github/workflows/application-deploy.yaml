@@ -150,7 +150,7 @@ jobs:
         run: |
           set -euo pipefail
           ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-          FUNCTIONS=(auth-guard session-capabilities-api uploads-api upload-status-api parser-worker statements-api dashboard-api summary-api cost-explorer-api)
+          FUNCTIONS=(auth-guard session-capabilities-api uploads-api upload-status-api parser-worker statements-api dashboard-api summary-api cost-explorer-api aws-invoices-api invoice-parser-worker aws-invoice-summary-api)
           DEPLOY_IDS=()
 
           for fn in "${FUNCTIONS[@]}"; do
@@ -254,6 +254,7 @@ jobs:
           NEXT_PUBLIC_COGNITO_CLIENT_ID: ${{ vars.COGNITO_SPA_CLIENT_ID }}
           NEXT_PUBLIC_APP_ORIGIN: https://cashight.nghuy.link
           NEXT_PUBLIC_ENABLE_AWS_COST_EXPLORER: ${{ vars.NEXT_PUBLIC_ENABLE_AWS_COST_EXPLORER || 'false' }}
+          NEXT_PUBLIC_ENABLE_AWS_BILLING_INVOICE: ${{ vars.NEXT_PUBLIC_ENABLE_AWS_BILLING_INVOICE || 'false' }}
         run: NODE_OPTIONS=--disable-warning=DEP0205 pnpm build
 
       - name: Configure AWS credentials

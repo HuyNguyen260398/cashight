@@ -21,12 +21,16 @@
 
 import https from 'node:https';
 import http from 'node:http';
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const APP_URL = (process.env.APP_URL ?? '').replace(/\/$/, '');
 const API_URL = (process.env.API_URL ?? '').replace(/\/$/, '');
 const NATIVE_ACCESS_TOKEN = process.env.SMOKE_NATIVE_ACCESS_TOKEN ?? '';
 const REQUIRE_NATIVE_AUTH = process.env.SMOKE_REQUIRE_NATIVE_AUTH === 'true';
+const AWS_INVOICE_FIXTURE = process.env.AWS_INVOICE_FIXTURE ?? '';
 
 // ── HTTP client ───────────────────────────────────────────────────────────────
 
@@ -199,6 +203,122 @@ export function inspectCostExplorerSmokeResponses(
   return { status: 'PASSED', total: firstTotal };
 }
 
+const PROHIBITED_INVOICE_KEYS = new Set([
+  'billto',
+  'address',
+  'invoicenumber',
+  'accountid',
+  'accountlabel',
+  'rawtext',
+]);
+
+function containsSensitiveInvoiceData(value) {
+  if (typeof value === 'string') {
+    return (
+      /(?:^|\D)\d{12}(?:\D|$)/.test(value) ||
+      /https?:\/\/[^\s"']*(?:aws-invoices|X-Amz-(?:Credential|Signature|Security-Token))/i.test(value)
+    );
+  }
+  if (Array.isArray(value)) return value.some(containsSensitiveInvoiceData);
+  if (!value || typeof value !== 'object') return false;
+  return Object.entries(value).some(([key, child]) => {
+    const normalized = key.toLowerCase().replace(/[^a-z]/g, '');
+    return PROHIBITED_INVOICE_KEYS.has(normalized) || containsSensitiveInvoiceData(child);
+  });
+}
+
+export function inspectAwsInvoiceSmokeResponses(
+  jobResponse,
+  dashboardResponse,
+  deleteResponse,
+) {
+  assert(jobResponse.status === 200, `Expected invoice job 200, got ${jobResponse.status}`);
+  const jobBody = parsedBody(jobResponse, 'Invoice upload job');
+  assert(jobBody?.job?.state === 'SUCCEEDED', 'Expected invoice job state SUCCEEDED');
+  assert(/^\d{4}-(0[1-9]|1[0-2])$/.test(jobBody.job.yearMonth), 'Expected invoice job yearMonth');
+
+  assert(dashboardResponse.status === 200, `Expected invoice dashboard 200, got ${dashboardResponse.status}`);
+  const dashboardBody = parsedBody(dashboardResponse, 'Invoice dashboard');
+  assert(dashboardBody?.dashboard?.yearMonth === jobBody.job.yearMonth, 'Expected dashboard for uploaded month');
+  assert(!containsSensitiveInvoiceData(dashboardBody), 'Invoice dashboard contained sensitive fields');
+  const linkedAccounts = dashboardBody?.dashboard?.selected?.linkedAccounts;
+  const allocations = dashboardBody?.dashboard?.accountAllocations;
+  assert(Array.isArray(linkedAccounts) && linkedAccounts.length > 0, 'Expected linked-account rows');
+  assert(Array.isArray(allocations) && allocations.length > 0, 'Expected account allocations');
+  assert(
+    [...linkedAccounts, ...allocations].every((item) => /^\d{4}$/.test(item.accountLast4)),
+    'Expected masked account IDs ending in four digits',
+  );
+
+  assert(deleteResponse.status === 200, `Expected invoice delete 200, got ${deleteResponse.status}`);
+  const deleteBody = parsedBody(deleteResponse, 'Invoice delete');
+  assert(
+    deleteBody?.deleted === true && deleteBody.yearMonth === jobBody.job.yearMonth,
+    'Expected uploaded invoice deletion confirmation',
+  );
+  assert(!containsSensitiveInvoiceData(deleteBody), 'Invoice delete response contained sensitive fields');
+  return { status: 'PASSED', yearMonth: jobBody.job.yearMonth };
+}
+
+async function runAwsInvoiceSmoke(fixturePath, nativeToken) {
+  const pdf = await readFile(fixturePath);
+  const sha256 = createHash('sha256').update(pdf).digest('hex');
+  const headers = {
+    Authorization: `Bearer ${nativeToken}`,
+    'Content-Type': 'application/json',
+  };
+  const createResponse = await request(`${API_URL}/aws/invoices/uploads`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      fileName: path.basename(fixturePath),
+      contentType: 'application/pdf',
+      size: pdf.length,
+      sha256,
+      force: true,
+    }),
+  });
+  assert(createResponse.status === 200, `Expected invoice upload creation 200, got ${createResponse.status}`);
+  const created = parsedBody(createResponse, 'Invoice upload creation');
+  assert(created?.job?.jobId && created?.upload?.url, 'Invoice upload creation omitted job or URL');
+
+  const putResponse = await request(created.upload.url, {
+    method: created.upload.method ?? 'PUT',
+    headers: created.upload.headers,
+    body: pdf,
+  });
+  assert(putResponse.status >= 200 && putResponse.status < 300, `Expected invoice PDF PUT success, got ${putResponse.status}`);
+
+  let jobResponse;
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    jobResponse = await request(
+      `${API_URL}/aws/invoices/uploads/${encodeURIComponent(created.job.jobId)}`,
+      { headers: { Authorization: `Bearer ${nativeToken}` } },
+    );
+    if (jobResponse.status !== 200) break;
+    const state = parsedBody(jobResponse, 'Invoice upload job')?.job?.state;
+    if (!['PENDING_UPLOAD', 'PROCESSING'].includes(state)) break;
+  }
+  assert(jobResponse, 'Invoice upload job did not return a terminal response');
+  const jobBody = parsedBody(jobResponse, 'Invoice upload job');
+  const yearMonth = jobBody?.job?.yearMonth;
+  assert(yearMonth, `Invoice upload ended in ${jobBody?.job?.state ?? 'unknown'} state`);
+
+  const dashboardResponse = await request(
+    `${API_URL}/aws/invoices/dashboard?yearMonth=${encodeURIComponent(yearMonth)}`,
+    { headers: { Authorization: `Bearer ${nativeToken}` } },
+  );
+  const deleteResponse = await request(
+    `${API_URL}/aws/invoices/${encodeURIComponent(yearMonth)}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${nativeToken}` },
+    },
+  );
+  return inspectAwsInvoiceSmokeResponses(jobResponse, dashboardResponse, deleteResponse);
+}
+
 // ── Smoke tests ───────────────────────────────────────────────────────────────
 
 async function main() {
@@ -300,6 +420,30 @@ async function main() {
     });
     assert(res.status === 401, `Expected 401, got ${res.status}`);
   });
+
+  await check('GET /aws/invoices without auth returns 401', async () => {
+    const res = await request(`${API_URL}/aws/invoices`);
+    assert(res.status === 401, `Expected 401, got ${res.status}`);
+  });
+
+  await check('POST /aws/invoices/uploads without auth returns 401', async () => {
+    const res = await request(`${API_URL}/aws/invoices/uploads`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    assert(res.status === 401, `Expected 401, got ${res.status}`);
+  });
+
+  if (NATIVE_ACCESS_TOKEN && AWS_INVOICE_FIXTURE) {
+    await check('AWS invoice synthetic fixture processes, masks, and deletes', async () => {
+      await runAwsInvoiceSmoke(AWS_INVOICE_FIXTURE, NATIVE_ACCESS_TOKEN);
+    });
+  } else {
+    console.log(
+      '  - authenticated AWS invoice fixture check skipped (SMOKE_NATIVE_ACCESS_TOKEN or AWS_INVOICE_FIXTURE not set)',
+    );
+  }
 
   // Static SPA routes exist and serve HTML
   await check('GET / returns 200 with HTML', async () => {

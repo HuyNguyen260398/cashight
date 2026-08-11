@@ -4,6 +4,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { toast } from 'sonner';
 
+import { ApiRequestError } from '@/frontend/api/client';
 import { useAwsInvoiceUpload } from '@/frontend/hooks/use-aws-invoice-upload';
 import { useAwsInvoices } from '@/frontend/hooks/use-aws-invoices';
 import { sleep } from '@/frontend/lib/sleep';
@@ -11,6 +12,11 @@ import { sleep } from '@/frontend/lib/sleep';
 const mockApiFetch = vi.fn();
 
 vi.mock('@/frontend/api/client', () => ({
+  ApiRequestError: class ApiRequestError extends Error {
+    constructor(public readonly status: number, public readonly body: unknown) {
+      super(`API request failed with status ${status}`);
+    }
+  },
   apiFetch: (...args: Parameters<typeof mockApiFetch>) => mockApiFetch(...args),
 }));
 
@@ -260,6 +266,21 @@ describe('useAwsInvoices', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.error).toBeTruthy();
     expect(result.current.invoice).toBeNull();
+  });
+
+  it('treats a missing selected month as an empty state while preserving history', async () => {
+    mockApiFetch
+      .mockRejectedValueOnce(new ApiRequestError(404, { error: { code: 'NOT_FOUND' } }))
+      .mockRejectedValueOnce(new ApiRequestError(404, { error: { code: 'NOT_FOUND' } }))
+      .mockResolvedValueOnce(jsonResponse({ items: [historyItem], nextCursor: null }));
+
+    const { result } = renderHook(() => useAwsInvoices('2026-08'));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.invoice).toBeNull();
+    expect(result.current.dashboard).toBeNull();
+    expect(result.current.history).toEqual([historyItem]);
+    expect(result.current.error).toBeNull();
   });
 
   it('preserves successful data when delete fails', async () => {

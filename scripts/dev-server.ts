@@ -298,7 +298,7 @@ async function route(
     method === 'POST' &&
     segments[0] === 'aws' &&
     segments[1] === 'invoices' &&
-    segments[2] === 'summaries' &&
+    segments[2] === 'summary' &&
     segments.length === 3
   ) {
     const body = (await readBody(request)).toString('utf8');

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildHistoricalCostExplorerRequest,
+  inspectAwsInvoiceSmokeResponses,
   inspectCostExplorerSmokeResponses,
   requireNativeAccessToken,
 } from '../smoke-serverless.mjs';
@@ -117,6 +118,67 @@ describe('serverless Cost Explorer smoke validation', () => {
           'short-lived-native-token',
         ),
       ).toThrow('sensitive fields');
+    }
+  });
+});
+
+function invoiceResponse(status, body) {
+  return { status, body: JSON.stringify(body) };
+}
+
+describe('serverless AWS invoice smoke validation', () => {
+  const succeededJob = invoiceResponse(200, {
+    job: {
+      state: 'SUCCEEDED',
+      yearMonth: '2026-07',
+    },
+  });
+  const dashboard = invoiceResponse(200, {
+    dashboard: {
+      yearMonth: '2026-07',
+      selected: {
+        linkedAccounts: [{ accountLast4: '0001' }],
+      },
+      accountAllocations: [{ accountLast4: '0001', value: 44.2 }],
+    },
+  });
+  const deleted = invoiceResponse(200, {
+    yearMonth: '2026-07',
+    deleted: true,
+  });
+
+  it('accepts success, masked dashboard data, and deletion', () => {
+    expect(
+      inspectAwsInvoiceSmokeResponses(succeededJob, dashboard, deleted),
+    ).toEqual({ status: 'PASSED', yearMonth: '2026-07' });
+  });
+
+  it('rejects terminal failures, unmasked IDs, and prohibited fields', () => {
+    expect(() =>
+      inspectAwsInvoiceSmokeResponses(
+        invoiceResponse(200, { job: { state: 'FAILED' } }),
+        dashboard,
+        deleted,
+      ),
+    ).toThrow('SUCCEEDED');
+
+    for (const leak of [
+      { accountId: '123456789012' },
+      { billTo: 'Private customer' },
+      { rawText: 'private extraction' },
+    ]) {
+      expect(() =>
+        inspectAwsInvoiceSmokeResponses(
+          succeededJob,
+          invoiceResponse(200, {
+            dashboard: {
+              ...JSON.parse(dashboard.body).dashboard,
+              ...leak,
+            },
+          }),
+          deleted,
+        ),
+      ).toThrow('sensitive');
     }
   });
 });

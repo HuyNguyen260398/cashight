@@ -7,7 +7,7 @@ import type {
   YearMonth,
 } from '@cashight/domain/aws-invoices';
 
-import { apiFetch } from '@/frontend/api/client';
+import { ApiRequestError, apiFetch } from '@/frontend/api/client';
 import {
   AwsInvoiceDashboardResponseSchema,
   AwsInvoiceDetailResponseSchema,
@@ -30,6 +30,15 @@ interface LoadedInvoices {
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
+}
+
+async function nullWhenMissing<T>(request: Promise<T>): Promise<T | null> {
+  try {
+    return await request;
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 404) return null;
+    throw error;
+  }
 }
 
 export function useAwsInvoices(yearMonth: YearMonth | null): {
@@ -64,20 +73,20 @@ export function useAwsInvoices(yearMonth: YearMonth | null): {
     const { apiBaseUrl } = getPublicConfig();
     const init = { signal: controller.signal };
     const detail = yearMonth
-      ? apiFetch(
+      ? nullWhenMissing(apiFetch(
           `${apiBaseUrl}/aws/invoices/${encodeURIComponent(yearMonth)}`,
           init,
         ).then(async (response) =>
           AwsInvoiceDetailResponseSchema.parse(await response.json()),
-        )
+        ))
       : Promise.resolve(null);
     const dashboard = yearMonth
-      ? apiFetch(
+      ? nullWhenMissing(apiFetch(
           `${apiBaseUrl}/aws/invoices/dashboard?yearMonth=${encodeURIComponent(yearMonth)}`,
           init,
         ).then(async (response) =>
           AwsInvoiceDashboardResponseSchema.parse(await response.json()),
-        )
+        ))
       : Promise.resolve(null);
     const history = apiFetch(`${apiBaseUrl}/aws/invoices`, init).then(
       async (response) =>

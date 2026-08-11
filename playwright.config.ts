@@ -33,7 +33,7 @@ export default defineConfig({
           timeout: 120_000,
         },
         {
-          command: `NEXT_DIST_DIR=.next-e2e NEXT_PUBLIC_DEV_AUTH_BYPASS=true NEXT_PUBLIC_ENABLE_AWS_COST_EXPLORER=true NEXT_PUBLIC_API_BASE_URL=${localApiUrl} NEXT_PUBLIC_COGNITO_AUTHORITY=${localApiUrl}/_oidc NEXT_PUBLIC_COGNITO_CLIENT_ID=e2e-public-client NEXT_PUBLIC_APP_ORIGIN=${localBaseUrl} NODE_OPTIONS=--disable-warning=DEP0205 ./node_modules/.bin/next dev --port ${localAppPort}`,
+          command: `NEXT_DIST_DIR=.next-e2e NEXT_PUBLIC_DEV_AUTH_BYPASS=true NEXT_PUBLIC_ENABLE_AWS_COST_EXPLORER=true NEXT_PUBLIC_ENABLE_AWS_BILLING_INVOICE=true NEXT_PUBLIC_API_BASE_URL=${localApiUrl} NEXT_PUBLIC_COGNITO_AUTHORITY=${localApiUrl}/_oidc NEXT_PUBLIC_COGNITO_CLIENT_ID=e2e-public-client NEXT_PUBLIC_APP_ORIGIN=${localBaseUrl} NODE_OPTIONS=--disable-warning=DEP0205 ./node_modules/.bin/next dev --port ${localAppPort}`,
           url: localBaseUrl,
           reuseExistingServer: false,
           timeout: 120_000,
