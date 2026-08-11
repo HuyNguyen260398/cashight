@@ -19,6 +19,7 @@
     "./aws-cost-canonical": "./src/aws-cost-canonical.ts",
     "./aws-invoices": "./src/aws-invoices.ts",
     "./aws-invoice-aggregations": "./src/aws-invoice-aggregations.ts",
+    "./aws-invoice-summary-payload": "./src/aws-invoice-summary-payload.ts",
     "./security/*": "./src/security/*.ts",
     "./pdf-dom-polyfill": "./src/pdf-dom-polyfill.ts",
     "./parsers/tpbank": "./src/parsers/tpbank.ts",

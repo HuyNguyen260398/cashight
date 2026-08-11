@@ -48,6 +48,11 @@ import {
   statementId,
 } from '../../backend/shared/storage';
 import { createAwsInvoicesApiHandler } from '../../backend/functions/aws-invoices-api/handler';
+import {
+  collectAwsInvoiceSummaryResponse,
+  prepareAwsInvoiceSummary,
+  type AwsInvoiceSummaryDependencies,
+} from '../../backend/functions/aws-invoice-summary-api/handler';
 import { createDashboardApiHandler } from '../../backend/functions/dashboard-api/handler';
 import { createProcessJob, computeSha256 } from '../../backend/functions/parser-worker/process-job';
 import {
@@ -512,6 +517,14 @@ export function createLocalHandlers(options: LocalPresignOptions) {
     randomUUID: () => crypto.randomUUID(),
   });
 
+  const awsInvoiceSummaries = async (event: unknown): Promise<ApiResponse> =>
+    collectAwsInvoiceSummaryResponse(
+      await prepareAwsInvoiceSummary(
+        event,
+        createLocalAwsInvoiceSummaryDependencies(),
+      ),
+    );
+
   return {
     uploads,
     uploadStatus,
@@ -521,6 +534,33 @@ export function createLocalHandlers(options: LocalPresignOptions) {
     sessionCapabilities,
     costExplorer,
     awsInvoices,
+    awsInvoiceSummaries,
+  };
+}
+
+function createLocalAwsInvoiceSummaryDependencies(): AwsInvoiceSummaryDependencies {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  return {
+    getAuthorizedUser: authorizedUser,
+    getMetadata: (workspaceId, yearMonth) =>
+      getAwsInvoiceMetadata(dynamo, TABLE_NAME, workspaceId, yearMonth),
+    queryMetadata: (workspaceId, cursor, limit) =>
+      queryAwsInvoiceMetadata(
+        dynamo,
+        TABLE_NAME,
+        workspaceId,
+        cursor,
+        limit,
+      ),
+    getInvoiceObject: getAwsInvoiceObject,
+    getApiKey: async () => apiKey || 'local-stub-key',
+    generateStream: (prompt, key) => {
+      if (!apiKey) return stubSummaryStream();
+      return (async function* real() {
+        const { streamSummary } = await import('../../backend/shared/gemini');
+        yield* streamSummary(prompt, key);
+      })();
+    },
   };
 }
 

@@ -294,6 +294,21 @@ async function route(
     return;
   }
 
+  if (
+    method === 'POST' &&
+    segments[0] === 'aws' &&
+    segments[1] === 'invoices' &&
+    segments[2] === 'summaries' &&
+    segments.length === 3
+  ) {
+    const body = (await readBody(request)).toString('utf8');
+    sendApiResponse(
+      response,
+      await handlers.awsInvoiceSummaries(buildEvent(request, url, {}, body)),
+    );
+    return;
+  }
+
   // AWS invoice handler owns upload/status/list/detail/delete/dashboard routes.
   if (
     segments[0] === 'aws' &&
