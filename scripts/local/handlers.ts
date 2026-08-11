@@ -1,4 +1,5 @@
 import { parseStatementPdf } from '@cashight/domain/parsers';
+import { parseAwsInvoicePdf } from '@cashight/domain/parsers/aws-invoice';
 import type { Statement } from '@cashight/domain/schemas';
 import type { AwsInvoice } from '@cashight/domain/aws-invoices';
 import type {
@@ -18,6 +19,7 @@ import type {
 import { createCostCsv } from '../../backend/functions/cost-explorer-api/csv';
 import { SavedReportError } from '../../backend/functions/cost-explorer-api/reports';
 import {
+  claimAwsInvoiceUploadJob,
   deleteAwsInvoiceMetadata,
   deleteWorkspaceStatementMetadata,
   getAwsInvoiceMetadata,
@@ -37,6 +39,7 @@ import {
   queryWorkspaceStatements,
   queryWorkspaceStatementsForYear,
   transitionJobState,
+  transitionAwsInvoiceJobState,
   upsertAuthorizedUser,
 } from '../../backend/shared/metadata';
 import {
@@ -47,6 +50,10 @@ import {
 import { createAwsInvoicesApiHandler } from '../../backend/functions/aws-invoices-api/handler';
 import { createDashboardApiHandler } from '../../backend/functions/dashboard-api/handler';
 import { createProcessJob, computeSha256 } from '../../backend/functions/parser-worker/process-job';
+import {
+  computeSha256 as computeAwsInvoiceSha256,
+  createInvoiceProcessJob,
+} from '../../backend/functions/invoice-parser-worker/process-job';
 import { createStatementsApiHandler } from '../../backend/functions/statements-api/handler';
 import {
   prepareSummary,
@@ -622,4 +629,45 @@ export const processUploadedPdf = createProcessJob({
   now: () => new Date(),
   enableLegacyWorkspaceFallback:
     process.env.ENABLE_LEGACY_WORKSPACE_FALLBACK === 'true',
+});
+
+export const processUploadedAwsInvoicePdf = createInvoiceProcessJob({
+  getJobRecord: (jobId) =>
+    getAwsInvoiceUploadJobRecord(dynamo, TABLE_NAME, jobId),
+  claimJob: (jobId, claimId) =>
+    claimAwsInvoiceUploadJob(
+      dynamo,
+      TABLE_NAME,
+      jobId,
+      claimId,
+      new Date().toISOString(),
+    ),
+  transitionToTerminal: (jobId, state, extra) =>
+    transitionAwsInvoiceJobState(
+      dynamo,
+      TABLE_NAME,
+      jobId,
+      'PROCESSING',
+      state,
+      new Date().toISOString(),
+      extra,
+    ).then(() => undefined),
+  downloadPdf: (key) => getObject(UPLOAD_BUCKET, key),
+  deletePdf: (key) => deleteObject(UPLOAD_BUCKET, key),
+  computeSha256: computeAwsInvoiceSha256,
+  parsePdf: parseAwsInvoicePdf,
+  getMetadata: (workspaceId, yearMonth) =>
+    getAwsInvoiceMetadata(dynamo, TABLE_NAME, workspaceId, yearMonth),
+  getDestinationInvoice: async (key) =>
+    (await objectExists(STATEMENTS_BUCKET, key))
+      ? getAwsInvoiceObject(key)
+      : undefined,
+  writeInvoice: (key, parsedInvoice) =>
+    putObject(
+      STATEMENTS_BUCKET,
+      key,
+      `${JSON.stringify(parsedInvoice, null, 2)}\n`,
+    ),
+  writeMetadata: (record) =>
+    putAwsInvoiceMetadata(dynamo, TABLE_NAME, record),
 });

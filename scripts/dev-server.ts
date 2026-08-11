@@ -30,6 +30,7 @@ import type { ApiResponse } from '../backend/shared/api-response';
 import {
   DEV_SUB,
   createLocalHandlers,
+  processUploadedAwsInvoicePdf,
   processUploadedPdf,
   seedAuthorizedUser,
   seedSyntheticAwsInvoice,
@@ -157,7 +158,15 @@ function readBody(request: http.IncomingMessage): Promise<Buffer> {
  */
 function schedulePdfProcessing(key: string): void {
   setTimeout(() => {
-    void processUploadedPdf(key)
+    const invoiceMatch =
+      /^uploads\/aws-invoices\/primary\/([0-9a-f-]{36})\.pdf$/i.exec(key);
+    const statementUpload = key.startsWith('uploads/statements/primary/');
+    const processing = invoiceMatch
+      ? processUploadedAwsInvoicePdf(key, invoiceMatch[1])
+      : statementUpload
+        ? processUploadedPdf(key)
+        : Promise.reject(new Error('Upload key does not match a parser prefix.'));
+    void processing
       .then(() => console.log(`[parser] done: ${key}`))
       .catch((err: unknown) => {
         // Production would retry the SQS message and eventually DLQ it. Locally

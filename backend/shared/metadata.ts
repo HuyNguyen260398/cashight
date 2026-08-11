@@ -71,6 +71,7 @@ export interface AwsInvoiceUploadJobRecord {
   errorCode?: AwsInvoiceErrorCode;
   yearMonth?: YearMonth;
   conflict?: { year: number; month: number };
+  processingClaimId?: string;
 }
 
 export interface CostQueryCacheManifestRecord {
@@ -182,6 +183,10 @@ const awsInvoiceUploadJobRecordSchema = z
         month: z.number().int().min(1).max(12),
       })
       .strict()
+      .optional(),
+    processingClaimId: z
+      .string()
+      .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/)
       .optional(),
   })
   .strict();
@@ -660,6 +665,67 @@ export async function transitionAwsInvoiceJobState(
       return 'ok';
     }
     throw error;
+  }
+}
+
+export type AwsInvoiceJobClaimResult =
+  | 'claimed'
+  | 'resume'
+  | 'duplicate'
+  | 'already_terminal'
+  | 'not_found';
+
+export async function claimAwsInvoiceUploadJob(
+  client: DynamoDBDocumentClient,
+  tableName: string,
+  jobId: string,
+  claimId: string,
+  updatedAt: string,
+): Promise<AwsInvoiceJobClaimResult> {
+  const safeJobId = z.string().uuid().parse(jobId);
+  const safeClaimId = z
+    .string()
+    .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/)
+    .parse(claimId);
+  z.string().datetime().parse(updatedAt);
+  try {
+    await client.send(
+      new UpdateCommand({
+        TableName: tableName,
+        Key: { PK: `JOB#${safeJobId}`, SK: 'METADATA' },
+        ConditionExpression:
+          'attribute_exists(PK) AND documentType = :documentType AND #state = :pending',
+        UpdateExpression:
+          'SET #state = :processing, processingClaimId = :claimId, updatedAt = :updatedAt',
+        ExpressionAttributeNames: { '#state': 'state' },
+        ExpressionAttributeValues: {
+          ':documentType': 'AWS_INVOICE',
+          ':pending': 'PENDING_UPLOAD',
+          ':processing': 'PROCESSING',
+          ':claimId': safeClaimId,
+          ':updatedAt': updatedAt,
+        },
+      }),
+    );
+    return 'claimed';
+  } catch (error) {
+    if (!(error instanceof ConditionalCheckFailedException)) throw error;
+    const current = await getAwsInvoiceUploadJobRecord(
+      client,
+      tableName,
+      safeJobId,
+    );
+    if (!current) return 'not_found';
+    if (['SUCCEEDED', 'CONFLICT', 'FAILED'].includes(current.state)) {
+      return 'already_terminal';
+    }
+    if (
+      current.state === 'PROCESSING' &&
+      current.processingClaimId === safeClaimId
+    ) {
+      return 'resume';
+    }
+    return 'duplicate';
   }
 }
 
