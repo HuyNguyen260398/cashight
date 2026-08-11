@@ -71,23 +71,25 @@ export function evaluateCondition(
   names: Names,
   values: Values,
 ): boolean {
+  const evaluateClause = (rawClause: string): boolean => {
+    const clause = rawClause.trim();
+    const exists = /^attribute_exists\(([^)]+)\)$/i.exec(clause);
+    if (exists) return item?.[resolveName(exists[1], names)] !== undefined;
+
+    const notExists = /^attribute_not_exists\(([^)]+)\)$/i.exec(clause);
+    if (notExists) return item?.[resolveName(notExists[1], names)] === undefined;
+
+    const equality = /^([#\w.]+)\s*=\s*(:\w+)$/.exec(clause);
+    if (equality) {
+      return item?.[resolveName(equality[1], names)] === resolveValue(equality[2], values);
+    }
+
+    throw new Error(`Unsupported ConditionExpression clause: ${clause}`);
+  };
+
   return expression
-    .split(/\s+AND\s+/i)
-    .map((clause) => clause.trim())
-    .every((clause) => {
-      const exists = /^attribute_exists\(([^)]+)\)$/i.exec(clause);
-      if (exists) return item?.[resolveName(exists[1], names)] !== undefined;
-
-      const notExists = /^attribute_not_exists\(([^)]+)\)$/i.exec(clause);
-      if (notExists) return item?.[resolveName(notExists[1], names)] === undefined;
-
-      const equality = /^([#\w.]+)\s*=\s*(:\w+)$/.exec(clause);
-      if (equality) {
-        return item?.[resolveName(equality[1], names)] === resolveValue(equality[2], values);
-      }
-
-      throw new Error(`Unsupported ConditionExpression clause: ${clause}`);
-    });
+    .split(/\s+OR\s+/i)
+    .some((group) => group.split(/\s+AND\s+/i).every(evaluateClause));
 }
 
 /**

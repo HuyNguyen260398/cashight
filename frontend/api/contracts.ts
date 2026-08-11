@@ -11,6 +11,13 @@ import {
   CostExplorerResultSchema,
   SavedCostReportSchema,
 } from '@cashight/domain/aws-cost-explorer';
+import {
+  AwsInvoiceDashboardSchema,
+  AwsInvoiceMetadataSchema,
+  AwsInvoiceSchema,
+  AwsInvoiceUploadJobSchema,
+  YearMonthSchema,
+} from '@cashight/domain/aws-invoices';
 
 // Re-export domain primitives for consumers of this module.
 export { UploadJobSchema, UploadJobStateSchema, CreateUploadRequestSchema };
@@ -77,6 +84,67 @@ export const DashboardResponseSchema = z.object({
   label: z.string(),
 }).passthrough();
 export type DashboardResponse = z.infer<typeof DashboardResponseSchema>;
+
+// ── AWS Billing Invoice responses ───────────────────────────────────────────
+
+export {
+  AwsInvoiceDashboardSchema,
+  AwsInvoiceSchema,
+  AwsInvoiceUploadJobSchema,
+  YearMonthSchema,
+};
+export type {
+  AwsInvoice,
+  AwsInvoiceDashboard,
+  AwsInvoiceUploadJob,
+  YearMonth,
+} from '@cashight/domain/aws-invoices';
+
+export const AwsInvoiceUploadPresignSchema = UploadPresignSchema.strict();
+
+export const CreateAwsInvoiceUploadResponseSchema = z
+  .object({
+    job: AwsInvoiceUploadJobSchema,
+    upload: AwsInvoiceUploadPresignSchema,
+  })
+  .strict();
+
+export const AwsInvoiceUploadJobResponseSchema = z
+  .object({ job: AwsInvoiceUploadJobSchema })
+  .strict();
+
+export const AwsInvoiceListItemSchema = AwsInvoiceMetadataSchema.pick({
+  yearMonth: true,
+  currency: true,
+  amountDue: true,
+  tax: true,
+  serviceCount: true,
+  linkedAccountCount: true,
+  uploadedAt: true,
+}).strict();
+export type AwsInvoiceListItem = z.infer<typeof AwsInvoiceListItemSchema>;
+
+export const AwsInvoiceListResponseSchema = z
+  .object({
+    items: z.array(AwsInvoiceListItemSchema),
+    nextCursor: z.string().nullable(),
+  })
+  .strict();
+
+export const AwsInvoiceDetailResponseSchema = z
+  .object({ invoice: AwsInvoiceSchema })
+  .strict();
+
+export const AwsInvoiceDashboardResponseSchema = z
+  .object({ dashboard: AwsInvoiceDashboardSchema })
+  .strict();
+
+export const DeleteAwsInvoiceResponseSchema = z
+  .object({
+    yearMonth: YearMonthSchema,
+    deleted: z.literal(true),
+  })
+  .strict();
 
 // ── GET /session/capabilities response ───────────────────────────────────────
 

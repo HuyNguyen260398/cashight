@@ -1,5 +1,6 @@
 import { parseStatementPdf } from '@cashight/domain/parsers';
 import type { Statement } from '@cashight/domain/schemas';
+import type { AwsInvoice } from '@cashight/domain/aws-invoices';
 import type {
   CostExplorerReportRequest,
   SavedCostReport,
@@ -17,14 +18,20 @@ import type {
 import { createCostCsv } from '../../backend/functions/cost-explorer-api/csv';
 import { SavedReportError } from '../../backend/functions/cost-explorer-api/reports';
 import {
+  deleteAwsInvoiceMetadata,
   deleteWorkspaceStatementMetadata,
+  getAwsInvoiceMetadata,
+  getAwsInvoiceUploadJobRecord,
   getAuthorizedUser,
   getStatementMetadataById,
   getWorkspaceStatementMetadataById,
   getUploadJobRecord,
   putIdempotencyRecord,
+  putAwsInvoiceMetadata,
+  putAwsInvoiceUploadJobRecord,
   putStatementMetadata,
   putUploadJobRecord,
+  queryAwsInvoiceMetadata,
   queryUserStatements,
   queryUserStatementsForYear,
   queryWorkspaceStatements,
@@ -32,7 +39,12 @@ import {
   transitionJobState,
   upsertAuthorizedUser,
 } from '../../backend/shared/metadata';
-import { parseStatementObject, statementId } from '../../backend/shared/storage';
+import {
+  parseAwsInvoiceObject,
+  parseStatementObject,
+  statementId,
+} from '../../backend/shared/storage';
+import { createAwsInvoicesApiHandler } from '../../backend/functions/aws-invoices-api/handler';
 import { createDashboardApiHandler } from '../../backend/functions/dashboard-api/handler';
 import { createProcessJob, computeSha256 } from '../../backend/functions/parser-worker/process-job';
 import { createStatementsApiHandler } from '../../backend/functions/statements-api/handler';
@@ -95,6 +107,78 @@ async function getStatementObject(objectKey: string): Promise<Statement> {
     if (err instanceof ApiError) throw err;
     throw new ApiError('NOT_FOUND', 404, 'Statement object not found.');
   }
+}
+
+async function getAwsInvoiceObject(objectKey: string): Promise<AwsInvoice> {
+  try {
+    return parseAwsInvoiceObject(await getObject(STATEMENTS_BUCKET, objectKey));
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError('NOT_FOUND', 404, 'AWS invoice object not found.');
+  }
+}
+
+const syntheticAwsInvoice: AwsInvoice = {
+  seller: 'Amazon Web Services, Inc.',
+  billingPeriod: { start: '2026-07-01', end: '2026-07-31' },
+  invoiceDate: '2026-08-01',
+  dueDate: '2026-08-01',
+  currency: 'USD',
+  totals: { charges: 42, credits: 2, tax: 4.2, amountDue: 44.2 },
+  services: [
+    { name: 'Example Compute', charges: 30, tax: 3, total: 33 },
+    { name: 'Example Storage', charges: 12, tax: 1.2, total: 13.2 },
+  ],
+  linkedAccounts: [
+    {
+      accountLast4: '0001',
+      charges: 42,
+      credits: 2,
+      tax: 4.2,
+      total: 44.2,
+      services: [
+        { name: 'Example Compute', charges: 30, tax: 3, total: 33 },
+        { name: 'Example Storage', charges: 12, tax: 1.2, total: 13.2 },
+      ],
+    },
+  ],
+  source: {
+    parserId: 'aws-inc-consolidated-usd',
+    parserVersion: 1,
+    sha256: '0'.repeat(64),
+    uploadedAt: '2026-08-03T00:00:00.000Z',
+  },
+};
+
+export async function seedSyntheticAwsInvoice(): Promise<void> {
+  const existing = await getAwsInvoiceMetadata(
+    dynamo,
+    TABLE_NAME,
+    'primary',
+    '2026-07',
+  );
+  if (existing) return;
+  const objectKey = 'users/primary/aws-invoices/2026/2026-07.json';
+  await putObject(
+    STATEMENTS_BUCKET,
+    objectKey,
+    `${JSON.stringify(syntheticAwsInvoice, null, 2)}\n`,
+  );
+  await putAwsInvoiceMetadata(dynamo, TABLE_NAME, {
+    PK: 'WORKSPACE#primary',
+    SK: 'AWS_INVOICE#2026-07',
+    yearMonth: '2026-07',
+    objectKey,
+    currency: 'USD',
+    amountDue: syntheticAwsInvoice.totals.amountDue,
+    tax: syntheticAwsInvoice.totals.tax,
+    serviceCount: syntheticAwsInvoice.services.length,
+    linkedAccountCount: syntheticAwsInvoice.linkedAccounts.length,
+    sha256: syntheticAwsInvoice.source.sha256,
+    parserId: syntheticAwsInvoice.source.parserId,
+    parserVersion: syntheticAwsInvoice.source.parserVersion,
+    uploadedAt: syntheticAwsInvoice.source.uploadedAt,
+  });
 }
 
 // ── API handlers ──────────────────────────────────────────────────────────────
@@ -395,6 +479,32 @@ export function createLocalHandlers(options: LocalPresignOptions) {
     createLocalCostExplorerDependencies(options),
   );
 
+  const awsInvoices = createAwsInvoicesApiHandler({
+    getAuthorizedUser: authorizedUser,
+    putJobRecord: (record) =>
+      putAwsInvoiceUploadJobRecord(dynamo, TABLE_NAME, record),
+    getJobRecord: (jobId) =>
+      getAwsInvoiceUploadJobRecord(dynamo, TABLE_NAME, jobId),
+    presign: createLocalPresign(options),
+    queryMetadata: (workspaceId, cursor, limit) =>
+      queryAwsInvoiceMetadata(
+        dynamo,
+        TABLE_NAME,
+        workspaceId,
+        cursor,
+        limit,
+      ),
+    getMetadata: (workspaceId, yearMonth) =>
+      getAwsInvoiceMetadata(dynamo, TABLE_NAME, workspaceId, yearMonth),
+    getInvoiceObject: getAwsInvoiceObject,
+    deleteInvoiceObject: (objectKey) =>
+      deleteObject(STATEMENTS_BUCKET, objectKey),
+    deleteMetadata: (workspaceId, yearMonth) =>
+      deleteAwsInvoiceMetadata(dynamo, TABLE_NAME, workspaceId, yearMonth),
+    now: () => new Date(),
+    randomUUID: () => crypto.randomUUID(),
+  });
+
   return {
     uploads,
     uploadStatus,
@@ -403,6 +513,7 @@ export function createLocalHandlers(options: LocalPresignOptions) {
     summaries,
     sessionCapabilities,
     costExplorer,
+    awsInvoices,
   };
 }
 

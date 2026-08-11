@@ -32,6 +32,7 @@ import {
   createLocalHandlers,
   processUploadedPdf,
   seedAuthorizedUser,
+  seedSyntheticAwsInvoice,
 } from './local/handlers';
 import { parsePdfPasswords } from '../backend/shared/pdf-passwords';
 import { UPLOAD_BUCKET, getObject, putObject } from './local/object-store';
@@ -284,6 +285,26 @@ async function route(
     return;
   }
 
+  // AWS invoice handler owns upload/status/list/detail/delete/dashboard routes.
+  if (
+    segments[0] === 'aws' &&
+    segments[1] === 'invoices' &&
+    segments.length >= 2
+  ) {
+    const body = method === 'POST' ? (await readBody(request)).toString('utf8') : null;
+    const pathParameters: Record<string, string> = {};
+    if (segments[2] === 'uploads' && segments[3]) {
+      pathParameters.jobId = decodeURIComponent(segments[3]);
+    } else if (segments[2] && !['uploads', 'dashboard'].includes(segments[2])) {
+      pathParameters.yearMonth = decodeURIComponent(segments[2]);
+    }
+    sendApiResponse(
+      response,
+      await handlers.awsInvoices(buildEvent(request, url, pathParameters, body)),
+    );
+    return;
+  }
+
   // POST /summaries
   if (method === 'POST' && segments[0] === 'summaries' && segments.length === 1) {
     const body = (await readBody(request)).toString('utf8');
@@ -329,6 +350,7 @@ function describePdfPasswords(): string {
 
 async function main(): Promise<void> {
   await seedAuthorizedUser();
+  await seedSyntheticAwsInvoice();
   server.listen(PORT, () => {
     console.log(
       [
