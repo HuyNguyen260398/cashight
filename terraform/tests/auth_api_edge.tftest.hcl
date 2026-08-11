@@ -80,6 +80,22 @@ override_resource {
   }
 }
 
+override_resource {
+  target          = aws_lambda_alias.aws_invoices_api_live
+  override_during = plan
+  values = {
+    arn = "arn:aws:lambda:ap-southeast-1:123456789012:function:cashight-aws-invoices-api:live"
+  }
+}
+
+override_resource {
+  target          = aws_lambda_alias.aws_invoice_summary_api_live
+  override_during = plan
+  values = {
+    arn = "arn:aws:lambda:ap-southeast-1:123456789012:function:cashight-aws-invoice-summary-api:live"
+  }
+}
+
 # ── Cognito SPA client ────────────────────────────────────────────────────────
 
 run "spa_client_has_no_secret" {
@@ -260,6 +276,53 @@ run "rest_api_routes_present" {
   assert {
     condition     = strcontains(aws_api_gateway_rest_api.cashight.body, "CognitoAuth")
     error_message = "REST API body must reference CognitoAuth security scheme"
+  }
+}
+
+run "aws_invoice_routes_have_exact_methods_scopes_and_aliases" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      toset(keys(yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/invoices/uploads"])) == toset(["post", "options"]),
+      toset(keys(yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/invoices/uploads/{jobId}"])) == toset(["get", "options"]),
+      toset(keys(yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/invoices"])) == toset(["get", "options"]),
+      toset(keys(yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/invoices/{yearMonth}"])) == toset(["get", "delete", "options"]),
+      toset(keys(yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/invoices/dashboard"])) == toset(["get", "options"]),
+      toset(keys(yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/invoices/summary"])) == toset(["post", "options"]),
+    ])
+    error_message = "AWS invoice routes must expose only the approved methods plus OPTIONS"
+  }
+
+  assert {
+    condition = alltrue([
+      yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/invoices/uploads"].post.security[0].CognitoAuth == ["cashight/write"],
+      yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/invoices/uploads/{jobId}"].get.security[0].CognitoAuth == ["cashight/read"],
+      yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/invoices"].get.security[0].CognitoAuth == ["cashight/read"],
+      yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/invoices/{yearMonth}"].get.security[0].CognitoAuth == ["cashight/read"],
+      yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/invoices/{yearMonth}"].delete.security[0].CognitoAuth == ["cashight/write"],
+      yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/invoices/dashboard"].get.security[0].CognitoAuth == ["cashight/read"],
+      yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/invoices/summary"].post.security[0].CognitoAuth == ["cashight/read"],
+    ])
+    error_message = "AWS invoice mutations and reads must use exact write/read scopes"
+  }
+
+  assert {
+    condition = alltrue([
+      for route in [
+        "/aws/invoices/uploads",
+        "/aws/invoices/uploads/{jobId}",
+        "/aws/invoices",
+        "/aws/invoices/{yearMonth}",
+        "/aws/invoices/dashboard",
+      ] : strcontains(jsonencode(yamldecode(aws_api_gateway_rest_api.cashight.body).paths[route]), "cashight-aws-invoices-api:live")
+    ]) && strcontains(jsonencode(yamldecode(aws_api_gateway_rest_api.cashight.body).paths["/aws/invoices/summary"]), "cashight-aws-invoice-summary-api:live")
+    error_message = "Invoice routes must use their dedicated live aliases"
+  }
+
+  assert {
+    condition     = aws_lambda_permission.api_aws_invoices.source_arn == "${aws_api_gateway_rest_api.cashight.execution_arn}/*/*/aws/invoices*" && aws_lambda_permission.api_aws_invoice_summary.source_arn == "${aws_api_gateway_rest_api.cashight.execution_arn}/*/POST/aws/invoices/summary"
+    error_message = "API Gateway invoke permissions must be scoped to invoice routes"
   }
 }
 

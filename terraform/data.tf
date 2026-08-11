@@ -293,6 +293,51 @@ resource "aws_sqs_queue_policy" "parse" {
   policy    = data.aws_iam_policy_document.parse_queue_policy.json
 }
 
+resource "aws_sqs_queue" "invoice_parse_dlq" {
+  name                      = "cashight-invoice-parse-dlq"
+  message_retention_seconds = 14 * 24 * 3600
+  sqs_managed_sse_enabled   = true
+}
+
+resource "aws_sqs_queue" "invoice_parse" {
+  name                       = "cashight-invoice-parse"
+  visibility_timeout_seconds = 360
+  sqs_managed_sse_enabled    = true
+
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.invoice_parse_dlq.arn
+    maxReceiveCount     = 3
+  })
+}
+
+data "aws_iam_policy_document" "invoice_parse_queue_policy" {
+  statement {
+    sid     = "AllowS3SendMessage"
+    effect  = "Allow"
+    actions = ["sqs:SendMessage"]
+    principals {
+      type        = "Service"
+      identifiers = ["s3.amazonaws.com"]
+    }
+    resources = [aws_sqs_queue.invoice_parse.arn]
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = [aws_s3_bucket.uploads.arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+}
+
+resource "aws_sqs_queue_policy" "invoice_parse" {
+  queue_url = aws_sqs_queue.invoice_parse.id
+  policy    = data.aws_iam_policy_document.invoice_parse_queue_policy.json
+}
+
 # ── S3 bucket notification → SQS ─────────────────────────────────────────────
 
 resource "aws_s3_bucket_notification" "uploads" {
@@ -301,9 +346,19 @@ resource "aws_s3_bucket_notification" "uploads" {
   queue {
     queue_arn     = aws_sqs_queue.parse.arn
     events        = ["s3:ObjectCreated:*"]
-    filter_prefix = "uploads/"
+    filter_prefix = "uploads/statements/"
     filter_suffix = ".pdf"
   }
 
-  depends_on = [aws_sqs_queue_policy.parse]
+  queue {
+    queue_arn     = aws_sqs_queue.invoice_parse.arn
+    events        = ["s3:ObjectCreated:*"]
+    filter_prefix = "uploads/aws-invoices/"
+    filter_suffix = ".pdf"
+  }
+
+  depends_on = [
+    aws_sqs_queue_policy.parse,
+    aws_sqs_queue_policy.invoice_parse,
+  ]
 }

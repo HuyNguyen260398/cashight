@@ -35,6 +35,38 @@ interface InvoiceQueueBatchResponse {
   batchItemFailures: Array<{ itemIdentifier: string }>;
 }
 
+type AwsInvoiceParseFailureCode =
+  | 'UNSUPPORTED_AWS_INVOICE'
+  | 'INVOICE_TOTAL_MISMATCH'
+  | 'INVALID_PDF'
+  | 'CHECKSUM_MISMATCH';
+
+export function emitAwsInvoiceParseFailureMetric(
+  errorCode: AwsInvoiceParseFailureCode,
+  functionName =
+    process.env.AWS_LAMBDA_FUNCTION_NAME ?? 'cashight-invoice-parser-worker',
+  timestamp = Date.now(),
+  writeMetric: (value: string) => void = console.log,
+): void {
+  writeMetric(
+    JSON.stringify({
+      _aws: {
+        Timestamp: timestamp,
+        CloudWatchMetrics: [
+          {
+            Namespace: 'Cashight',
+            Dimensions: [['FunctionName', 'ErrorCode']],
+            Metrics: [{ Name: 'AwsInvoiceParseFailure', Unit: 'Count' }],
+          },
+        ],
+      },
+      FunctionName: functionName,
+      ErrorCode: errorCode,
+      AwsInvoiceParseFailure: 1,
+    }),
+  );
+}
+
 function extractS3Key(body: string): string {
   const notification = JSON.parse(body) as S3Notification;
   const key = notification.Records?.[0]?.s3?.object?.key;
@@ -108,8 +140,8 @@ export async function handler(
         claimId,
         new Date().toISOString(),
       ),
-    transitionToTerminal: (jobId, state, extra) =>
-      transitionAwsInvoiceJobState(
+    transitionToTerminal: async (jobId, state, extra) => {
+      await transitionAwsInvoiceJobState(
         dynamoDocumentClient,
         tableName,
         jobId,
@@ -117,7 +149,15 @@ export async function handler(
         state,
         new Date().toISOString(),
         extra,
-      ).then(() => undefined),
+      );
+      if (
+        state === 'FAILED' &&
+        extra?.errorCode &&
+        extra.errorCode !== 'INVOICE_CONFLICT'
+      ) {
+        emitAwsInvoiceParseFailureMetric(extra.errorCode);
+      }
+    },
     downloadPdf: (key) => readObject(uploadBucket, key),
     deletePdf: (key) =>
       s3Client

@@ -11,6 +11,7 @@ import {
 } from '../functions/invoice-parser-worker/process-job';
 import {
   createInvoiceParserWorkerHandler,
+  emitAwsInvoiceParseFailureMetric,
   type InvoiceQueueRecord,
 } from '../functions/invoice-parser-worker/handler';
 import type { AwsInvoiceUploadJobRecord } from '../shared/metadata';
@@ -232,6 +233,38 @@ describe('invoice parser job', () => {
     expect(deps.transitionToTerminal).toHaveBeenCalledWith(JOB_ID, 'SUCCEEDED', {
       yearMonth: '2026-07',
     });
+  });
+});
+
+describe('invoice parser metrics', () => {
+  it('emits only function and sanitized error-code dimensions', () => {
+    const writeMetric = vi.fn();
+
+    emitAwsInvoiceParseFailureMetric(
+      'INVOICE_TOTAL_MISMATCH',
+      'cashight-invoice-parser-worker',
+      1_786_000_000_000,
+      writeMetric,
+    );
+
+    const metric = JSON.parse(writeMetric.mock.calls[0][0] as string) as Record<
+      string,
+      unknown
+    >;
+    expect(metric).toMatchObject({
+      FunctionName: 'cashight-invoice-parser-worker',
+      ErrorCode: 'INVOICE_TOTAL_MISMATCH',
+      AwsInvoiceParseFailure: 1,
+    });
+    expect(Object.keys(metric).sort()).toEqual([
+      'AwsInvoiceParseFailure',
+      'ErrorCode',
+      'FunctionName',
+      '_aws',
+    ]);
+    expect(JSON.stringify(metric)).not.toMatch(
+      /account|address|amount|invoiceNumber|rawText/i,
+    );
   });
 });
 

@@ -12,6 +12,30 @@ override_resource {
   }
 }
 
+override_resource {
+  target          = aws_s3_bucket.uploads
+  override_during = plan
+  values = {
+    arn = "arn:aws:s3:::cashight-uploads-stub"
+  }
+}
+
+override_resource {
+  target          = aws_s3_bucket.statements
+  override_during = plan
+  values = {
+    arn = "arn:aws:s3:::cashight-statements-stub"
+  }
+}
+
+override_resource {
+  target          = aws_sqs_queue.invoice_parse_dlq
+  override_during = plan
+  values = {
+    arn = "arn:aws:sqs:ap-southeast-1:123456789012:cashight-invoice-parse-dlq"
+  }
+}
+
 run "dynamodb_billing_mode" {
   command = plan
 
@@ -38,6 +62,152 @@ run "dynamodb_deletion_protection" {
   assert {
     condition     = aws_dynamodb_table.cashight.deletion_protection_enabled == true
     error_message = "DynamoDB table must have deletion protection enabled to prevent accidental drops"
+  }
+}
+
+run "invoice_queue_is_isolated_and_retry_safe" {
+  command = plan
+
+  assert {
+    condition     = aws_sqs_queue.invoice_parse.name == "cashight-invoice-parse" && aws_sqs_queue.invoice_parse_dlq.name == "cashight-invoice-parse-dlq"
+    error_message = "Invoice parsing must use its own queue and DLQ"
+  }
+
+  assert {
+    condition     = jsondecode(aws_sqs_queue.invoice_parse.redrive_policy).maxReceiveCount == 3
+    error_message = "Invoice parse queue must move a message to its DLQ after three receives"
+  }
+
+  assert {
+    condition     = aws_sqs_queue.invoice_parse.visibility_timeout_seconds > aws_lambda_function.invoice_parser_worker.timeout
+    error_message = "Invoice queue visibility timeout must exceed the worker timeout"
+  }
+
+  assert {
+    condition     = aws_lambda_event_source_mapping.invoice_parser_worker_sqs.batch_size == 1 && toset(aws_lambda_event_source_mapping.invoice_parser_worker_sqs.function_response_types) == toset(["ReportBatchItemFailures"])
+    error_message = "Invoice worker must process one message and report partial batch failures"
+  }
+}
+
+run "upload_notifications_use_exact_non_overlapping_prefixes" {
+  command = plan
+
+  assert {
+    condition     = toset([for queue in aws_s3_bucket_notification.uploads.queue : queue.filter_prefix]) == toset(["uploads/statements/", "uploads/aws-invoices/"])
+    error_message = "Upload notifications must isolate statement and AWS invoice PDF prefixes"
+  }
+
+  assert {
+    condition     = alltrue([for queue in aws_s3_bucket_notification.uploads.queue : queue.filter_suffix == ".pdf"])
+    error_message = "Both upload notifications must accept PDF objects only"
+  }
+}
+
+run "invoice_lambdas_have_required_runtime_limits" {
+  command = plan
+
+  assert {
+    condition     = aws_lambda_function.aws_invoices_api.runtime == "nodejs22.x" && aws_lambda_function.aws_invoices_api.memory_size == 512 && aws_lambda_function.aws_invoices_api.timeout == 30
+    error_message = "AWS invoices API must use Node.js 22, 512 MiB, and a 30-second timeout"
+  }
+
+  assert {
+    condition     = aws_lambda_function.invoice_parser_worker.runtime == "nodejs22.x" && aws_lambda_function.invoice_parser_worker.memory_size == 2048 && aws_lambda_function.invoice_parser_worker.timeout == 300 && aws_lambda_function.invoice_parser_worker.reserved_concurrent_executions == 1
+    error_message = "Invoice parser worker must use Node.js 22, 2048 MiB, 300 seconds, and concurrency 1"
+  }
+
+  assert {
+    condition     = aws_lambda_function.aws_invoice_summary_api.runtime == "nodejs22.x" && aws_lambda_function.aws_invoice_summary_api.memory_size == 512 && aws_lambda_function.aws_invoice_summary_api.timeout == 60
+    error_message = "AWS invoice summary API must use Node.js 22, 512 MiB, and a 60-second timeout"
+  }
+
+  assert {
+    condition = alltrue([
+      aws_lambda_function.aws_invoices_api.tracing_config[0].mode == "Active",
+      aws_lambda_function.invoice_parser_worker.tracing_config[0].mode == "Active",
+      aws_lambda_function.aws_invoice_summary_api.tracing_config[0].mode == "Active",
+      aws_cloudwatch_log_group.lambda_aws_invoices_api.retention_in_days == 30,
+      aws_cloudwatch_log_group.lambda_invoice_parser_worker.retention_in_days == 30,
+      aws_cloudwatch_log_group.lambda_aws_invoice_summary_api.retention_in_days == 30,
+    ])
+    error_message = "Every invoice Lambda must enable active tracing and retain logs for 30 days"
+  }
+}
+
+run "invoice_iam_is_prefix_scoped_and_excludes_cost_explorer" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for policy in [
+        data.aws_iam_policy_document.lambda_aws_invoices_api_permissions,
+        data.aws_iam_policy_document.lambda_invoice_parser_worker_permissions,
+        data.aws_iam_policy_document.lambda_aws_invoice_summary_api_permissions,
+        ] : !anytrue(flatten([
+          for statement in policy.statement : [for action in statement.actions : startswith(action, "ce:")]
+      ]))
+    ])
+    error_message = "Invoice Lambdas must not receive Cost Explorer permissions"
+  }
+
+  assert {
+    condition     = toset(flatten([for statement in data.aws_iam_policy_document.lambda_aws_invoices_api_permissions.statement : statement.actions if startswith(statement.sid, "DynamoDB")])) == toset(["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:Query", "dynamodb:UpdateItem", "dynamodb:DeleteItem"])
+    error_message = "Invoice API DynamoDB actions must be exact"
+  }
+
+  assert {
+    condition     = toset(flatten([for statement in data.aws_iam_policy_document.lambda_invoice_parser_worker_permissions.statement : statement.actions if startswith(statement.sid, "DynamoDB")])) == toset(["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"])
+    error_message = "Invoice worker DynamoDB actions must be exact"
+  }
+
+  assert {
+    condition     = toset(flatten([for statement in data.aws_iam_policy_document.lambda_aws_invoice_summary_api_permissions.statement : statement.actions if startswith(statement.sid, "DynamoDB")])) == toset(["dynamodb:GetItem", "dynamodb:Query"])
+    error_message = "Invoice summary DynamoDB actions must be read-only and exact"
+  }
+
+  assert {
+    condition     = alltrue([for resource in flatten([for statement in data.aws_iam_policy_document.lambda_aws_invoices_api_permissions.statement : statement.resources if startswith(statement.sid, "S3")]) : strcontains(resource, "/uploads/aws-invoices/") || strcontains(resource, "/users/*/aws-invoices/")])
+    error_message = "Invoice API S3 permissions must be limited to invoice upload and persisted invoice prefixes"
+  }
+
+  assert {
+    condition     = !contains(keys(aws_lambda_function.invoice_parser_worker.environment[0].variables), "GEMINI_PARAM") && !contains(keys(aws_lambda_function.invoice_parser_worker.environment[0].variables), "PDF_PASSWORD_PARAM") && contains(keys(aws_lambda_function.aws_invoice_summary_api.environment[0].variables), "GEMINI_PARAM")
+    error_message = "Only the summary Lambda may receive Gemini configuration, and the invoice parser must not receive PDF passwords"
+  }
+}
+
+run "invoice_pipeline_has_operational_alarms" {
+  command = plan
+
+  assert {
+    condition = toset([
+      aws_cloudwatch_metric_alarm.aws_invoices_api_errors.metric_name,
+      aws_cloudwatch_metric_alarm.aws_invoice_summary_api_errors.metric_name,
+      aws_cloudwatch_metric_alarm.invoice_parser_worker_errors.metric_name,
+      aws_cloudwatch_metric_alarm.invoice_parser_worker_duration.metric_name,
+      aws_cloudwatch_metric_alarm.invoice_parser_worker_throttles.metric_name,
+      aws_cloudwatch_metric_alarm.invoice_total_mismatch.metric_name,
+      aws_cloudwatch_metric_alarm.invoice_parse_queue_age.metric_name,
+      aws_cloudwatch_metric_alarm.invoice_parse_dlq_messages.metric_name,
+      ]) == toset([
+      "Errors",
+      "Duration",
+      "Throttles",
+      "AwsInvoiceParseFailure",
+      "ApproximateAgeOfOldestMessage",
+      "ApproximateNumberOfMessagesVisible",
+    ])
+    error_message = "Invoice infrastructure must cover API/summary errors, worker health, reconciliation, queue age, and DLQ depth"
+  }
+
+  assert {
+    condition     = one([for query in aws_cloudwatch_metric_alarm.invoice_parser_missing_invocations.metric_query : query.expression if query.id == "missing"]) == "IF(FILL(queued, 0) > 0, FILL(invocations, 0), 1)"
+    error_message = "Missing-invocation alarm must fire only when queued work is not invoking the parser"
+  }
+
+  assert {
+    condition     = toset(keys(aws_cloudwatch_metric_alarm.invoice_total_mismatch.dimensions)) == toset(["FunctionName", "ErrorCode"])
+    error_message = "Reconciliation alarm dimensions must contain only function and sanitized error code"
   }
 }
 

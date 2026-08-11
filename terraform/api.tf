@@ -13,6 +13,8 @@ locals {
     statements_api_arn           = aws_lambda_alias.statements_api_live.arn
     dashboard_api_arn            = aws_lambda_alias.dashboard_api_live.arn
     summary_api_arn              = aws_lambda_alias.summary_api_live.arn
+    aws_invoices_api_arn         = aws_lambda_alias.aws_invoices_api_live.arn
+    aws_invoice_summary_api_arn  = aws_lambda_alias.aws_invoice_summary_api_live.arn
   }
 }
 
@@ -201,6 +203,24 @@ resource "aws_lambda_permission" "api_summary" {
   qualifier     = aws_lambda_alias.summary_api_live.name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.cashight.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "api_aws_invoices" {
+  statement_id  = "AllowAPIGatewayAwsInvoices"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.aws_invoices_api.function_name
+  qualifier     = aws_lambda_alias.aws_invoices_api_live.name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.cashight.execution_arn}/*/*/aws/invoices*"
+}
+
+resource "aws_lambda_permission" "api_aws_invoice_summary" {
+  statement_id  = "AllowAPIGatewayAwsInvoiceSummary"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.aws_invoice_summary_api.function_name
+  qualifier     = aws_lambda_alias.aws_invoice_summary_api_live.name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.cashight.execution_arn}/*/POST/aws/invoices/summary"
 }
 
 # ── Outputs ───────────────────────────────────────────────────────────────────

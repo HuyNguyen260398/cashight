@@ -167,3 +167,195 @@ resource "aws_cloudwatch_metric_alarm" "cost_explorer_export_failures" {
     Result    = "failure"
   }
 }
+
+# ── AWS invoice pipeline ──────────────────────────────────────────────────────
+
+resource "aws_cloudwatch_metric_alarm" "aws_invoices_api_errors" {
+  alarm_name          = "cashight-aws-invoices-api-errors"
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_description   = "AWS invoices API Lambda errors"
+  alarm_actions       = local.security_alarm_actions
+
+  dimensions = {
+    FunctionName = aws_lambda_function.aws_invoices_api.function_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "aws_invoice_summary_api_errors" {
+  alarm_name          = "cashight-aws-invoice-summary-api-errors"
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_description   = "AWS invoice summary Lambda errors"
+  alarm_actions       = local.security_alarm_actions
+
+  dimensions = {
+    FunctionName = aws_lambda_function.aws_invoice_summary_api.function_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "invoice_parser_worker_errors" {
+  alarm_name          = "cashight-invoice-parser-worker-errors"
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_description   = "Invoice parser worker errors"
+  alarm_actions       = local.security_alarm_actions
+
+  dimensions = {
+    FunctionName = aws_lambda_function.invoice_parser_worker.function_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "invoice_parser_worker_duration" {
+  alarm_name          = "cashight-invoice-parser-worker-duration"
+  namespace           = "AWS/Lambda"
+  metric_name         = "Duration"
+  extended_statistic  = "p95"
+  period              = 300
+  evaluation_periods  = 2
+  threshold           = 270000
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_description   = "Invoice parser p95 duration is approaching its 300-second timeout"
+  alarm_actions       = local.security_alarm_actions
+
+  dimensions = {
+    FunctionName = aws_lambda_function.invoice_parser_worker.function_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "invoice_parser_worker_throttles" {
+  alarm_name          = "cashight-invoice-parser-worker-throttles"
+  namespace           = "AWS/Lambda"
+  metric_name         = "Throttles"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_description   = "Invoice parser worker throttles"
+  alarm_actions       = local.security_alarm_actions
+
+  dimensions = {
+    FunctionName = aws_lambda_function.invoice_parser_worker.function_name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "invoice_total_mismatch" {
+  alarm_name          = "cashight-invoice-total-mismatch"
+  namespace           = "Cashight"
+  metric_name         = "AwsInvoiceParseFailure"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_description   = "An AWS invoice failed integer-cent total reconciliation"
+  alarm_actions       = local.security_alarm_actions
+
+  dimensions = {
+    FunctionName = aws_lambda_function.invoice_parser_worker.function_name
+    ErrorCode    = "INVOICE_TOTAL_MISMATCH"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "invoice_parse_queue_age" {
+  alarm_name          = "cashight-invoice-parse-queue-age"
+  namespace           = "AWS/SQS"
+  metric_name         = "ApproximateAgeOfOldestMessage"
+  statistic           = "Maximum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 600
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_description   = "AWS invoice parsing is delayed by at least ten minutes"
+  alarm_actions       = local.security_alarm_actions
+
+  dimensions = {
+    QueueName = aws_sqs_queue.invoice_parse.name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "invoice_parse_dlq_messages" {
+  alarm_name          = "cashight-invoice-parse-dlq-messages"
+  namespace           = "AWS/SQS"
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_description   = "Messages entered the AWS invoice parsing DLQ"
+  alarm_actions       = local.security_alarm_actions
+
+  dimensions = {
+    QueueName = aws_sqs_queue.invoice_parse_dlq.name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "invoice_parser_missing_invocations" {
+  alarm_name          = "cashight-invoice-parser-missing-invocations"
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_description   = "Invoice queue has work but the parser is not being invoked"
+  alarm_actions       = local.security_alarm_actions
+
+  metric_query {
+    id          = "missing"
+    expression  = "IF(FILL(queued, 0) > 0, FILL(invocations, 0), 1)"
+    label       = "Invoice parser invocation health"
+    return_data = true
+  }
+
+  metric_query {
+    id          = "queued"
+    return_data = false
+    metric {
+      namespace   = "AWS/SQS"
+      metric_name = "ApproximateNumberOfMessagesVisible"
+      period      = 300
+      stat        = "Maximum"
+      dimensions = {
+        QueueName = aws_sqs_queue.invoice_parse.name
+      }
+    }
+  }
+
+  metric_query {
+    id          = "invocations"
+    return_data = false
+    metric {
+      namespace   = "AWS/Lambda"
+      metric_name = "Invocations"
+      period      = 300
+      stat        = "Sum"
+      dimensions = {
+        FunctionName = aws_lambda_function.invoice_parser_worker.function_name
+      }
+    }
+  }
+}
