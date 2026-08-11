@@ -18,6 +18,8 @@ export function Pagination({
       <Button
         variant="outline"
         size="sm"
+        className="min-h-11"
+        aria-label="Previous page"
         disabled={page <= 1}
         onClick={() => onPageChange(page - 1)}
       >
@@ -29,6 +31,8 @@ export function Pagination({
       <Button
         variant="outline"
         size="sm"
+        className="min-h-11"
+        aria-label="Next page"
         disabled={page >= pageCount}
         onClick={() => onPageChange(page + 1)}
       >
