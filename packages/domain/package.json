@@ -17,6 +17,7 @@
     "./workspace": "./src/workspace.ts",
     "./aws-cost-explorer": "./src/aws-cost-explorer.ts",
     "./aws-cost-canonical": "./src/aws-cost-canonical.ts",
+    "./aws-invoices": "./src/aws-invoices.ts",
     "./security/*": "./src/security/*.ts",
     "./pdf-dom-polyfill": "./src/pdf-dom-polyfill.ts",
     "./parsers/tpbank": "./src/parsers/tpbank.ts",
