@@ -60,7 +60,11 @@ test.describe('AWS Cost Explorer browser parity', () => {
     for (const tile of ['Total cost', 'Average monthly cost', 'Service count']) {
       await expect(page.getByText(tile, { exact: true })).toBeVisible();
     }
-    // The breakdown table sits directly under its graph, not below the sidebar.
+    // The breakdown table sits directly under its graph, not below the sidebar,
+    // and the parameters panel starts level with the overview above the graph.
+    const overviewBox = await page
+      .getByRole('heading', { name: 'Cost and usage overview' })
+      .boundingBox();
     const graphBox = await page
       .getByRole('heading', { name: 'Cost and usage graph' })
       .boundingBox();
@@ -72,6 +76,22 @@ test.describe('AWS Cost Explorer browser parity', () => {
       .boundingBox();
     expect(breakdownBox!.y).toBeGreaterThan(graphBox!.y);
     expect(breakdownBox!.x).toBeLessThan(parametersBox!.x);
+    expect(parametersBox!.y).toBeLessThan(graphBox!.y);
+    expect(Math.abs(parametersBox!.y - overviewBox!.y)).toBeLessThan(24);
+
+    // Collapsing the sidebar widens the report column and restores on demand.
+    const parametersPanel = page.getByRole('heading', { name: 'Report parameters' });
+    await page.getByRole('button', { name: 'Hide report parameters' }).click();
+    await expect(parametersPanel).toBeHidden();
+    const widenedGraph = await page
+      .getByRole('img', { name: /chart/i })
+      .boundingBox();
+    await page.getByRole('button', { name: 'Show report parameters' }).click();
+    await expect(parametersPanel).toBeVisible();
+    const narrowedGraph = await page
+      .getByRole('img', { name: /chart/i })
+      .boundingBox();
+    expect(widenedGraph!.width).toBeGreaterThan(narrowedGraph!.width);
 
     // The graph's own toggle restyles the chart with no further AWS query.
     const chartType = page.getByRole('group', { name: 'Chart type' });

@@ -3,7 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { CostExplorerReportRequest } from '@cashight/domain/aws-cost-explorer';
-import { AlertTriangle, Cloud, Loader2, RefreshCw } from 'lucide-react';
+import {
+  AlertTriangle,
+  Cloud,
+  Loader2,
+  PanelRightClose,
+  PanelRightOpen,
+  RefreshCw,
+} from 'lucide-react';
 
 import { ReportParameters } from './report-parameters';
 import { CostBreakdown } from './cost-breakdown';
@@ -20,6 +27,9 @@ import {
   parseCostReportSearch,
   serializeCostReportSearch,
 } from '@/frontend/lib/aws-cost-explorer-url';
+import { cn } from '@/lib/utils';
+
+const PARAMETERS_PANEL_ID = 'cost-report-parameters';
 
 function PanelSkeleton({ label }: { label: string }) {
   return (
@@ -107,6 +117,7 @@ function NativeCostExplorerDashboard() {
     exportCsv,
   } = useCostExplorer();
   const cooldownActive = useRefreshCooldown(state.refreshCooldownUntil);
+  const [parametersVisible, setParametersVisible] = useState(true);
 
   /**
    * Everything in the request except `chartStyle` decides what AWS is asked for.
@@ -223,6 +234,21 @@ function NativeCostExplorerDashboard() {
               </p>
             ) : null}
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 self-start"
+            aria-expanded={parametersVisible}
+            aria-controls={PARAMETERS_PANEL_ID}
+            onClick={() => setParametersVisible((visible) => !visible)}
+          >
+            {parametersVisible ? (
+              <PanelRightClose aria-hidden />
+            ) : (
+              <PanelRightOpen aria-hidden />
+            )}
+            {parametersVisible ? 'Hide report parameters' : 'Show report parameters'}
+          </Button>
         </div>
       </header>
 
@@ -238,30 +264,31 @@ function NativeCostExplorerDashboard() {
       ) : null}
 
       <div className="grid grid-cols-12 gap-4 md:gap-6">
-        {state.status === 'loading' || state.status === 'idle' ? (
-          <>
-            <div className="col-span-12" aria-live="polite">
-              <p className="sr-only">Loading cost and usage…</p>
-              <PanelSkeleton label="Loading cost and usage overview" />
-            </div>
-            <div className="col-span-12 space-y-4 md:space-y-6 xl:col-span-8">
+        {/* One report column, so the sidebar starts level with the overview and
+            the breakdown stays directly under its own chart. */}
+        <div
+          className={cn(
+            'col-span-12 space-y-4 md:space-y-6',
+            parametersVisible && 'xl:col-span-8',
+          )}
+        >
+          {state.status === 'loading' || state.status === 'idle' ? (
+            <>
+              <div aria-live="polite">
+                <p className="sr-only">Loading cost and usage…</p>
+                <PanelSkeleton label="Loading cost and usage overview" />
+              </div>
               <PanelSkeleton label="Loading cost and usage graph" />
               <PanelSkeleton label="Loading cost and usage breakdown" />
-            </div>
-          </>
-        ) : state.status === 'success' ? (
-          <>
-            <div className="col-span-12">
+            </>
+          ) : state.status === 'success' ? (
+            <>
               <CostOverview
                 request={activeRequest}
                 result={state.result}
                 forecast={state.forecast}
                 comparison={state.comparison}
               />
-            </div>
-            {/* Graph and breakdown share the left column so the table stays
-                directly under its chart instead of below the tall sidebar. */}
-            <div className="col-span-12 space-y-4 md:space-y-6 xl:col-span-8">
               <CostUsageGraph
                 request={activeRequest}
                 result={state.result}
@@ -276,11 +303,17 @@ function NativeCostExplorerDashboard() {
                 comparison={state.comparison}
                 onExportCsv={() => exportCsv(activeRequest)}
               />
-            </div>
-          </>
-        ) : null}
+            </>
+          ) : null}
+        </div>
 
-        <aside className="col-span-12 xl:col-span-4">
+        {/* Hidden rather than unmounted, so collapsing the panel never discards
+            an unapplied draft. */}
+        <aside
+          id={PARAMETERS_PANEL_ID}
+          hidden={!parametersVisible}
+          className="col-span-12 xl:col-span-4"
+        >
           <ReportParameters
             initialRequest={initialRequest}
             granularDataEnabled={false}

@@ -1,7 +1,14 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { CostExplorerReportRequest } from '@cashight/domain/aws-cost-explorer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -306,6 +313,36 @@ describe('Cost Explorer panel states', () => {
     expect(screen.getAllByText('Estimated').length).toBeGreaterThan(0);
     expect(screen.getByText(/Updated Aug 10, 2026/)).toBeInTheDocument();
     expect(screen.getByText('$1,234.56')).toBeInTheDocument();
+  });
+
+  it('collapses and restores the report parameters panel without losing a draft', async () => {
+    render(<CostExplorerDashboard />);
+
+    const toggle = () =>
+      screen.getByRole('button', { name: /report parameters$/ });
+    expect(toggle()).toHaveAttribute('aria-expanded', 'true');
+    expect(
+      screen.getByRole('heading', { name: 'Report parameters' }),
+    ).toBeInTheDocument();
+
+    // An unapplied edit must survive the collapse.
+    fireEvent.change(screen.getByLabelText('Metric'), {
+      target: { value: 'AmortizedCost' },
+    });
+
+    await userEvent.click(toggle());
+    expect(toggle()).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      screen.queryByRole('heading', { name: 'Report parameters' }),
+    ).not.toBeInTheDocument();
+    // Collapsing is presentational only.
+    expect(mockRun).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(toggle());
+    expect(
+      screen.getByRole('heading', { name: 'Report parameters' }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Metric')).toHaveValue('AmortizedCost');
   });
 
   it('summarises the range as total cost, average, and distinct service count', () => {
