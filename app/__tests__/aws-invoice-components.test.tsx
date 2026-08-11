@@ -202,8 +202,10 @@ describe('AWS invoice tables', () => {
     const body = screen.getByTestId('invoice-services-body');
     expect(within(body).getAllByRole('row')).toHaveLength(10);
     expect(within(body).getAllByRole('row')[0]).toHaveTextContent('Service 12');
+    expect(screen.getByRole('columnheader', { name: /total/i })).toHaveAttribute('aria-sort', 'descending');
     fireEvent.click(screen.getByRole('button', { name: /sort by service/i }));
     expect(within(body).getAllByRole('row')[0]).toHaveTextContent('Service 01');
+    expect(screen.getByRole('columnheader', { name: /service/i })).toHaveAttribute('aria-sort', 'ascending');
     fireEvent.click(screen.getByRole('button', { name: /next page/i }));
     expect(screen.getByText('Page 2 of 2')).toBeTruthy();
   });

@@ -9,6 +9,7 @@ export default function Loading() {
       className="surface-card flex min-h-[50vh] items-center justify-center p-6"
       aria-busy="true"
       aria-label="Loading page"
+      aria-live="polite"
     >
       <div className="flex flex-col items-center gap-3">
         <Spinner />

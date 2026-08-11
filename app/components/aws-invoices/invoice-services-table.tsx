@@ -72,7 +72,11 @@ export function InvoiceServicesTable({
                     ['tax', 'Tax'],
                     ['total', 'Total'],
                   ] as const).map(([key, label]) => (
-                    <TableHead key={key} className={key === 'name' ? '' : 'text-right'}>
+                    <TableHead
+                      key={key}
+                      className={key === 'name' ? '' : 'text-right'}
+                      aria-sort={sortKey === key ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    >
                       <Button variant="ghost" size="sm" className="min-h-11 gap-1 px-1" aria-label={`Sort by ${label.toLowerCase()}`} onClick={() => toggleSort(key)}>
                         {label}<SortIcon active={sortKey === key} direction={direction} />
                       </Button>

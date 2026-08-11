@@ -257,6 +257,14 @@
   outline-offset: 2px;
 }
 
+.aws-invoice-chart {
+  min-width: 0;
+}
+
+.aws-invoice-chart text {
+  font-family: var(--font-geist-sans), sans-serif;
+}
+
 /* The shared Table primitive owns horizontal overflow by default. Cost
    Explorer uses one bounded two-axis scrollport so sticky period headers stay
    attached to the viewport while wide breakdown data scrolls. */
@@ -268,6 +276,14 @@
   .cost-explorer-chart *,
   .cost-explorer-chart *::before,
   .cost-explorer-chart *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .aws-invoice-chart *,
+  .aws-invoice-chart *::before,
+  .aws-invoice-chart *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

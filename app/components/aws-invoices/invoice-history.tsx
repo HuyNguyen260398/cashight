@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { YearMonth } from '@cashight/domain/aws-invoices';
 import { Eye, Loader2, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import type { AwsInvoiceListItem } from '@/frontend/api/contracts';
 import {
@@ -48,6 +49,8 @@ export function InvoiceHistory({
     try {
       await onDelete(yearMonth);
       setOpenMonth(null);
+    } catch {
+      toast.error('Could not delete invoice');
     } finally {
       setDeletingMonth(null);
     }

@@ -35,7 +35,7 @@ export function InvoiceChartCard({
             No {title.toLowerCase()} data
           </div>
         ) : (
-          <div role="img" aria-label={ariaLabel} className="min-w-0">
+          <div role="img" aria-label={ariaLabel} className="aws-invoice-chart min-w-0">
             <div className="sr-only">{summary}</div>
             {children}
           </div>
