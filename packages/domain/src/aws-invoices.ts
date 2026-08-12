@@ -10,9 +10,18 @@ function isValidIsoDate(value: string): boolean {
   );
 }
 
+/**
+ * Scaling by 100 carries IEEE-754 error far larger than Number.EPSILON — e.g.
+ * 2.01 * 100 === 200.99999999999997 — so the tolerance has to absorb that while
+ * still rejecting a genuine third decimal place.
+ */
+const CENT_SCALING_TOLERANCE = 1e-6;
+
 function hasAtMostTwoDecimals(value: number): boolean {
-  return Number.isSafeInteger(Math.round(value * 100)) &&
-    Math.abs(value * 100 - Math.round(value * 100)) < Number.EPSILON * 100;
+  const scaled = value * 100;
+  const rounded = Math.round(scaled);
+  return Number.isSafeInteger(rounded) &&
+    Math.abs(scaled - rounded) < CENT_SCALING_TOLERANCE;
 }
 
 export const YearMonthSchema = z
@@ -68,7 +77,9 @@ const AwsInvoiceLinkedAccountSchema = z
     credits: AwsInvoiceMoneySchema,
     tax: AwsInvoiceMoneySchema,
     total: AwsInvoiceMoneySchema,
-    services: z.array(AwsInvoiceServiceSchema).min(1).max(1_000),
+    // May be empty: a linked account with no billable usage has every service
+    // zero-valued, and zero-valued services are filtered from the report.
+    services: z.array(AwsInvoiceServiceSchema).max(1_000),
   })
   .strict();
 export type AwsInvoiceLinkedAccount = z.infer<

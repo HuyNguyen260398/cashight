@@ -44,6 +44,9 @@ describe('AWS invoice field parsing', () => {
     ['August 1, 2026', '2026-08-01'],
     ['Aug 01, 2026', '2026-08-01'],
     ['1 August 2026', '2026-08-01'],
+    // AWS renders a space before the comma in the real invoice layout.
+    ['August 1 , 2026', '2026-08-01'],
+    ['August 1 ,2026', '2026-08-01'],
   ])('parses invoice date %s', (value, expected) => {
     expect(parseAwsInvoiceDate(value)).toBe(expected);
   });
@@ -62,6 +65,15 @@ describe('AWS invoice field parsing', () => {
     ],
     [
       'Jul 1 - Jul 31, 2026',
+      { start: '2026-07-01', end: '2026-07-31' },
+    ],
+    // Real layout: space before the comma, en dash separator.
+    [
+      'July 1 - July 31 , 2026',
+      { start: '2026-07-01', end: '2026-07-31' },
+    ],
+    [
+      'July 1 – July 31 , 2026',
       { start: '2026-07-01', end: '2026-07-31' },
     ],
   ])('parses billing period %s', (value, expected) => {

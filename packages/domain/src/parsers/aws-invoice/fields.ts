@@ -6,7 +6,8 @@ export type AwsInvoiceParseErrorCode =
   | 'INVALID_INVOICE_DATE'
   | 'INVALID_BILLING_PERIOD'
   | 'INVALID_ACCOUNT_ID'
-  | 'UNSAFE_SERVICE_NAME';
+  | 'UNSAFE_SERVICE_NAME'
+  | 'UNKNOWN_COMPONENT_LABEL';
 
 export class AwsInvoiceParseError extends Error {
   readonly code: AwsInvoiceParseErrorCode;
@@ -80,8 +81,20 @@ function monthNumber(value: string): number | undefined {
   return MONTHS.get(value.toLowerCase());
 }
 
+/**
+ * AWS renders dates as `August 1 , 2026` — a space before the comma and
+ * sometimes none after it. Normalize the comma spacing before matching.
+ */
+function normalizeCommaSpacing(value: string): string {
+  return value
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/\s+,/g, ',')
+    .replace(/,(?=\S)/g, ', ');
+}
+
 export function parseAwsInvoiceDate(value: string): string {
-  const normalized = value.trim().replace(/\s+/g, ' ');
+  const normalized = normalizeCommaSpacing(value);
   const monthFirst = /^([A-Za-z]+) (\d{1,2}), (\d{4})$/.exec(normalized);
   const dayFirst = /^(\d{1,2}) ([A-Za-z]+) (\d{4})$/.exec(normalized);
 
@@ -102,7 +115,7 @@ export function parseAwsBillingPeriod(value: string): {
   start: string;
   end: string;
 } {
-  const normalized = value.trim().replace(/\s+/g, ' ');
+  const normalized = normalizeCommaSpacing(value);
   const full = /^([A-Za-z]+ \d{1,2}, \d{4})\s+[–-]\s+([A-Za-z]+ \d{1,2}, \d{4})$/.exec(
     normalized,
   );

@@ -6,22 +6,66 @@ until the verification checklist at the end passes in the target environment.
 
 ## Supported document contract
 
-Parser `aws-inc-consolidated-usd` version 1 supports an unencrypted, USD,
+Parser `aws-inc-consolidated-usd` version 2 supports an unencrypted, USD,
 consolidated invoice issued by `Amazon Web Services, Inc.`. Detection requires
 these exact layout markers:
 
-- `Amazon Web Services, Inc.`
+- `Amazon Web Services, Inc. Invoice` (the seller heading; the seller name also
+  appears in per-page legal boilerplate, which is deliberately ignored)
 - `Invoice Summary`
-- `Billing period`
-- `Detail for consolidated bill`
-- `Linked account allocation`
+- `Detail for Consolidated Bill`
+- `Activity By Account`
 
-The parser also requires invoice/due dates, charges, credits, tax, amount due,
-linked-account allocation rows, and per-account service detail. Every service,
-account, consolidated, tax, credit, and amount-due total is reconciled in
-integer cents. Unknown seller/layout markers fail with
-`UNSUPPORTED_AWS_INVOICE`; any reconciliation failure uses
-`INVOICE_TOTAL_MISMATCH`. Neither failure writes invoice JSON or metadata.
+Any other AWS selling entity — a row matching `Amazon Web Services … Invoice`
+that is not the heading above — fails closed.
+
+### Layout model
+
+The document is an indent-driven outline, not a column table. Labels sit in a
+left band at fixed x indents and every amount sits in a right-hand column past
+x=400:
+
+| Indent | Meaning |
+| --- | --- |
+| x=36 | page banners, footers, legal boilerplate — ignored |
+| x=40 | section heading, or a section total when it carries an amount |
+| x=50 | item: a service name, or an account label `Name (123456789012)` |
+| x=60 | component: `Charges`, `Credits`, or a tax line |
+
+Indents are only 4pt apart, so the matching tolerance must stay under 4.
+Sections persist across page boundaries — a service list continued on the next
+page keeps appending to the section that opened it.
+
+Tax is itemized under several labels that all fold into one tax figure:
+`Tax`, `VAT`, `GST`, `CT`, `ST`, and `Estimated US sales tax to be collected`
+(trailing footnote markers such as `VAT **` are stripped). An unrecognized
+component label fails closed with `UNKNOWN_COMPONENT_LABEL` rather than being
+silently dropped.
+
+Sections: `Summary`, `Detail for Consolidated Bill`, `Activity By Account`, then
+one `Summary for Linked Account` + `Detail for Linked Account` block per linked
+account. Section totals are `Total for this invoice`, `Total allocated for this
+invoice`, and `Account <id> total allocated for this invoice`.
+
+### Reconciliation
+
+Every total is reconciled in integer cents; the identity throughout is
+`total = charges - credits + tax`:
+
+- each service and each account item against its own components
+- the summary block, the header `TOTAL AMOUNT DUE ON …` banner, and
+  `Total for this invoice` must all state the same amount due
+- consolidated service charge/tax sums against the summary charges/tax
+- linked-account totals sum against `Total allocated for this invoice`
+- each account's service charge/tax sums against that account's totals
+
+Zero-valued services participate in reconciliation and are then filtered from
+the reported lists. A linked account with no billable usage legitimately ends up
+with an empty service list and a zero total.
+
+Unknown seller/layout markers fail with `UNSUPPORTED_AWS_INVOICE`; any
+reconciliation failure uses `INVOICE_TOTAL_MISMATCH`. Neither failure writes
+invoice JSON or metadata.
 
 Persisted and returned data may contain only masked `accountLast4` values. Bill
 to/address data, invoice numbers, full account IDs, account labels, extracted

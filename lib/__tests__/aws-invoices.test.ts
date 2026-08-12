@@ -256,3 +256,65 @@ describe('invoice boundary contracts', () => {
     ).toThrow();
   });
 });
+
+describe('real-invoice money and cardinality edge cases', () => {
+  // 2.01 * 100 === 200.99999999999997 in IEEE-754. A tolerance of
+  // Number.EPSILON * 100 is tighter than that error, so ordinary cent
+  // amounts were rejected as having more than two decimal places.
+  it.each([2.01, 2.03, 2.05, 2.07, 2.18, 2.2, 2.22, 2.24])(
+    'accepts %s as a two-decimal amount',
+    (tax) => {
+      expect(() =>
+        AwsInvoiceSchema.parse({
+          ...validInvoice,
+          totals: { charges: 100, credits: 0, tax, amountDue: 100 + tax },
+          services: [
+            { name: 'Example Service', charges: 100, tax, total: 100 + tax },
+          ],
+          linkedAccounts: [
+            {
+              accountLast4: '1234',
+              charges: 100,
+              credits: 0,
+              tax,
+              total: 100 + tax,
+              services: [
+                { name: 'Example Service', charges: 100, tax, total: 100 + tax },
+              ],
+            },
+          ],
+        }),
+      ).not.toThrow();
+    },
+  );
+
+  it('still rejects amounts with more than two decimals', () => {
+    expect(() =>
+      AwsInvoiceSchema.parse({
+        ...validInvoice,
+        totals: { charges: 100, credits: 0, tax: 10.001, amountDue: 110.001 },
+      }),
+    ).toThrow();
+  });
+
+  // A linked account with no billable usage has every service zero-valued,
+  // and zero-valued services are filtered out of the reported list.
+  it('accepts a linked account whose services all filtered out as zero', () => {
+    expect(() =>
+      AwsInvoiceSchema.parse({
+        ...validInvoice,
+        linkedAccounts: [
+          ...validInvoice.linkedAccounts,
+          {
+            accountLast4: '5678',
+            charges: 0,
+            credits: 0,
+            tax: 0,
+            total: 0,
+            services: [],
+          },
+        ],
+      }),
+    ).not.toThrow();
+  });
+});
