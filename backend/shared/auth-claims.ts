@@ -62,7 +62,18 @@ export function extractAccessClaims(
   return { sub, ...(username ? { username } : {}), scopes };
 }
 
-function providerFromSignedUsername(username: string | undefined): AuthProvider | undefined {
+/**
+ * Derive the identity provider from an access token's `username` claim.
+ * Cognito prefixes federated usernames with the IdP name, so `Google_<sub>`
+ * is a Google sign-in and a bare username is a native pool user.
+ *
+ * Returns undefined rather than guessing when the username is absent or does
+ * not match either shape — callers gate authorization on this, so an
+ * unrecognised value must never resolve to the privileged provider.
+ */
+export function providerFromSignedUsername(
+  username: string | undefined,
+): AuthProvider | undefined {
   if (!username) return undefined;
   if (/^Google_[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(username)) return 'GOOGLE';
   if (/^[A-Za-z0-9][A-Za-z0-9.@:-]{0,127}$/.test(username)) return 'COGNITO';

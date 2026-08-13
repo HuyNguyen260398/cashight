@@ -2,6 +2,7 @@ import { parseStatementPdf } from '@cashight/domain/parsers';
 import { parseAwsInvoicePdf } from '@cashight/domain/parsers/aws-invoice';
 import type { Statement } from '@cashight/domain/schemas';
 import type { AwsInvoice } from '@cashight/domain/aws-invoices';
+import type { AuthProvider } from '@cashight/domain/workspace';
 import type {
   CostExplorerReportRequest,
   SavedCostReport,
@@ -99,15 +100,25 @@ const dynamo = createLocalDynamoClient();
 
 const authorizedUser = (sub: string) => getAuthorizedUser(dynamo, TABLE_NAME, sub);
 
-/** Insert the AUTHZ record without which every authorized route returns 403. */
-export async function seedAuthorizedUser(sub: string = DEV_SUB): Promise<void> {
+/**
+ * Insert the AUTHZ record without which every authorized route returns 403.
+ *
+ * `authProvider` is a real authorization input, not a formality: only COGNITO
+ * may reach AWS Cost Explorer. It defaults to COGNITO for the boot seed of
+ * DEV_SUB — the bypass exists to test everything *except* identity — but a
+ * caller seeding a signed-in user must pass what that user actually used.
+ */
+export async function seedAuthorizedUser(
+  sub: string = DEV_SUB,
+  authProvider: AuthProvider = 'COGNITO',
+): Promise<void> {
   const now = new Date().toISOString();
   await upsertAuthorizedUser(dynamo, TABLE_NAME, {
     PK: `AUTHZ#${sub}`,
     SK: 'PROFILE',
     active: true,
     workspaceId: 'primary',
-    authProvider: 'COGNITO',
+    authProvider,
     createdAt: now,
     updatedAt: now,
   });

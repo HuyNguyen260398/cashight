@@ -15,6 +15,9 @@
  * into a Lambda.
  */
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
+import type { AuthProvider } from '@cashight/domain/workspace';
+
+import { providerFromSignedUsername } from '../../backend/shared/auth-claims';
 
 /** Claims shape the handlers read off `requestContext.authorizer`. */
 export interface AuthorizerClaims {
@@ -62,6 +65,31 @@ export interface AccessTokenVerifier {
 
 /** Just the read side of `process.env`, so tests can pass a plain object. */
 export type EnvLike = Partial<Record<string, string>>;
+
+/**
+ * Which identity provider the caller signed in with.
+ *
+ * This decides an authorization gate — only native Cognito users may reach AWS
+ * Cost Explorer (`cost-explorer-api/handler.ts` and `session-capabilities-api`
+ * both check `authProvider === 'COGNITO'`) — so it must never be assumed.
+ *
+ * Production derives it in the Cognito TokenGeneration trigger from the
+ * `identities` user attribute (`auth-guard/handler.ts:deriveAuthProvider`).
+ * That attribute is not in the access token, so here it comes from `username`,
+ * using the same rule the legacy authorization path already applies. Unknown
+ * shapes fail closed rather than defaulting to the privileged provider.
+ */
+export function authProviderFromClaims(claims: { username?: string }): AuthProvider {
+  const provider = providerFromSignedUsername(claims.username);
+  if (!provider) {
+    throw new LocalAuthError(
+      `Cannot determine the identity provider from username ${
+        claims.username === undefined ? '(absent)' : JSON.stringify(claims.username)
+      }; refusing to authorize.`,
+    );
+  }
+  return provider;
+}
 
 /**
  * Build a verifier for the pool the SPA signs in to. Throws at construction

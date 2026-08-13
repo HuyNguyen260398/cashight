@@ -85,11 +85,28 @@ No AWS change is needed: the user pool already lists
 `http://localhost:3000/auth/callback/` in its callback URLs
 (`terraform/cognito.tf`).
 
-Two local-only differences remain. The dev server auto-creates the `AUTHZ`
-record for whichever `sub` signs in — production keeps a real allowlist, but
-locally a 403 on every route is a confusing way to learn that. And the
-presigned-PUT endpoint stays unauthenticated, because a real S3 presigned URL
-carries its authorization in the signature rather than a bearer token.
+Because there is no Cognito trigger locally, the dev server stands in for
+`auth-guard/handler.ts` and writes the `AUTHZ` record for whichever `sub` signs
+in — production keeps a real allowlist, but locally a 403 on every route is a
+confusing way to learn that.
+
+**The identity provider on that record is derived, never assumed.** It gates AWS
+Cost Explorer: `session-capabilities-api` and `cost-explorer-api` both require
+`authProvider === 'COGNITO'`, so a Google sign-in gets `canViewAwsCosts: false`
+and a `403 COGNITO_REAUTH_REQUIRED` on cost queries, exactly as in production.
+The trigger reads the `identities` user attribute, which is not in an access
+token, so locally it comes from the `username` claim — `Google_<sub>` means
+Google, a bare username means a native pool user — using the same rule as the
+legacy authorization path (`providerFromSignedUsername`). An unrecognised
+username fails closed with a 401 rather than defaulting to the privileged
+provider. The boot log names the provider on each first sign-in.
+
+Everything else stays available to a Google session: statements, invoices and
+the bank dashboards are workspace-scoped, not provider-scoped.
+
+One more local-only difference: the presigned-PUT endpoint stays
+unauthenticated, because a real S3 presigned URL carries its authorization in
+the signature rather than a bearer token.
 
 Access tokens last an hour; `AuthProvider` renews silently before expiry, so in
 practice this is one sign-in per browser session.

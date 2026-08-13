@@ -42,6 +42,7 @@ import {
 import { parsePdfPasswords } from '../backend/shared/pdf-passwords';
 import {
   LocalAuthError,
+  authProviderFromClaims,
   bearerToken,
   createCognitoVerifier,
   type AccessTokenVerifier,
@@ -128,13 +129,19 @@ async function resolveClaims(request: http.IncomingMessage): Promise<AuthorizerC
 
   const claims = await verifier.verify(token);
 
-  // Local convenience: production keeps a real allowlist, but here the sub is
-  // whichever Cognito account you signed in with, and a 403 on every route is
-  // a confusing way to learn that.
+  // Production writes this record in the Cognito TokenGeneration trigger
+  // (auth-guard/handler.ts); locally there is no trigger, so the dev server
+  // stands in for it. The provider must come from the token — stamping every
+  // sub COGNITO would hand a Google sign-in the AWS Cost Explorer access that
+  // only native Cognito users are meant to have.
+  const authProvider = authProviderFromClaims(claims);
   if (!seededSubs.has(claims.sub)) {
-    await seedAuthorizedUser(claims.sub);
+    await seedAuthorizedUser(claims.sub, authProvider);
     seededSubs.add(claims.sub);
-    console.log(`[auth] authorized local workspace access for sub ${claims.sub}`);
+    console.log(
+      `[auth] authorized local workspace access for sub ${claims.sub} via ${authProvider}` +
+        (authProvider === 'COGNITO' ? '' : ' (AWS cost data stays denied)'),
+    );
   }
 
   return claims;
