@@ -4,7 +4,7 @@ import type { AwsInvoiceDashboard } from '@cashight/domain/aws-invoices';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 import { ChartTooltip } from '@/app/components/chart-tooltip';
-import { CHART_AXIS_COLOR, CHART_COLORS } from '@/lib/chart-colors';
+import { CHART_AXIS_COLOR, CHART_COLORS, CHART_CURSOR_FILL } from '@/lib/chart-colors';
 import { InvoiceChartCard } from './invoice-chart-card';
 import { formatInvoiceMoney } from './invoice-format';
 
@@ -19,7 +19,7 @@ export function InvoiceAccountAllocation({ dashboard }: { dashboard: AwsInvoiceD
         <BarChart data={data} layout="vertical" margin={{ left: 8, right: 8 }}>
           <XAxis type="number" hide />
           <YAxis type="category" dataKey="account" width={90} tick={{ fontSize: 11, fill: CHART_AXIS_COLOR }} />
-          <Tooltip content={<ChartTooltip format={format} />} />
+          <Tooltip content={<ChartTooltip format={format} />} cursor={{ fill: CHART_CURSOR_FILL }} />
           <Bar dataKey="value" fill={CHART_COLORS.success} radius={[0, 5, 5, 0]} />
         </BarChart>
       </ResponsiveContainer>

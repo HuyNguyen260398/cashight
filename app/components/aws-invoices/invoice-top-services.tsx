@@ -4,7 +4,7 @@ import type { AwsInvoiceDashboard } from '@cashight/domain/aws-invoices';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 import { ChartTooltip } from '@/app/components/chart-tooltip';
-import { CHART_AXIS_COLOR, CHART_COLORS } from '@/lib/chart-colors';
+import { CHART_AXIS_COLOR, CHART_COLORS, CHART_CURSOR_FILL } from '@/lib/chart-colors';
 import { InvoiceChartCard } from './invoice-chart-card';
 import { servicePanelHeight } from './invoice-chart-size';
 import { formatInvoiceMoney } from './invoice-format';
@@ -28,7 +28,7 @@ export function InvoiceTopServices({ dashboard }: { dashboard: AwsInvoiceDashboa
           <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.2} />
           <XAxis type="number" hide />
           <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 11, fill: CHART_AXIS_COLOR }} tickFormatter={(value) => String(value).length > 24 ? `${String(value).slice(0, 23)}…` : String(value)} />
-          <Tooltip content={<ChartTooltip format={format} />} />
+          <Tooltip content={<ChartTooltip format={format} />} cursor={{ fill: CHART_CURSOR_FILL }} />
           <Bar dataKey="value" fill={CHART_COLORS.brand} radius={[0, 5, 5, 0]} />
         </BarChart>
       </ResponsiveContainer>
