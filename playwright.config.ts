@@ -27,7 +27,13 @@ export default defineConfig({
     ? undefined
     : [
         {
-          command: `LOCAL_API_PORT=${localApiPort} LOCAL_ALLOWED_ORIGIN=${localBaseUrl} LOCAL_API_BASE_URL=${localApiUrl} node --import tsx scripts/dev-server.ts`,
+          // NEXT_PUBLIC_DEV_AUTH_BYPASS and LOCAL_AWS_COST_EXPLORER are pinned
+          // rather than inherited: dev-server.ts reads .env.local, where a
+          // developer may have switched on real Cognito sign-in (which would
+          // 401 every request, since the app below runs under the bypass) or
+          // the real, billable Cost Explorer API (which would replace the
+          // fixtures these specs assert on).
+          command: `LOCAL_API_PORT=${localApiPort} LOCAL_ALLOWED_ORIGIN=${localBaseUrl} LOCAL_API_BASE_URL=${localApiUrl} NEXT_PUBLIC_DEV_AUTH_BYPASS=true LOCAL_AWS_COST_EXPLORER=fake node --import tsx scripts/dev-server.ts`,
           url: `${localApiUrl}/health`,
           reuseExistingServer: false,
           timeout: 120_000,

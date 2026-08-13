@@ -6,11 +6,14 @@
  *
  * What it replaces:
  *   API Gateway  → the routing table below (same paths as api-openapi.yaml.tftpl)
- *   Cognito JWT  → a fixed claims object (DEV_SUB), see `buildEvent`
+ *   Cognito JWT  → a fixed claims object (DEV_SUB), see `resolveClaims`, unless
+ *                  NEXT_PUBLIC_DEV_AUTH_BYPASS is off — then real tokens are
+ *                  verified against the real user pool
  *   S3           → scripts/local/object-store.ts (files under .local-data/objects)
  *   DynamoDB     → scripts/local/dynamo.ts (.local-data/table.json)
  *   S3→SQS→Lambda→ a background call to the real parser worker after PUT
  *   Secrets Mgr  → PDF_PASSWORD / GEMINI_API_KEY from .env.local
+ *   Cost Explorer→ fixed synthetic figures, unless LOCAL_AWS_COST_EXPLORER=real
  *
  * Usage:
  *   pnpm dev:local          # this server on :8787
@@ -18,7 +21,7 @@
  *
  * .env.local needs:
  *   NEXT_PUBLIC_API_BASE_URL=http://localhost:8787
- *   NEXT_PUBLIC_DEV_AUTH_BYPASS=true
+ *   NEXT_PUBLIC_DEV_AUTH_BYPASS=true    # false → real Cognito sign-in
  *
  * Never deployed. Nothing here is imported by the app or the Lambda bundles.
  */
@@ -32,10 +35,18 @@ import {
   createLocalHandlers,
   processUploadedAwsInvoicePdf,
   processUploadedPdf,
+  resolveCostExplorerMode,
   seedAuthorizedUser,
   seedSyntheticAwsInvoice,
 } from './local/handlers';
 import { parsePdfPasswords } from '../backend/shared/pdf-passwords';
+import {
+  LocalAuthError,
+  bearerToken,
+  createCognitoVerifier,
+  type AccessTokenVerifier,
+  type AuthorizerClaims,
+} from './local/cognito-auth';
 import { UPLOAD_BUCKET, getObject, putObject } from './local/object-store';
 import { localDataDir } from './local/paths';
 
@@ -49,6 +60,17 @@ const API_BASE_URL = process.env.LOCAL_API_BASE_URL ?? `http://localhost:${PORT}
 /** Artificial lag before parsing, so the UI actually shows the PROCESSING state. */
 const PARSE_DELAY_MS = Number(process.env.LOCAL_PARSE_DELAY_MS ?? 300);
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+
+/**
+ * Whether requests carry a real Cognito access token.
+ *
+ * Deliberately the same expression as the SPA's `isDevAuthBypass()`
+ * (frontend/auth/config.ts) and read from the same variable, so the two sides
+ * can never disagree about whether a token is expected: the client sends an
+ * `Authorization` header exactly when this server demands one.
+ */
+const AUTH_MODE: 'bypass' | 'cognito' =
+  process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS === 'true' ? 'bypass' : 'cognito';
 
 /**
  * Minimal .env.local reader. The Next dev server loads .env.local itself, but
@@ -68,19 +90,65 @@ function loadDotEnvLocal(): void {
 
 const handlers = createLocalHandlers({ apiBaseUrl: API_BASE_URL });
 
-// ── Lambda event construction ─────────────────────────────────────────────────
+// ── Authorization ─────────────────────────────────────────────────────────────
+
+/** Claims used under the bypass — what every request looked like before. */
+const BYPASS_CLAIMS: AuthorizerClaims = {
+  sub: DEV_SUB,
+  token_use: 'access',
+  scope: 'cashight/read cashight/write',
+};
+
+/** Built at boot in cognito mode; never touched under the bypass. */
+let verifier: AccessTokenVerifier | undefined;
 
 /**
- * Build the API Gateway proxy event shape the handlers expect. The authorizer
- * claims are synthesized rather than validated: locally there is no Cognito,
- * and the point of this server is testing the parse pipeline, not the JWT
- * guard (which has its own suite in backend/__tests__/auth-guard.test.ts).
+ * Subs known to have an AUTHZ record. Without one, `authorizeRequest` 403s
+ * every route, and a real Cognito sub is not the one seeded at boot.
  */
+const seededSubs = new Set<string>([DEV_SUB]);
+
+/**
+ * Resolve the claims API Gateway's JWT authorizer would have attached.
+ *
+ * Under the bypass they are synthesized, as they always were: the point of
+ * that mode is testing the parse pipeline with no AWS account, not the JWT
+ * guard (which has its own suite in backend/__tests__/auth-guard.test.ts).
+ *
+ * In cognito mode the bearer token is verified against the real user pool's
+ * JWKS and its claims are used verbatim, so scope and token_use are enforced
+ * downstream exactly as in production.
+ */
+async function resolveClaims(request: http.IncomingMessage): Promise<AuthorizerClaims> {
+  if (AUTH_MODE === 'bypass') return BYPASS_CLAIMS;
+  if (!verifier) throw new LocalAuthError('Cognito verifier is not initialised.');
+
+  const token = bearerToken(request.headers.authorization);
+  if (!token) throw new LocalAuthError('Missing Authorization: Bearer <access token>.');
+
+  const claims = await verifier.verify(token);
+
+  // Local convenience: production keeps a real allowlist, but here the sub is
+  // whichever Cognito account you signed in with, and a 403 on every route is
+  // a confusing way to learn that.
+  if (!seededSubs.has(claims.sub)) {
+    await seedAuthorizedUser(claims.sub);
+    seededSubs.add(claims.sub);
+    console.log(`[auth] authorized local workspace access for sub ${claims.sub}`);
+  }
+
+  return claims;
+}
+
+// ── Lambda event construction ─────────────────────────────────────────────────
+
+/** Build the API Gateway proxy event shape the handlers expect. */
 function buildEvent(
   request: http.IncomingMessage,
   url: URL,
   pathParameters: Record<string, string>,
   body: string | null,
+  claims: AuthorizerClaims,
 ) {
   return {
     httpMethod: request.method ?? 'GET',
@@ -92,11 +160,7 @@ function buildEvent(
     requestContext: {
       requestId: crypto.randomUUID(),
       authorizer: {
-        claims: {
-          sub: DEV_SUB,
-          token_use: 'access',
-          scope: 'cashight/read cashight/write',
-        },
+        claims,
       },
     },
   };
@@ -194,7 +258,12 @@ async function route(
 
   // GET /health
   if (method === 'GET' && segments[0] === 'health') {
-    sendJson(response, 200, { status: 'ok', mode: 'local', sub: DEV_SUB });
+    sendJson(response, 200, {
+      status: 'ok',
+      mode: 'local',
+      auth: AUTH_MODE,
+      ...(AUTH_MODE === 'bypass' ? { sub: DEV_SUB } : {}),
+    });
     return;
   }
 
@@ -231,16 +300,31 @@ async function route(
     }
   }
 
+  // Everything past this point is an authorized route. The presigned-PUT
+  // endpoint above stays open on purpose: a real S3 presigned URL carries its
+  // authorization in the signature, not in a bearer token.
+  let claims: AuthorizerClaims;
+  try {
+    claims = await resolveClaims(request);
+  } catch (error) {
+    if (!(error instanceof LocalAuthError)) throw error;
+    console.warn(`[auth] 401 ${method} ${url.pathname}: ${error.message}`);
+    sendJson(response, 401, {
+      error: { code: 'UNAUTHORIZED', message: error.message },
+    });
+    return;
+  }
+
   // POST /uploads
   if (method === 'POST' && segments[0] === 'uploads' && segments.length === 1) {
     const body = (await readBody(request)).toString('utf8');
-    sendApiResponse(response, await handlers.uploads(buildEvent(request, url, {}, body)));
+    sendApiResponse(response, await handlers.uploads(buildEvent(request, url, {}, body, claims)));
     return;
   }
 
   // GET /uploads/{jobId}
   if (method === 'GET' && segments[0] === 'uploads' && segments.length === 2) {
-    const event = buildEvent(request, url, { jobId: decodeURIComponent(segments[1]) }, null);
+    const event = buildEvent(request, url, { jobId: decodeURIComponent(segments[1]) }, null, claims);
     sendApiResponse(response, await handlers.uploadStatus(event));
     return;
   }
@@ -250,7 +334,7 @@ async function route(
     const pathParameters: Record<string, string> =
       segments.length === 2 ? { statementId: decodeURIComponent(segments[1]) } : {};
     if (method === 'GET' || (method === 'DELETE' && segments.length === 2)) {
-      const event = buildEvent(request, url, pathParameters, null);
+      const event = buildEvent(request, url, pathParameters, null, claims);
       sendApiResponse(response, await handlers.statements(event));
       return;
     }
@@ -258,7 +342,7 @@ async function route(
 
   // GET /dashboard
   if (method === 'GET' && segments[0] === 'dashboard' && segments.length === 1) {
-    sendApiResponse(response, await handlers.dashboard(buildEvent(request, url, {}, null)));
+    sendApiResponse(response, await handlers.dashboard(buildEvent(request, url, {}, null, claims)));
     return;
   }
 
@@ -271,7 +355,7 @@ async function route(
   ) {
     sendApiResponse(
       response,
-      await handlers.sessionCapabilities(buildEvent(request, url, {}, null)),
+      await handlers.sessionCapabilities(buildEvent(request, url, {}, null, claims)),
     );
     return;
   }
@@ -289,7 +373,7 @@ async function route(
         : {};
     sendApiResponse(
       response,
-      await handlers.costExplorer(buildEvent(request, url, pathParameters, body)),
+      await handlers.costExplorer(buildEvent(request, url, pathParameters, body, claims)),
     );
     return;
   }
@@ -304,7 +388,7 @@ async function route(
     const body = (await readBody(request)).toString('utf8');
     sendApiResponse(
       response,
-      await handlers.awsInvoiceSummaries(buildEvent(request, url, {}, body)),
+      await handlers.awsInvoiceSummaries(buildEvent(request, url, {}, body, claims)),
     );
     return;
   }
@@ -324,7 +408,7 @@ async function route(
     }
     sendApiResponse(
       response,
-      await handlers.awsInvoices(buildEvent(request, url, pathParameters, body)),
+      await handlers.awsInvoices(buildEvent(request, url, pathParameters, body, claims)),
     );
     return;
   }
@@ -332,7 +416,7 @@ async function route(
   // POST /summaries
   if (method === 'POST' && segments[0] === 'summaries' && segments.length === 1) {
     const body = (await readBody(request)).toString('utf8');
-    sendApiResponse(response, await handlers.summaries(buildEvent(request, url, {}, body)));
+    sendApiResponse(response, await handlers.summaries(buildEvent(request, url, {}, body, claims)));
     return;
   }
 
@@ -372,7 +456,37 @@ function describePdfPasswords(): string {
   return `${count} candidate${count === 1 ? '' : 's'} from ${source}`;
 }
 
+/**
+ * Build the Cognito verifier up front so a misconfigured pool fails at boot
+ * with one clear message, rather than 401ing every request.
+ */
+function initialiseAuth(): void {
+  if (AUTH_MODE === 'bypass') return;
+  try {
+    verifier = createCognitoVerifier();
+  } catch (error) {
+    console.error(
+      [
+        '',
+        `  Cannot start in real Cognito mode: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        '',
+        '  Either set the Cognito values in .env.local:',
+        '    NEXT_PUBLIC_COGNITO_AUTHORITY=https://cognito-idp.<region>.amazonaws.com/<user-pool-id>',
+        '    NEXT_PUBLIC_COGNITO_CLIENT_ID=<spa client id>',
+        '',
+        '  ...or go back to synthesized claims:',
+        '    NEXT_PUBLIC_DEV_AUTH_BYPASS=true',
+        '',
+      ].join('\n'),
+    );
+    process.exit(1);
+  }
+}
+
 async function main(): Promise<void> {
+  initialiseAuth();
   await seedAuthorizedUser();
   await seedSyntheticAwsInvoice();
   server.listen(PORT, () => {
@@ -381,14 +495,23 @@ async function main(): Promise<void> {
         '',
         `  cashight local API  →  ${API_BASE_URL}`,
         `  data directory      →  ${localDataDir()}`,
-        `  acting as sub       →  ${DEV_SUB}`,
+        `  auth                →  ${
+          AUTH_MODE === 'bypass'
+            ? `bypass, acting as sub ${DEV_SUB}`
+            : 'real Cognito access tokens (sign in at http://localhost:3000)'
+        }`,
         `  CORS origin         →  ${ALLOWED_ORIGIN}`,
         `  PDF passwords       →  ${describePdfPasswords()}`,
         `  Gemini              →  ${process.env.GEMINI_API_KEY ? 'real API' : 'stubbed'}`,
+        `  Cost Explorer       →  ${
+          resolveCostExplorerMode() === 'real'
+            ? 'REAL AWS account data (billable, ~$0.01/request)'
+            : 'fixed synthetic figures'
+        }`,
         '',
         '  Point the app at it with, in .env.local:',
         `    NEXT_PUBLIC_API_BASE_URL=${API_BASE_URL}`,
-        '    NEXT_PUBLIC_DEV_AUTH_BYPASS=true',
+        `    NEXT_PUBLIC_DEV_AUTH_BYPASS=${AUTH_MODE === 'bypass'}`,
         '',
       ].join('\n'),
     );

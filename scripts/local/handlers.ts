@@ -12,10 +12,13 @@ import {
   createCostExplorerApiHandler,
   type CostExplorerApiDependencies,
 } from '../../backend/functions/cost-explorer-api/handler';
-import type {
-  CompleteCostExplorerResult,
-  CostDimensionValue,
+import {
+  CostExplorerAwsAdapter,
+  type CompleteCostExplorerResult,
+  type CostDimensionValue,
 } from '../../backend/functions/cost-explorer-api/aws-adapter';
+import { createCostExplorerClients } from '../../backend/shared/cost-explorer-clients';
+import type { EnvLike } from './cognito-auth';
 import { createCostCsv } from '../../backend/functions/cost-explorer-api/csv';
 import { SavedReportError } from '../../backend/functions/cost-explorer-api/reports';
 import {
@@ -307,16 +310,30 @@ function compareSavedReports(left: SavedCostReport, right: SavedCostReport): num
   return left.reportId < right.reportId ? -1 : left.reportId > right.reportId ? 1 : 0;
 }
 
-export function createLocalCostExplorerDependencies(
-  { apiBaseUrl }: LocalPresignOptions,
-): CostExplorerApiDependencies {
-  const cache = new Map<string, CompleteCostExplorerResult>();
-  const refreshClaims = new Map<string, number>();
-  const queryLocks = new Set<string>();
-  const savedReports = new Map<string, SavedCostReport>();
-  let reportSequence = 0;
+export type LocalCostExplorerMode = 'fake' | 'real';
 
-  const adapter = {
+/**
+ * Which Cost Explorer data source the local stack uses.
+ *
+ * Synthetic by default: the whole point of `pnpm dev:local` is running with no
+ * AWS account, and the real API bills roughly $0.01 per (paginated) request.
+ * `LOCAL_AWS_COST_EXPLORER=real` opts in to your own account's figures, read
+ * through the ambient AWS credentials (`~/.aws`, `AWS_PROFILE`, SSO session).
+ */
+export function resolveCostExplorerMode(
+  env: EnvLike = process.env,
+): LocalCostExplorerMode {
+  return (env.LOCAL_AWS_COST_EXPLORER ?? '').trim().toLowerCase() === 'real'
+    ? 'real'
+    : 'fake';
+}
+
+/**
+ * Fixed figures that exercise every shape the dashboard renders — series,
+ * breakdown, forecast, comparison, dimension paging — without touching AWS.
+ */
+function createFakeCostExplorerAdapter() {
+  return {
     query: async (request: CostExplorerReportRequest) => fixedCostResult(request, new Date()),
     forecast: async () => ({
       total: '21.75',
@@ -360,6 +377,33 @@ export function createLocalCostExplorerDependencies(
       { arn: 'arn:aws:billing::000000000000:billingview/local-team', name: 'Local team' },
     ],
   };
+}
+
+/**
+ * The same adapter the Lambda constructs, pointed at your own account.
+ *
+ * Only the data source changes: the result cache, saved reports and CSV export
+ * below stay local, so nothing is written to AWS and no DynamoDB/S3 access is
+ * needed — just `ce:` and `billing:` reads.
+ */
+export function createLocalCostExplorerAdapter(
+  mode: LocalCostExplorerMode = resolveCostExplorerMode(),
+) {
+  return mode === 'real'
+    ? new CostExplorerAwsAdapter(createCostExplorerClients())
+    : createFakeCostExplorerAdapter();
+}
+
+export function createLocalCostExplorerDependencies(
+  { apiBaseUrl }: LocalPresignOptions,
+): CostExplorerApiDependencies {
+  const cache = new Map<string, CompleteCostExplorerResult>();
+  const refreshClaims = new Map<string, number>();
+  const queryLocks = new Set<string>();
+  const savedReports = new Map<string, SavedCostReport>();
+  let reportSequence = 0;
+
+  const adapter = createLocalCostExplorerAdapter();
 
   return {
     getAuthorizedUser: authorizedUser,
