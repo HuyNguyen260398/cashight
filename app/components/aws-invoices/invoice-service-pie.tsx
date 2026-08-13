@@ -8,9 +8,9 @@ import { CHART_COLORS } from '@/lib/chart-colors';
 import { InvoiceChartCard } from './invoice-chart-card';
 import { formatInvoiceMoney } from './invoice-format';
 import {
-  PIE_PLOT_HEIGHT,
-  servicePieHeight,
+  servicePanelHeight,
   servicePieLegendHeight,
+  servicePiePlotHeight,
 } from './invoice-chart-size';
 
 const COLORS = [
@@ -28,6 +28,11 @@ export function InvoiceServicePie({ dashboard }: { dashboard: AwsInvoiceDashboar
   );
   const format = (value: number) =>
     formatInvoiceMoney(value, dashboard.selected.currency);
+  // Shared with the top-services panel beside it in the same grid row.
+  const height = servicePanelHeight(
+    dashboard.serviceBreakdown.length,
+    dashboard.topServices.length,
+  );
 
   return (
     <InvoiceChartCard
@@ -39,7 +44,7 @@ export function InvoiceServicePie({ dashboard }: { dashboard: AwsInvoiceDashboar
         <ul>{data.map((item) => <li key={item.name}>{item.name}: {format(item.value)} ({item.percentage.toFixed(2)}%)</li>)}</ul>
       }
     >
-      <ResponsiveContainer width="100%" height={servicePieHeight(data.length)}>
+      <ResponsiveContainer width="100%" height={height}>
         <PieChart>
           {/* Anchor the donut in the top plot band so the legend below it can
               never overlap the slices, however many services there are. */}
@@ -47,7 +52,7 @@ export function InvoiceServicePie({ dashboard }: { dashboard: AwsInvoiceDashboar
             data={data}
             dataKey="value"
             nameKey="name"
-            cy={PIE_PLOT_HEIGHT / 2}
+            cy={servicePiePlotHeight(height, data.length) / 2}
             innerRadius={58}
             outerRadius={88}
           >

@@ -37,3 +37,30 @@ export function topServicesHeight(itemCount: number): number {
     Math.max(itemCount, 0) * BAR_BAND_HEIGHT + BAR_CHART_CHROME,
   );
 }
+
+/**
+ * The breakdown and top-services panels share one grid row, so they share a
+ * height: whichever needs more space sets it for both. Each panel derives this
+ * from the same dashboard counts, so they agree without lifting any state.
+ */
+export function servicePanelHeight(
+  breakdownCount: number,
+  topServicesCount: number,
+): number {
+  return Math.max(
+    servicePieHeight(breakdownCount),
+    topServicesHeight(topServicesCount),
+  );
+}
+
+/**
+ * Plot band left for the donut once the legend has taken its rows. When the bar
+ * panel is the taller of the two, the surplus widens the donut's band rather
+ * than stranding it in whitespace.
+ */
+export function servicePiePlotHeight(
+  panelHeight: number,
+  breakdownCount: number,
+): number {
+  return panelHeight - servicePieLegendHeight(breakdownCount);
+}
