@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 const selectClassName =
   'h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-theme-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-300';
@@ -35,6 +36,14 @@ export interface SavedReportsProps {
     reportId?: string,
   ) => Promise<SavedCostReport>;
   onDelete: (reportId: string) => Promise<void>;
+  /**
+   * Rendered inside the narrow parameters sidebar rather than a full-width
+   * panel. The breakpoints below are viewport-based, so a section that only
+   * asks "is the viewport wide?" lays out for room this panel does not have —
+   * which is why every sibling section in report-parameters.tsx takes this
+   * flag and collapses to a single column at xl, where the sidebar appears.
+   */
+  compact?: boolean;
 }
 
 export function SavedReports({
@@ -45,6 +54,7 @@ export function SavedReports({
   onLoad,
   onSave,
   onDelete,
+  compact = false,
 }: SavedReportsProps) {
   const [selectedId, setSelectedId] = useState('');
   const [name, setName] = useState('');
@@ -58,6 +68,21 @@ export function SavedReports({
     () => reports.find((report) => report.reportId === selectedId),
     [reports, selectedId],
   );
+
+  // xl is where the parameters panel becomes a ~300px sidebar. Side-by-side
+  // field and actions do not fit there: the field collapsed to 26px and the
+  // buttons overflowed the panel border. Stacking matches what every other
+  // section of report-parameters.tsx already does in compact mode.
+  const fieldGrid = cn(
+    'grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]',
+    compact && 'xl:grid-cols-1',
+  );
+  const actionGroup = cn(
+    'grid gap-3 self-end grid-cols-2',
+    compact && 'xl:grid-cols-1',
+  );
+  const labelClassName =
+    'space-y-1 text-xs font-medium text-gray-700 dark:text-gray-300';
 
   const duplicate = (candidate: string, exceptId?: string) =>
     reports.some(
@@ -147,8 +172,12 @@ export function SavedReports({
         </p>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-        <label className="space-y-1 text-xs font-medium text-gray-700 dark:text-gray-300">
+      {/* One grid for both rows, so the two fields share a column track and
+          their right edges line up. Separate grids sized their own 1fr column
+          against a different number of action columns, leaving the wider row's
+          field visibly short. */}
+      <div className={fieldGrid}>
+        <label className={labelClassName}>
           <span>Saved report</span>
           <select
             aria-label="Saved report"
@@ -178,10 +207,8 @@ export function SavedReports({
         >
           Load report
         </Button>
-      </div>
 
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-        <label className="space-y-1 text-xs font-medium text-gray-700 dark:text-gray-300">
+        <label className={labelClassName}>
           <span>Report name</span>
           <Input
             aria-label="Report name"
@@ -194,33 +221,35 @@ export function SavedReports({
             }}
           />
         </label>
-        <Button
-          type="button"
-          variant="secondary"
-          className="min-h-11 self-end"
-          disabled={mutation !== null}
-          onClick={() => void save(false)}
-        >
-          {mutation === 'save' ? (
-            <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden />
-          ) : (
-            <Save aria-hidden />
-          )}
-          Save as new
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="min-h-11 self-end"
-          disabled={!selected || mutation !== null}
-          onClick={() => void save(true)}
-        >
-          Rename report
-        </Button>
+        <div className={actionGroup}>
+          <Button
+            type="button"
+            variant="secondary"
+            className="min-h-11"
+            disabled={mutation !== null}
+            onClick={() => void save(false)}
+          >
+            {mutation === 'save' ? (
+              <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden />
+            ) : (
+              <Save aria-hidden />
+            )}
+            Save as new
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            disabled={!selected || mutation !== null}
+            onClick={() => void save(true)}
+          >
+            Rename report
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div aria-live="polite">
+        <div aria-live="polite" className="min-w-0 flex-1">
           {localError && (
             <p role="alert" className="text-sm text-error-600 dark:text-error-400">
               {localError}
@@ -231,8 +260,7 @@ export function SavedReports({
         <Button
           type="button"
           variant="destructive"
-          size="sm"
-          className="min-h-11"
+          className={cn('min-h-11', compact && 'xl:w-full')}
           disabled={!selected || mutation !== null}
           onClick={() => setDeleteOpen(true)}
         >

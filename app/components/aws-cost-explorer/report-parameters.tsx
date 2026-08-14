@@ -738,6 +738,7 @@ export function ReportParameters({
             onLoad={setLoadedReport}
             onSave={onSaveReport}
             onDelete={onDeleteReport}
+            compact={compact}
           />
         )}
 
