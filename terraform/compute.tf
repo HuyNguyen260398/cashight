@@ -263,9 +263,12 @@ data "aws_iam_policy_document" "lambda_cost_explorer_api_permissions" {
       "ce:GetCostAndUsageComparisons",
       "ce:GetCostComparisonDrivers",
     ]
-    resources = [
-      "arn:aws:billing::${data.aws_caller_identity.current.account_id}:billingview/*",
-    ]
+    # "*", not billingview/*. billingViewArn is optional on a report, and the
+    # dashboard's default report omits it, so the Cost Explorer request carries
+    # no billingview resource for IAM to match — a scoped policy denies every
+    # such call with AccessDeniedException. Least privilege here comes from the
+    # exact action list above, which stays read-only; ce:* is never granted.
+    resources = ["*"]
   }
 
   statement {
