@@ -20,18 +20,6 @@ variable "bucket_suffix" {
   default     = "cashight-2026"
 }
 
-variable "enable_security_alarms" {
-  type        = bool
-  description = "Create CloudWatch alarms and an optional SNS email subscription for Amplify security signals."
-  default     = false
-}
-
-variable "alarm_email" {
-  type        = string
-  description = "Email address for optional security alarm notifications. Leave empty to create alarms without SNS actions."
-  default     = ""
-}
-
 variable "allowed_email" {
   type        = string
   description = "Single email address permitted to sign in to Cashight."
