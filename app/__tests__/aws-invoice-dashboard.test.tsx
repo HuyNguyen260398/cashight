@@ -136,6 +136,39 @@ describe('AWS invoice month state and dashboard composition', () => {
     expect(shiftInvoiceMonth('2026-12', 1)).toBe('2027-01');
   });
 
+  it('follows a finished upload to the month it was parsed as', () => {
+    // Uploading a July invoice while August is on screen used to leave the
+    // dashboard on August: the month lives in the URL, the upload never
+    // changed it, and every panel needs an invoice for the selected month —
+    // so the page showed its empty state while history listed the new record.
+    mocks.search = 'year=2026&month=8';
+    render(<AwsInvoiceDashboard />);
+    expect(mocks.push).not.toHaveBeenCalled();
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('cashight:aws-invoices-changed', {
+          detail: { yearMonth: '2026-07' },
+        }),
+      );
+    });
+
+    expect(mocks.push).toHaveBeenCalledWith('/aws/billing-invoice/?year=2026&month=7');
+  });
+
+  it('stays put when a change carries no month', () => {
+    mocks.search = 'year=2026&month=8';
+    render(<AwsInvoiceDashboard />);
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('cashight:aws-invoices-changed', { detail: {} }),
+      );
+    });
+
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
   it('loads the valid URL month and renders panels in responsive document order', () => {
     render(<AwsInvoiceDashboard />);
     expect(mocks.useInvoices).toHaveBeenCalledWith('2026-07');
