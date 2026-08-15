@@ -160,6 +160,18 @@ run "invoice_iam_is_prefix_scoped_and_excludes_cost_explorer" {
     error_message = "Invoice worker DynamoDB actions must be exact"
   }
 
+  # The worker reads the destination invoice to detect a month conflict, and on
+  # a first upload that key does not exist. S3 answers a missing key with 403
+  # AccessDenied instead of 404 NoSuchKey unless the caller holds ListBucket on
+  # the bucket, and the worker only treats 404/NoSuchKey as absent — so without
+  # this the very first invoice of a month always fails. The grant cannot carry
+  # an s3:prefix condition: the existence check runs with no prefix in the
+  # request context, so a conditioned grant would not apply.
+  assert {
+    condition     = contains(flatten([for statement in data.aws_iam_policy_document.lambda_invoice_parser_worker_permissions.statement : statement.actions if statement.sid == "S3ListStatementsBucket"]), "s3:ListBucket")
+    error_message = "Invoice worker must hold s3:ListBucket so a missing destination reads as 404, not 403"
+  }
+
   assert {
     condition     = toset(flatten([for statement in data.aws_iam_policy_document.lambda_aws_invoice_summary_api_permissions.statement : statement.actions if startswith(statement.sid, "DynamoDB")])) == toset(["dynamodb:GetItem", "dynamodb:Query"])
     error_message = "Invoice summary DynamoDB actions must be read-only and exact"
