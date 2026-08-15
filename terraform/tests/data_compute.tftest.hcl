@@ -440,12 +440,17 @@ run "cost_explorer_iam_is_exact_and_read_only" {
     error_message = "Cost Explorer IAM must contain the exact approved ce read actions"
   }
 
+  # Cost Explorer reads must stay on "*". A report that does not name a billing
+  # view sends no BillingViewArn, so the request carries no billingview resource
+  # and a policy scoped to billingview/* denies it — which is exactly how the
+  # dashboard failed in production with AwsCostAccessDenied. The action list
+  # above is what keeps this least-privilege; the resource cannot narrow it.
   assert {
     condition = toset(one([
       for statement in data.aws_iam_policy_document.lambda_cost_explorer_api_permissions.statement : statement.resources
       if statement.sid == "CostExplorerRead"
-    ])) == toset(["arn:aws:billing::${data.aws_caller_identity.current.account_id}:billingview/*"])
-    error_message = "Cost Explorer reads must be scoped to deployment-account billing views"
+    ])) == toset(["*"])
+    error_message = "Cost Explorer reads must allow unscoped requests that omit a billing view"
   }
 
   assert {
