@@ -96,6 +96,17 @@ data "aws_iam_policy_document" "lambda_deploy" {
       "arn:aws:codedeploy:${var.region}:${data.aws_caller_identity.current.account_id}:deploymentconfig:CodeDeployDefault.Lambda*",
     ]
   }
+
+  # Smoke tests mint their own short-lived token from the machine client, so the
+  # workflow reads that client's secret at deploy time instead of keeping a
+  # credential in GitHub. Describe only, and only on this pool — the role cannot
+  # create clients, change auth flows, or touch users.
+  statement {
+    sid       = "ReadSmokeClientSecret"
+    effect    = "Allow"
+    actions   = ["cognito-idp:DescribeUserPoolClient"]
+    resources = [aws_cognito_user_pool.users.arn]
+  }
 }
 
 resource "aws_iam_role_policy" "lambda_deploy" {

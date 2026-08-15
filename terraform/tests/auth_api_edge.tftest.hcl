@@ -553,3 +553,41 @@ run "legacy_flags_reach_only_compatibility_consumers" {
     error_message = "Workspace compatibility flag must not reach Lambdas without a legacy statement path"
   }
 }
+
+# ── Smoke-test machine client ────────────────────────────────────────────────
+
+run "smoke_client_is_machine_only_and_scoped" {
+  command = plan
+
+  # Client credentials is not a preference here. The API demands the cashight/*
+  # scopes, and Cognito attaches custom scopes only to tokens from an OAuth
+  # flow — AdminInitiateAuth and SRP return aws.cognito.signin.user.admin
+  # alone, which authorizeRequest rejects. Changing this flow silently breaks
+  # every authenticated smoke check with a 403.
+  assert {
+    condition     = toset(aws_cognito_user_pool_client.smoke.allowed_oauth_flows) == toset(["client_credentials"])
+    error_message = "Smoke client must use client credentials; other flows do not carry the cashight scopes"
+  }
+
+  assert {
+    condition     = toset(aws_cognito_user_pool_client.smoke.allowed_oauth_scopes) == toset(["cashight/read", "cashight/write"])
+    error_message = "Smoke client must hold exactly the read and write scopes the smoke checks exercise"
+  }
+
+  # Client credentials requires a secret, and the workflow reads it from the
+  # pool at deploy time so no credential is stored in GitHub.
+  assert {
+    condition     = aws_cognito_user_pool_client.smoke.generate_secret
+    error_message = "Smoke client must have a secret to use the client-credentials flow"
+  }
+
+  # The API authorises on an AUTHZ record keyed by the token's sub, which for a
+  # client-credentials token is the client id. Without this record every smoke
+  # request is a 403. The item body interpolates that id and so is unknown at
+  # plan time; what this pins is that the record lands in the table the API
+  # actually reads.
+  assert {
+    condition     = aws_dynamodb_table_item.smoke_authorization.table_name == aws_dynamodb_table.cashight.name
+    error_message = "Smoke authorization record must be written to the table the API reads"
+  }
+}

@@ -321,6 +321,8 @@ jobs:
     name: Smoke Tests
     needs: [deploy-backend, deploy-frontend]
     runs-on: ubuntu-latest
+    # Needed to assume the deploy role: it trusts this environment's subject.
+    environment: production
 
     steps:
       - name: Checkout
@@ -331,13 +333,55 @@ jobs:
         with:
           node-version: 24
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-southeast-1
+
+      # A Cognito access token lives one hour, so it cannot be a stored secret —
+      # any value committed here is stale long before the next deploy. Mint one
+      # per run instead, from the machine client, whose secret is read from the
+      # pool rather than kept in GitHub.
+      #
+      # This must be the client-credentials flow: the API requires the
+      # cashight/* scopes, and Cognito grants custom scopes only through OAuth.
+      # A token from AdminInitiateAuth or SRP carries
+      # `aws.cognito.signin.user.admin` alone and the API answers 403.
+      - name: Mint smoke access token
+        id: token
+        env:
+          POOL_ID: ${{ vars.COGNITO_USER_POOL_ID }}
+          CLIENT_ID: ${{ vars.COGNITO_SMOKE_CLIENT_ID }}
+          HOSTED_UI: ${{ vars.COGNITO_HOSTED_UI_DOMAIN }}
+        run: |
+          set -euo pipefail
+          SECRET=$(aws cognito-idp describe-user-pool-client \
+            --user-pool-id "${POOL_ID}" --client-id "${CLIENT_ID}" \
+            --query 'UserPoolClient.ClientSecret' --output text)
+          echo "::add-mask::${SECRET}"
+
+          RESPONSE=$(curl -sS -X POST "${HOSTED_UI}/oauth2/token" \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            -u "${CLIENT_ID}:${SECRET}" \
+            -d 'grant_type=client_credentials&scope=cashight/read cashight/write')
+
+          TOKEN=$(jq -r '.access_token // empty' <<<"${RESPONSE}")
+          if [ -z "${TOKEN}" ]; then
+            # The body carries no token, so only the error code is safe to show.
+            echo "::error::Could not mint a smoke token: $(jq -r '.error // "unknown_error"' <<<"${RESPONSE}")"
+            exit 1
+          fi
+          echo "::add-mask::${TOKEN}"
+          echo "token=${TOKEN}" >> "${GITHUB_OUTPUT}"
+
       - name: Run smoke tests
         run: node scripts/smoke-serverless.mjs
         env:
           APP_URL: https://next.cashight.nghuy.link
           API_URL: https://api.cashight.nghuy.link
           SMOKE_REQUIRE_NATIVE_AUTH: 'true'
-          SMOKE_NATIVE_ACCESS_TOKEN: ${{ secrets.SMOKE_NATIVE_ACCESS_TOKEN }}
+          SMOKE_NATIVE_ACCESS_TOKEN: ${{ steps.token.outputs.token }}
 
   # ── Release manifest ─────────────────────────────────────────────────────────
   release-manifest:
