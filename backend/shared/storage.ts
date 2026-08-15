@@ -1,4 +1,12 @@
 import { StatementSchema, type Statement } from '@cashight/domain/schemas';
+import {
+  AwsInvoiceSchema,
+  type AwsInvoice,
+} from '@cashight/domain/aws-invoices';
+import {
+  WorkspaceIdSchema,
+  type WorkspaceId,
+} from '@cashight/domain/workspace';
 import { z } from 'zod';
 
 import { ApiError } from './api-response';
@@ -37,6 +45,18 @@ export function statementId(
 }
 
 export function statementObjectKey(
+  workspaceId: WorkspaceId,
+  cardLast4: string,
+  year: number,
+  month: number,
+): string {
+  WorkspaceIdSchema.parse(workspaceId);
+  validateStatementCoordinates(cardLast4, year, month);
+  const mm = String(month).padStart(2, '0');
+  return `users/${workspaceId}/statements/${cardLast4}/${year}/${year}-${mm}.json`;
+}
+
+export function legacyStatementObjectKey(
   sub: string,
   cardLast4: string,
   year: number,
@@ -50,6 +70,29 @@ export function statementObjectKey(
   return `users/${sub}/statements/${cardLast4}/${year}/${year}-${mm}.json`;
 }
 
+export function workspacePartition(
+  workspaceId: WorkspaceId,
+): 'WORKSPACE#primary' {
+  WorkspaceIdSchema.parse(workspaceId);
+  return `WORKSPACE#${workspaceId}`;
+}
+
+export function awsInvoiceObjectKey(
+  workspaceId: WorkspaceId,
+  year: number,
+  month: number,
+): string {
+  WorkspaceIdSchema.parse(workspaceId);
+  if (!yearSchema.safeParse(year).success) {
+    throw new ApiError('INVALID_REQUEST', 400, 'Invalid year.');
+  }
+  if (!monthSchema.safeParse(month).success) {
+    throw new ApiError('INVALID_REQUEST', 400, 'Invalid month.');
+  }
+  const mm = String(month).padStart(2, '0');
+  return `users/${workspaceId}/aws-invoices/${year}/${year}-${mm}.json`;
+}
+
 export function parseStatementObject(body: string | Uint8Array): Statement {
   try {
     const text =
@@ -60,6 +103,22 @@ export function parseStatementObject(body: string | Uint8Array): Statement {
       'DATA_INTEGRITY_ERROR',
       500,
       'Invalid statement object',
+    );
+  }
+}
+
+export function parseAwsInvoiceObject(
+  body: string | Uint8Array,
+): AwsInvoice {
+  try {
+    const text =
+      typeof body === 'string' ? body : Buffer.from(body).toString('utf8');
+    return AwsInvoiceSchema.parse(JSON.parse(text));
+  } catch {
+    throw new ApiError(
+      'DATA_INTEGRITY_ERROR',
+      500,
+      'Invalid AWS invoice object',
     );
   }
 }

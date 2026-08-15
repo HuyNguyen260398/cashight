@@ -27,7 +27,7 @@ export interface ProcessJobDependencies {
   checkDestinationExists: (key: string) => Promise<boolean>;
   writeStatement: (key: string, statement: Statement) => Promise<void>;
   writeMetadata: (params: {
-    sub: string;
+    owner: { workspaceId: 'primary'; subject: string };
     jobId: string;
     statement: Statement;
     objectKey: string;
@@ -36,6 +36,8 @@ export interface ProcessJobDependencies {
   }) => Promise<void>;
   computeSha256: (buffer: Buffer) => Promise<string>;
   now: () => Date;
+  enableLegacyWorkspaceFallback?: boolean;
+  onLegacyFallback?: () => void;
 }
 
 function isPasswordError(err: unknown): boolean {
@@ -55,22 +57,63 @@ function isPdfMagic(buffer: Buffer): boolean {
   return buffer.length >= 4 && buffer.slice(0, 4).toString('ascii') === '%PDF';
 }
 
-function parseKeyParts(key: string): { sub: string; jobId: string } {
-  // key format: uploads/{sub}/{jobId}.pdf
+function parseKeyParts(
+  key: string,
+  enableLegacyWorkspaceFallback: boolean,
+): { workspaceId: 'primary'; legacySubject?: string; jobId: string } {
   const parts = key.split('/');
-  if (parts.length !== 3 || parts[0] !== 'uploads' || !parts[2].endsWith('.pdf')) {
-    throw new Error(`Unexpected S3 key format: ${key}`);
+  if (
+    parts.length === 4 &&
+    parts[0] === 'uploads' &&
+    parts[1] === 'statements' &&
+    parts[2] === 'primary' &&
+    parts[3].endsWith('.pdf')
+  ) {
+    return {
+      workspaceId: 'primary',
+      jobId: parts[3].replace(/\.pdf$/, ''),
+    };
   }
-  return { sub: parts[1], jobId: parts[2].replace('.pdf', '') };
+  if (
+    enableLegacyWorkspaceFallback &&
+    parts.length === 3 &&
+    parts[0] === 'uploads' &&
+    parts[1].length > 0 &&
+    parts[2].endsWith('.pdf')
+  ) {
+    return {
+      workspaceId: 'primary',
+      legacySubject: parts[1],
+      jobId: parts[2].replace(/\.pdf$/, ''),
+    };
+  }
+  throw new Error(`Unexpected S3 key format: ${key}`);
 }
 
 export function createProcessJob(deps: ProcessJobDependencies) {
   return async (s3Key: string): Promise<void> => {
-    const { sub, jobId } = parseKeyParts(s3Key);
+    const { workspaceId, legacySubject, jobId } = parseKeyParts(
+      s3Key,
+      deps.enableLegacyWorkspaceFallback === true,
+    );
 
     const job = await deps.getJobRecord(jobId);
     if (!job) {
       throw new Error(`Upload job not found: ${jobId}`);
+    }
+
+    let owner: { workspaceId: 'primary'; subject: string };
+    if (legacySubject !== undefined) {
+      if (job.owner || job.sub !== legacySubject) {
+        throw new Error('Upload job owner mismatch');
+      }
+      owner = { workspaceId, subject: legacySubject };
+      deps.onLegacyFallback?.();
+    } else {
+      if (!job.owner || job.owner.workspaceId !== workspaceId) {
+        throw new Error('Upload job owner mismatch');
+      }
+      owner = job.owner;
     }
 
     const now = deps.now();
@@ -143,7 +186,12 @@ export function createProcessJob(deps: ProcessJobDependencies) {
 
     // Derive destination key
     const [year, month] = statement.statementDate.split('-').map(Number);
-    const destKey = statementObjectKey(sub, statement.cardLast4, year, month);
+    const destKey = statementObjectKey(
+      owner.workspaceId,
+      statement.cardLast4,
+      year,
+      month,
+    );
     const stmtId = statementId(statement.cardLast4, year, month);
 
     // Check for conflict
@@ -161,7 +209,7 @@ export function createProcessJob(deps: ProcessJobDependencies) {
 
     // Write metadata to DynamoDB — retryable, do NOT delete PDF on failure
     await deps.writeMetadata({
-      sub,
+      owner,
       jobId,
       statement,
       objectKey: destKey,

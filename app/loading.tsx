@@ -5,8 +5,16 @@ import { Spinner } from '@/app/components/spinner';
 // while the destination segment streams in.
 export default function Loading() {
   return (
-    <div className="flex min-h-[50vh] items-center justify-center rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03]">
-      <Spinner />
-    </div>
+    <main
+      className="surface-card flex min-h-[50vh] items-center justify-center p-6"
+      aria-busy="true"
+      aria-label="Loading page"
+      aria-live="polite"
+    >
+      <div className="flex flex-col items-center gap-3">
+        <Spinner />
+        <p className="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
+      </div>
+    </main>
   );
 }

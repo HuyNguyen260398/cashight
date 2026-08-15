@@ -3,7 +3,8 @@ info:
   title: cashight-api
   version: "2026-06-29"
   description: >
-    Cashight REST API — statements, dashboard, uploads, and AI summaries.
+    Cashight REST API — session capabilities, statements, dashboard, uploads,
+    AI summaries, and AWS cost reports.
     All endpoints (except /health) require a Cognito access token with the
     appropriate cashight/read or cashight/write scope.
 
@@ -48,6 +49,36 @@ x-amazon-apigateway-gateway-responses:
       gatewayresponse.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
 
 components:
+  schemas:
+    CostReportEnvelope:
+      type: object
+      required: [request]
+      additionalProperties: false
+      properties:
+        request:
+          type: object
+        refresh:
+          type: boolean
+    CostDimensionRequest:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+    SavedCostReportInput:
+      type: object
+      required: [name, request]
+      additionalProperties: false
+      properties:
+        reportId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        request:
+          type: object
   securitySchemes:
     CognitoAuth:
       type: apiKey
@@ -86,6 +117,452 @@ paths:
               method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
             responseTemplates:
               application/json: '{"status":"ok"}'
+
+  # ── /session/capabilities ─────────────────────────────────────────────────
+
+  /session/capabilities:
+    get:
+      operationId: getSessionCapabilities
+      summary: Get server-derived capabilities for the authenticated session
+      security:
+        - CognitoAuth: ["cashight/read"]
+      x-amazon-apigateway-request-validator: all
+      responses:
+        "200":
+          description: SessionCapabilities JSON
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${session_capabilities_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsSessionCapabilities
+      summary: CORS preflight
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+
+  # ── /aws/cost-explorer/* ──────────────────────────────────────────────────
+
+  /aws/cost-explorer/query:
+    post:
+      operationId: queryCostExplorer
+      summary: Run or retrieve a complete validated Cost Explorer report
+      security:
+        - CognitoAuth: ["cashight/read"]
+      x-amazon-apigateway-request-validator: all
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CostReportEnvelope"
+      responses:
+        "200":
+          description: Complete normalized Cost Explorer report
+        "400":
+          description: Invalid cost query
+        "403":
+          description: Cognito reauthentication or AWS access required
+        "503":
+          description: Query busy or throttled
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${cost_explorer_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsCostExplorerQuery
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+
+  /aws/cost-explorer/comparisons:
+    post:
+      operationId: compareCostExplorerPeriods
+      summary: Compare two validated Cost Explorer periods
+      security:
+        - CognitoAuth: ["cashight/read"]
+      x-amazon-apigateway-request-validator: all
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CostReportEnvelope"
+      responses:
+        "200":
+          description: Normalized cost comparison and drivers
+        "400":
+          description: Invalid cost query
+        "403":
+          description: Forbidden
+        "503":
+          description: AWS query unavailable
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${cost_explorer_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsCostExplorerComparisons
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+
+  /aws/cost-explorer/dimensions:
+    post:
+      operationId: listCostExplorerDimensions
+      summary: Search paginated Cost Explorer values or list billing views
+      security:
+        - CognitoAuth: ["cashight/read"]
+      x-amazon-apigateway-request-validator: all
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CostDimensionRequest"
+      responses:
+        "200":
+          description: Paginated dimension values or billing views
+        "400":
+          description: Invalid dimension query
+        "403":
+          description: Forbidden
+        "503":
+          description: AWS query unavailable
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${cost_explorer_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsCostExplorerDimensions
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+
+  /aws/cost-explorer/forecast:
+    post:
+      operationId: forecastCostExplorer
+      summary: Forecast a supported validated Cost Explorer report
+      security:
+        - CognitoAuth: ["cashight/read"]
+      x-amazon-apigateway-request-validator: all
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CostReportEnvelope"
+      responses:
+        "200":
+          description: Normalized forecast
+        "400":
+          description: Invalid forecast query
+        "403":
+          description: Forbidden
+        "503":
+          description: AWS query unavailable
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${cost_explorer_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsCostExplorerForecast
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+
+  /aws/cost-explorer/export:
+    post:
+      operationId: exportCostExplorerCsv
+      summary: Create a private short-lived CSV export for the active report
+      security:
+        - CognitoAuth: ["cashight/read"]
+      x-amazon-apigateway-request-validator: all
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CostReportEnvelope"
+      responses:
+        "200":
+          description: Five-minute private download URL
+        "400":
+          description: Invalid export query
+        "403":
+          description: Forbidden
+        "503":
+          description: Export unavailable
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${cost_explorer_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsCostExplorerExport
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+
+  /aws/cost-explorer/reports:
+    get:
+      operationId: listSavedCostExplorerReports
+      summary: List saved Cost Explorer report definitions
+      security:
+        - CognitoAuth: ["cashight/read"]
+      x-amazon-apigateway-request-validator: all
+      responses:
+        "200":
+          description: Saved report definitions
+        "403":
+          description: Forbidden
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${cost_explorer_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    post:
+      operationId: saveCostExplorerReport
+      summary: Create, replace, or rename a saved Cost Explorer report
+      security:
+        - CognitoAuth: ["cashight/write"]
+      x-amazon-apigateway-request-validator: all
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavedCostReportInput"
+      responses:
+        "201":
+          description: Saved report definition
+        "400":
+          description: Invalid report definition
+        "403":
+          description: Forbidden
+        "409":
+          description: Duplicate name or write conflict
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${cost_explorer_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsSavedCostExplorerReports
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+
+  /aws/cost-explorer/reports/{reportId}:
+    delete:
+      operationId: deleteSavedCostExplorerReport
+      summary: Delete an owned saved Cost Explorer report
+      security:
+        - CognitoAuth: ["cashight/write"]
+      x-amazon-apigateway-request-validator: all
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Saved report deleted
+        "400":
+          description: Invalid report identifier
+        "403":
+          description: Forbidden
+        "404":
+          description: Saved report not found
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${cost_explorer_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsSavedCostExplorerReport
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
 
   # ── /statements ───────────────────────────────────────────────────────────
 
@@ -362,6 +839,266 @@ paths:
             responseParameters:
               method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
               method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+
+  # ── /aws/invoices ────────────────────────────────────────────────────────
+
+  /aws/invoices/uploads:
+    post:
+      operationId: createAwsInvoiceUpload
+      summary: Initiate an AWS invoice PDF upload
+      security:
+        - CognitoAuth: ["cashight/write"]
+      x-amazon-apigateway-request-validator: all
+      responses:
+        "200":
+          description: Invoice upload job and pre-signed URL
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${aws_invoices_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsAwsInvoiceUploads
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin: { schema: { type: string } }
+            Access-Control-Allow-Methods: { schema: { type: string } }
+            Access-Control-Allow-Headers: { schema: { type: string } }
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+
+  /aws/invoices/uploads/{jobId}:
+    get:
+      operationId: getAwsInvoiceUploadStatus
+      summary: Poll an AWS invoice upload job
+      security:
+        - CognitoAuth: ["cashight/read"]
+      x-amazon-apigateway-request-validator: all
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Invoice upload job status }
+        "404": { description: Job not found }
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${aws_invoices_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsAwsInvoiceUploadStatus
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin: { schema: { type: string } }
+            Access-Control-Allow-Methods: { schema: { type: string } }
+            Access-Control-Allow-Headers: { schema: { type: string } }
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+
+  /aws/invoices:
+    get:
+      operationId: listAwsInvoices
+      summary: List AWS invoice history
+      security:
+        - CognitoAuth: ["cashight/read"]
+      responses:
+        "200": { description: Paginated invoice history }
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${aws_invoices_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsAwsInvoices
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin: { schema: { type: string } }
+            Access-Control-Allow-Methods: { schema: { type: string } }
+            Access-Control-Allow-Headers: { schema: { type: string } }
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+
+  /aws/invoices/{yearMonth}:
+    get:
+      operationId: getAwsInvoice
+      summary: Get one AWS invoice
+      security:
+        - CognitoAuth: ["cashight/read"]
+      x-amazon-apigateway-request-validator: all
+      parameters:
+        - name: yearMonth
+          in: path
+          required: true
+          schema: { type: string, pattern: '^\\d{4}-(0[1-9]|1[0-2])$' }
+      responses:
+        "200": { description: Privacy-safe AWS invoice }
+        "404": { description: Invoice not found }
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${aws_invoices_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    delete:
+      operationId: deleteAwsInvoice
+      summary: Delete one AWS invoice
+      security:
+        - CognitoAuth: ["cashight/write"]
+      x-amazon-apigateway-request-validator: all
+      parameters:
+        - name: yearMonth
+          in: path
+          required: true
+          schema: { type: string, pattern: '^\\d{4}-(0[1-9]|1[0-2])$' }
+      responses:
+        "204": { description: Invoice deleted }
+        "404": { description: Invoice not found }
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${aws_invoices_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsAwsInvoice
+      parameters:
+        - name: yearMonth
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin: { schema: { type: string } }
+            Access-Control-Allow-Methods: { schema: { type: string } }
+            Access-Control-Allow-Headers: { schema: { type: string } }
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+
+  /aws/invoices/dashboard:
+    get:
+      operationId: getAwsInvoiceDashboard
+      summary: Get AWS invoice dashboard aggregates
+      security:
+        - CognitoAuth: ["cashight/read"]
+      x-amazon-apigateway-request-validator: all
+      parameters:
+        - name: yearMonth
+          in: query
+          required: true
+          schema: { type: string, pattern: '^\\d{4}-(0[1-9]|1[0-2])$' }
+      responses:
+        "200": { description: Invoice dashboard aggregates }
+        "404": { description: Invoice not found }
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${aws_invoices_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsAwsInvoiceDashboard
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin: { schema: { type: string } }
+            Access-Control-Allow-Methods: { schema: { type: string } }
+            Access-Control-Allow-Headers: { schema: { type: string } }
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+
+  /aws/invoices/summary:
+    post:
+      operationId: createAwsInvoiceSummary
+      summary: Generate a privacy-safe aggregate AWS invoice summary
+      security:
+        - CognitoAuth: ["cashight/read"]
+      x-amazon-apigateway-request-validator: all
+      responses:
+        "200": { description: Buffered summary text }
+        "404": { description: Invoice not found }
+      x-amazon-apigateway-integration:
+        type: aws_proxy
+        httpMethod: POST
+        uri: "arn:aws:apigateway:${region}:lambda:path/2015-03-31/functions/${aws_invoice_summary_api_arn}/invocations"
+        passthroughBehavior: when_no_match
+    options:
+      operationId: optionsAwsInvoiceSummary
+      responses:
+        "200":
+          description: CORS preflight response
+          headers:
+            Access-Control-Allow-Origin: { schema: { type: string } }
+            Access-Control-Allow-Methods: { schema: { type: string } }
+            Access-Control-Allow-Headers: { schema: { type: string } }
+      x-amazon-apigateway-integration:
+        type: MOCK
+        requestTemplates:
+          application/json: '{"statusCode": 200}'
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'https://cashight.nghuy.link'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
               method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
 
   # ── /summaries ────────────────────────────────────────────────────────────

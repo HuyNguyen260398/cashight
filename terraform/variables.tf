@@ -38,6 +38,30 @@ variable "allowed_email" {
   default     = ""
 }
 
+variable "enable_legacy_authz_fallback" {
+  type        = bool
+  description = "Temporary migration flag allowing strict, signed-username compatibility for legacy authorization records. Set false after authorization backfill validation."
+  default     = true
+}
+
+variable "enable_legacy_workspace_fallback" {
+  type        = bool
+  description = "Temporary migration flag allowing reads from legacy subject-scoped statement data. Set false after object and metadata backfill validation."
+  default     = true
+}
+
+variable "enable_cost_explorer_granular_data" {
+  type        = bool
+  description = "Expose Cost Explorer resource/hourly queries after the matching AWS account preference has been enabled out of band. Programmatic granular queries may incur additional charges."
+  default     = false
+}
+
+variable "cost_explorer_granular_data_enabled_out_of_band" {
+  type        = bool
+  description = "Operator acknowledgement that the required Cost Explorer granular-data preference was already enabled manually in the AWS Billing console. Terraform never changes that account preference."
+  default     = false
+}
+
 variable "cutover_dns_to_cloudfront" {
   type        = bool
   description = <<-EOT

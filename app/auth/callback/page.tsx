@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { getOidcManager } from '@/frontend/auth/oidc';
+import { resolveOidcCallbackReturn } from '@/frontend/auth/return-to';
 
 /**
  * Landing page for the Cognito PKCE redirect. Calls
@@ -22,12 +23,12 @@ export default function AuthCallbackPage() {
     async function handleCallback() {
       try {
         const manager = getOidcManager();
-        await manager.signinRedirectCallback();
+        const user = await manager.signinRedirectCallback();
         // Full navigation (not router.replace): AuthProvider only restores the
         // session on mount, and it's mounted once at the root layout, so a
         // client-side route change would leave it holding a stale
         // unauthenticated state and ProtectedRoute would bounce back to /signin.
-        window.location.href = '/';
+        window.location.href = resolveOidcCallbackReturn(user?.state);
       } catch (err) {
         console.error('Auth callback failed:', err);
         window.location.href = '/signin/?error=callback';

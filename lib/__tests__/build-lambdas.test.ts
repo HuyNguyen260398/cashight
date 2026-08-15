@@ -36,10 +36,12 @@ afterEach(async () => {
 });
 
 describe('buildLambdas', () => {
-  it('bundles discovered handlers and copies the parser worker', async () => {
+  it('bundles handlers and copies the pdfjs worker only to PDF parsers', async () => {
     const projectRoot = await temporaryProject();
     await writeHandler(projectRoot, 'health');
+    await writeHandler(projectRoot, 'invoice-parser-worker');
     await writeHandler(projectRoot, 'parser-worker');
+    await writeHandler(projectRoot, 'session-capabilities-api');
     const workerPath = path.join(
       projectRoot,
       'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
@@ -49,7 +51,12 @@ describe('buildLambdas', () => {
 
     const result = await buildLambdas({ projectRoot });
 
-    expect(result.functionNames).toEqual(['health', 'parser-worker']);
+    expect(result.functionNames).toEqual([
+      'health',
+      'invoice-parser-worker',
+      'parser-worker',
+      'session-capabilities-api',
+    ]);
     for (const functionName of result.functionNames) {
       const outputDirectory = path.join(
         projectRoot,
@@ -63,15 +70,26 @@ describe('buildLambdas', () => {
         await readFile(path.join(outputDirectory, 'index.js.map'), 'utf8'),
       ).toContain('handler.ts');
     }
-    expect(
-      await readFile(
+    for (const functionName of ['invoice-parser-worker', 'parser-worker']) {
+      expect(
+        await readFile(
+          path.join(
+            projectRoot,
+            `dist/lambdas/${functionName}/pdf.worker.mjs`,
+          ),
+          'utf8',
+        ),
+      ).toBe('worker fixture');
+    }
+    await expect(
+      readFile(
         path.join(
           projectRoot,
-          'dist/lambdas/parser-worker/pdf.worker.mjs',
+          'dist/lambdas/session-capabilities-api/pdf.worker.mjs',
         ),
         'utf8',
       ),
-    ).toBe('worker fixture');
+    ).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('fails parser-worker builds when the pdfjs worker is missing', async () => {

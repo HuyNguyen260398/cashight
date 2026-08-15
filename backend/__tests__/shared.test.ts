@@ -9,14 +9,17 @@ import {
 } from '../shared/auth-claims';
 import {
   assertRecordOwner,
+  parseAuthorizedUserRecord,
   parseStatementMetadataRecord,
 } from '../shared/metadata';
 import { sanitizeForLog } from '../shared/observability';
 import { clearSecretCache, getSecretString } from '../shared/secrets';
 import {
+  legacyStatementObjectKey,
   parseStatementObject,
   statementId,
   statementObjectKey,
+  workspacePartition,
 } from '../shared/storage';
 
 function eventWithClaims(claims: Record<string, unknown>): unknown {
@@ -27,6 +30,8 @@ const validAuthorizationRecord = {
   PK: 'AUTHZ#user-123',
   SK: 'PROFILE',
   active: true,
+  workspaceId: 'primary',
+  authProvider: 'COGNITO',
   createdAt: '2026-06-27T12:00:00.000Z',
   updatedAt: '2026-06-27T12:00:00.000Z',
 } as const;
@@ -85,20 +90,137 @@ describe('access-token authorization', () => {
       ),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
+
+  it('returns trusted workspace authorization with signed access claims', async () => {
+    const getAuthorizedUser = vi.fn().mockResolvedValue(validAuthorizationRecord);
+
+    await expect(
+      authorizeRequest(
+        eventWithClaims({
+          sub: 'user-123',
+          username: 'native-user-123',
+          token_use: 'access',
+          scope: 'cashight/read cashight/write',
+        }),
+        'cashight/read',
+        { getAuthorizedUser },
+      ),
+    ).resolves.toEqual({
+      claims: {
+        sub: 'user-123',
+        username: 'native-user-123',
+        scopes: new Set(['cashight/read', 'cashight/write']),
+      },
+      authorization: validAuthorizationRecord,
+    });
+  });
+
+  it('strictly rejects legacy authorization records by default', async () => {
+    const legacyRecord = {
+      PK: 'AUTHZ#user-123',
+      SK: 'PROFILE',
+      active: true,
+      createdAt: '2026-06-27T12:00:00.000Z',
+      updatedAt: '2026-06-27T12:00:00.000Z',
+    };
+
+    expect(parseAuthorizedUserRecord(legacyRecord)).toBeUndefined();
+    await expect(
+      authorizeRequest(
+        eventWithClaims({
+          sub: 'user-123',
+          username: 'native-user-123',
+          token_use: 'access',
+          scope: 'cashight/read',
+        }),
+        'cashight/read',
+        { getAuthorizedUser: vi.fn().mockResolvedValue(legacyRecord) },
+      ),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it.each([
+    ['native-user-123', 'COGNITO'],
+    ['Google_123456789', 'GOOGLE'],
+  ] as const)(
+    'bridges a legacy authorization record from signed username %s',
+    async (username, authProvider) => {
+      const onLegacyFallback = vi.fn();
+      const legacyRecord = {
+        PK: 'AUTHZ#user-123',
+        SK: 'PROFILE',
+        active: true,
+        createdAt: '2026-06-27T12:00:00.000Z',
+        updatedAt: '2026-06-27T12:00:00.000Z',
+      };
+
+      const result = await authorizeRequest(
+        eventWithClaims({
+          sub: 'user-123',
+          username,
+          token_use: 'access',
+          scope: 'cashight/read',
+        }),
+        'cashight/read',
+        {
+          getAuthorizedUser: vi.fn().mockResolvedValue(legacyRecord),
+          enableLegacyAuthzFallback: true,
+          onLegacyFallback,
+        },
+      );
+
+      expect(result.authorization).toEqual({
+        ...legacyRecord,
+        workspaceId: 'primary',
+        authProvider,
+      });
+      expect(onLegacyFallback).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([undefined, '', 'Google_', 'Facebook_123', 'OIDC_123'])(
+    'rejects unsafe signed usernames during legacy fallback: %s',
+    async (username) => {
+      const legacyRecord = {
+        PK: 'AUTHZ#user-123',
+        SK: 'PROFILE',
+        active: true,
+        createdAt: '2026-06-27T12:00:00.000Z',
+        updatedAt: '2026-06-27T12:00:00.000Z',
+      };
+
+      await expect(
+        authorizeRequest(
+          eventWithClaims({
+            sub: 'user-123',
+            username,
+            authProvider: 'GOOGLE',
+            token_use: 'access',
+            scope: 'cashight/read',
+          }),
+          'cashight/read',
+          {
+            getAuthorizedUser: vi.fn().mockResolvedValue(legacyRecord),
+            enableLegacyAuthzFallback: true,
+          },
+        ),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    },
+  );
 });
 
 describe('metadata and storage boundaries', () => {
-  it('rejects records owned by another subject', () => {
+  it('rejects records owned by another workspace', () => {
     expect(() =>
-      assertRecordOwner('user-123', { PK: 'USER#different-user' }),
+      assertRecordOwner('primary', { PK: 'WORKSPACE#other' }),
     ).toThrowError(expect.objectContaining({ code: 'FORBIDDEN' }));
   });
 
-  it('rejects records whose object key belongs to another subject', () => {
+  it('rejects records whose object key belongs to another workspace', () => {
     expect(() =>
-      assertRecordOwner('user-123', {
-        PK: 'USER#user-123',
-        objectKey: 'users/different-user/statements/9674/2026/2026-05.json',
+      assertRecordOwner('primary', {
+        PK: 'WORKSPACE#primary',
+        objectKey: 'users/other/statements/9674/2026/2026-05.json',
       }),
     ).toThrowError(expect.objectContaining({ code: 'FORBIDDEN' }));
   });
@@ -117,15 +239,19 @@ describe('metadata and storage boundaries', () => {
 
   it('builds validated deterministic statement identifiers and keys', () => {
     expect(statementId('9674', 2026, 5)).toBe('2026-05-9674');
-    expect(statementObjectKey('user-123', '9674', 2026, 5)).toBe(
+    expect(workspacePartition('primary')).toBe('WORKSPACE#primary');
+    expect(statementObjectKey('primary', '9674', 2026, 5)).toBe(
+      'users/primary/statements/9674/2026/2026-05.json',
+    );
+    expect(legacyStatementObjectKey('user-123', '9674', 2026, 5)).toBe(
       'users/user-123/statements/9674/2026/2026-05.json',
     );
   });
 
   it.each(['../user', 'user/other', ' user-123', 'user-123 '])(
-    'rejects unsafe subject values: %s',
+    'rejects unsafe legacy subject values: %s',
     (sub) => {
-      expect(() => statementObjectKey(sub, '9674', 2026, 5)).toThrow(
+      expect(() => legacyStatementObjectKey(sub, '9674', 2026, 5)).toThrow(
         'Invalid subject',
       );
     },

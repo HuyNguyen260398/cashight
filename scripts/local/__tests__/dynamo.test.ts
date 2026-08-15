@@ -61,6 +61,29 @@ describe('evaluateCondition', () => {
     expect(check('PROCESSING')).toBe(false);
   });
 
+  it('supports the ownership-safe create-or-replace OR condition', () => {
+    const expression = 'attribute_not_exists(PK) OR PK = :pk';
+    const values = { ':pk': 'WORKSPACE#primary' };
+
+    expect(evaluateCondition(expression, undefined, {}, values)).toBe(true);
+    expect(
+      evaluateCondition(
+        expression,
+        { PK: 'WORKSPACE#primary', SK: 'AWS_INVOICE#2026-07' },
+        {},
+        values,
+      ),
+    ).toBe(true);
+    expect(
+      evaluateCondition(
+        expression,
+        { PK: 'WORKSPACE#other', SK: 'AWS_INVOICE#2026-07' },
+        {},
+        values,
+      ),
+    ).toBe(false);
+  });
+
   it('rejects expression forms it cannot faithfully evaluate', () => {
     expect(() => evaluateCondition('size(PK) > :n', undefined, {}, { ':n': 1 })).toThrow(
       /Unsupported ConditionExpression/,

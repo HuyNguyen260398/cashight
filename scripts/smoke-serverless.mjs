@@ -3,12 +3,17 @@
  * smoke-serverless.mjs
  *
  * Smoke tests for the serverless deployment at next.cashight.nghuy.link and
- * api.cashight.nghuy.link. All checks are unauthenticated or check that auth
- * is correctly enforced — no credentials are required.
+ * api.cashight.nghuy.link. Baseline checks are unauthenticated. When a short-
+ * lived native Cognito access token is supplied, the suite also verifies the
+ * server-derived session capabilities response.
  *
  * Required environment variables:
  *   APP_URL  — base URL of the frontend (e.g. https://next.cashight.nghuy.link)
  *   API_URL  — base URL of the API    (e.g. https://api.cashight.nghuy.link)
+ *
+ * Optional environment variables:
+ *   SMOKE_NATIVE_ACCESS_TOKEN — short-lived Cognito-native access token
+ *   SMOKE_REQUIRE_NATIVE_AUTH — set to true for production verification
  *
  * Exit 0 = all checks passed
  * Exit 1 = one or more checks failed
@@ -16,12 +21,16 @@
 
 import https from 'node:https';
 import http from 'node:http';
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const APP_URL = (process.env.APP_URL ?? '').replace(/\/$/, '');
 const API_URL = (process.env.API_URL ?? '').replace(/\/$/, '');
-
-if (!APP_URL) throw new Error('APP_URL env var is required');
-if (!API_URL) throw new Error('API_URL env var is required');
+const NATIVE_ACCESS_TOKEN = process.env.SMOKE_NATIVE_ACCESS_TOKEN ?? '';
+const REQUIRE_NATIVE_AUTH = process.env.SMOKE_REQUIRE_NATIVE_AUTH === 'true';
+const AWS_INVOICE_FIXTURE = process.env.AWS_INVOICE_FIXTURE ?? '';
 
 // ── HTTP client ───────────────────────────────────────────────────────────────
 
@@ -33,10 +42,8 @@ function request(url, options = {}) {
       url,
       {
         method: options.method ?? 'GET',
-        // The API sits behind AWS WAF (AWSManagedRulesCommonRuleSet), whose
-        // NoUserAgent_HEADER rule blocks requests without a User-Agent with a
-        // 403. Real clients are browsers, which always send one — so send a
-        // realistic User-Agent here to represent an actual consumer.
+        // Send the same identifying header a real HTTP client supplies. It also
+        // keeps the smoke request useful if an edge filter is reintroduced.
         headers: { 'User-Agent': 'cashight-smoke-tests/1.0', ...(options.headers ?? {}) },
         timeout: 15000,
       },
@@ -64,6 +71,8 @@ function request(url, options = {}) {
 
 const results = [];
 
+class SmokeSkip extends Error {}
+
 async function check(name, fn) {
   try {
     await fn();
@@ -71,6 +80,11 @@ async function check(name, fn) {
     results.push({ name, passed: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    if (err instanceof SmokeSkip) {
+      console.log(`  - ${name} skipped (${msg})`);
+      results.push({ name, passed: false, skipped: true, reason: msg });
+      return;
+    }
     console.error(`  ✗ ${name}: ${msg}`);
     results.push({ name, passed: false, error: msg });
   }
@@ -80,9 +94,238 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+export function requireNativeAccessToken(nativeToken, required) {
+  if (required && !nativeToken) {
+    throw new Error(
+      'SMOKE_NATIVE_ACCESS_TOKEN is required when SMOKE_REQUIRE_NATIVE_AUTH=true',
+    );
+  }
+  return nativeToken;
+}
+
+function isoDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+export function buildHistoricalCostExplorerRequest(now = new Date()) {
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const start = new Date(
+    Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - 1, 1),
+  );
+  return {
+    mode: 'STANDARD',
+    timePeriod: { start: isoDate(start), end: isoDate(end) },
+    granularity: 'MONTHLY',
+    metric: 'UnblendedCost',
+    groupBy: [{ type: 'DIMENSION', key: 'SERVICE' }],
+    chartStyle: 'STACK',
+    showForecast: false,
+    showOnlyUntagged: false,
+    showOnlyUncategorized: false,
+  };
+}
+
+function parsedBody(response, label) {
+  try {
+    return JSON.parse(response.body);
+  } catch {
+    throw new Error(`${label} did not return JSON`);
+  }
+}
+
+function costExplorerDisabledReason(response) {
+  if (response.status !== 424) return null;
+  const body = parsedBody(response, 'Cost Explorer query');
+  return body?.error?.code === 'COST_EXPLORER_DISABLED'
+    ? 'AWS Cost Explorer is not enabled in the target account.'
+    : null;
+}
+
+function containsSensitiveCostData(value, nativeToken) {
+  const sensitiveKeys = new Set([
+    'accesstoken',
+    'token',
+    'credentials',
+    'secret',
+    'password',
+    'accesskey',
+    'secretaccesskey',
+    'accountid',
+    'linkedaccount',
+    'billingviewarn',
+    'request',
+    'filter',
+  ]);
+  const visit = (current) => {
+    if (typeof current === 'string') {
+      return (
+        (nativeToken.length > 0 && current.includes(nativeToken)) ||
+        /(?:^|\D)\d{12}(?:\D|$)/.test(current)
+      );
+    }
+    if (Array.isArray(current)) return current.some(visit);
+    if (!current || typeof current !== 'object') return false;
+    return Object.entries(current).some(([key, child]) => {
+      const normalized = key.toLowerCase().replace(/[^a-z]/g, '');
+      return sensitiveKeys.has(normalized) || visit(child);
+    });
+  };
+  return visit(value);
+}
+
+export function inspectCostExplorerSmokeResponses(
+  firstResponse,
+  secondResponse,
+  nativeToken,
+) {
+  const disabledReason = costExplorerDisabledReason(firstResponse);
+  if (disabledReason) return { status: 'SKIPPED', reason: disabledReason };
+
+  assert(firstResponse.status === 200, `Expected first query 200, got ${firstResponse.status}`);
+  assert(secondResponse, 'Expected a second Cost Explorer query response');
+  assert(secondResponse.status === 200, `Expected second query 200, got ${secondResponse.status}`);
+
+  const first = parsedBody(firstResponse, 'First Cost Explorer query');
+  const second = parsedBody(secondResponse, 'Second Cost Explorer query');
+  assert(
+    !containsSensitiveCostData(first, nativeToken) &&
+      !containsSensitiveCostData(second, nativeToken),
+    'Cost Explorer responses contained sensitive fields',
+  );
+  assert(first?.result?.source === 'AWS', 'Expected first query source AWS');
+  assert(second?.result?.source === 'CACHE', 'Expected second query source CACHE');
+  const firstTotal = first?.result?.overview?.total;
+  const secondTotal = second?.result?.overview?.total;
+  assert(
+    typeof firstTotal === 'string' && firstTotal === secondTotal,
+    'Expected identical overview totals',
+  );
+  return { status: 'PASSED', total: firstTotal };
+}
+
+const PROHIBITED_INVOICE_KEYS = new Set([
+  'billto',
+  'address',
+  'invoicenumber',
+  'accountid',
+  'accountlabel',
+  'rawtext',
+]);
+
+function containsSensitiveInvoiceData(value) {
+  if (typeof value === 'string') {
+    return (
+      /(?:^|\D)\d{12}(?:\D|$)/.test(value) ||
+      /https?:\/\/[^\s"']*(?:aws-invoices|X-Amz-(?:Credential|Signature|Security-Token))/i.test(value)
+    );
+  }
+  if (Array.isArray(value)) return value.some(containsSensitiveInvoiceData);
+  if (!value || typeof value !== 'object') return false;
+  return Object.entries(value).some(([key, child]) => {
+    const normalized = key.toLowerCase().replace(/[^a-z]/g, '');
+    return PROHIBITED_INVOICE_KEYS.has(normalized) || containsSensitiveInvoiceData(child);
+  });
+}
+
+export function inspectAwsInvoiceSmokeResponses(
+  jobResponse,
+  dashboardResponse,
+  deleteResponse,
+) {
+  assert(jobResponse.status === 200, `Expected invoice job 200, got ${jobResponse.status}`);
+  const jobBody = parsedBody(jobResponse, 'Invoice upload job');
+  assert(jobBody?.job?.state === 'SUCCEEDED', 'Expected invoice job state SUCCEEDED');
+  assert(/^\d{4}-(0[1-9]|1[0-2])$/.test(jobBody.job.yearMonth), 'Expected invoice job yearMonth');
+
+  assert(dashboardResponse.status === 200, `Expected invoice dashboard 200, got ${dashboardResponse.status}`);
+  const dashboardBody = parsedBody(dashboardResponse, 'Invoice dashboard');
+  assert(dashboardBody?.dashboard?.yearMonth === jobBody.job.yearMonth, 'Expected dashboard for uploaded month');
+  assert(!containsSensitiveInvoiceData(dashboardBody), 'Invoice dashboard contained sensitive fields');
+  const linkedAccounts = dashboardBody?.dashboard?.selected?.linkedAccounts;
+  const allocations = dashboardBody?.dashboard?.accountAllocations;
+  assert(Array.isArray(linkedAccounts) && linkedAccounts.length > 0, 'Expected linked-account rows');
+  assert(Array.isArray(allocations) && allocations.length > 0, 'Expected account allocations');
+  assert(
+    [...linkedAccounts, ...allocations].every((item) => /^\d{4}$/.test(item.accountLast4)),
+    'Expected masked account IDs ending in four digits',
+  );
+
+  assert(deleteResponse.status === 200, `Expected invoice delete 200, got ${deleteResponse.status}`);
+  const deleteBody = parsedBody(deleteResponse, 'Invoice delete');
+  assert(
+    deleteBody?.deleted === true && deleteBody.yearMonth === jobBody.job.yearMonth,
+    'Expected uploaded invoice deletion confirmation',
+  );
+  assert(!containsSensitiveInvoiceData(deleteBody), 'Invoice delete response contained sensitive fields');
+  return { status: 'PASSED', yearMonth: jobBody.job.yearMonth };
+}
+
+async function runAwsInvoiceSmoke(fixturePath, nativeToken) {
+  const pdf = await readFile(fixturePath);
+  const sha256 = createHash('sha256').update(pdf).digest('hex');
+  const headers = {
+    Authorization: `Bearer ${nativeToken}`,
+    'Content-Type': 'application/json',
+  };
+  const createResponse = await request(`${API_URL}/aws/invoices/uploads`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      fileName: path.basename(fixturePath),
+      contentType: 'application/pdf',
+      size: pdf.length,
+      sha256,
+      force: true,
+    }),
+  });
+  assert(createResponse.status === 200, `Expected invoice upload creation 200, got ${createResponse.status}`);
+  const created = parsedBody(createResponse, 'Invoice upload creation');
+  assert(created?.job?.jobId && created?.upload?.url, 'Invoice upload creation omitted job or URL');
+
+  const putResponse = await request(created.upload.url, {
+    method: created.upload.method ?? 'PUT',
+    headers: created.upload.headers,
+    body: pdf,
+  });
+  assert(putResponse.status >= 200 && putResponse.status < 300, `Expected invoice PDF PUT success, got ${putResponse.status}`);
+
+  let jobResponse;
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    jobResponse = await request(
+      `${API_URL}/aws/invoices/uploads/${encodeURIComponent(created.job.jobId)}`,
+      { headers: { Authorization: `Bearer ${nativeToken}` } },
+    );
+    if (jobResponse.status !== 200) break;
+    const state = parsedBody(jobResponse, 'Invoice upload job')?.job?.state;
+    if (!['PENDING_UPLOAD', 'PROCESSING'].includes(state)) break;
+  }
+  assert(jobResponse, 'Invoice upload job did not return a terminal response');
+  const jobBody = parsedBody(jobResponse, 'Invoice upload job');
+  const yearMonth = jobBody?.job?.yearMonth;
+  assert(yearMonth, `Invoice upload ended in ${jobBody?.job?.state ?? 'unknown'} state`);
+
+  const dashboardResponse = await request(
+    `${API_URL}/aws/invoices/dashboard?yearMonth=${encodeURIComponent(yearMonth)}`,
+    { headers: { Authorization: `Bearer ${nativeToken}` } },
+  );
+  const deleteResponse = await request(
+    `${API_URL}/aws/invoices/${encodeURIComponent(yearMonth)}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${nativeToken}` },
+    },
+  );
+  return inspectAwsInvoiceSmokeResponses(jobResponse, dashboardResponse, deleteResponse);
+}
+
 // ── Smoke tests ───────────────────────────────────────────────────────────────
 
 async function main() {
+  if (!APP_URL) throw new Error('APP_URL env var is required');
+  if (!API_URL) throw new Error('API_URL env var is required');
+  requireNativeAccessToken(NATIVE_ACCESS_TOKEN, REQUIRE_NATIVE_AUTH);
+
   console.log(`\nSmoke tests`);
   console.log(`  APP: ${APP_URL}`);
   console.log(`  API: ${API_URL}\n`);
@@ -107,6 +350,68 @@ async function main() {
     assert(res.status === 401, `Expected 401, got ${res.status}`);
   });
 
+  await check('GET /session/capabilities without auth returns 401', async () => {
+    const res = await request(`${API_URL}/session/capabilities`);
+    assert(res.status === 401, `Expected 401, got ${res.status}`);
+  });
+
+  if (NATIVE_ACCESS_TOKEN) {
+    await check(
+      'GET /session/capabilities returns native AWS capability only',
+      async () => {
+        const res = await request(`${API_URL}/session/capabilities`, {
+          headers: { Authorization: `Bearer ${NATIVE_ACCESS_TOKEN}` },
+        });
+        assert(res.status === 200, `Expected 200, got ${res.status}`);
+        const body = JSON.parse(res.body);
+        assert(
+          JSON.stringify(Object.keys(body).sort()) ===
+            JSON.stringify(['canViewAwsCosts']),
+          'Capabilities response contained unexpected keys',
+        );
+        assert(
+          body.canViewAwsCosts === true,
+          'Native session must receive canViewAwsCosts: true',
+        );
+      },
+    );
+
+    await check(
+      'Cost Explorer bounded query returns AWS then identical CACHE totals',
+      async () => {
+        const reportRequest = buildHistoricalCostExplorerRequest();
+        const headers = {
+          Authorization: `Bearer ${NATIVE_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        };
+        const first = await request(`${API_URL}/aws/cost-explorer/query`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ request: reportRequest, refresh: true }),
+        });
+        const disabledReason = costExplorerDisabledReason(first);
+        if (disabledReason) throw new SmokeSkip(disabledReason);
+        const second = await request(`${API_URL}/aws/cost-explorer/query`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ request: reportRequest, refresh: false }),
+        });
+        inspectCostExplorerSmokeResponses(
+          first,
+          second,
+          NATIVE_ACCESS_TOKEN,
+        );
+      },
+    );
+  } else {
+    console.log(
+      '  - authenticated capabilities check skipped (SMOKE_NATIVE_ACCESS_TOKEN not set)',
+    );
+    console.log(
+      '  - authenticated Cost Explorer check skipped (SMOKE_NATIVE_ACCESS_TOKEN not set)',
+    );
+  }
+
   await check('POST /uploads without auth returns 401', async () => {
     const res = await request(`${API_URL}/uploads`, {
       method: 'POST',
@@ -115,6 +420,30 @@ async function main() {
     });
     assert(res.status === 401, `Expected 401, got ${res.status}`);
   });
+
+  await check('GET /aws/invoices without auth returns 401', async () => {
+    const res = await request(`${API_URL}/aws/invoices`);
+    assert(res.status === 401, `Expected 401, got ${res.status}`);
+  });
+
+  await check('POST /aws/invoices/uploads without auth returns 401', async () => {
+    const res = await request(`${API_URL}/aws/invoices/uploads`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    assert(res.status === 401, `Expected 401, got ${res.status}`);
+  });
+
+  if (NATIVE_ACCESS_TOKEN && AWS_INVOICE_FIXTURE) {
+    await check('AWS invoice synthetic fixture processes, masks, and deletes', async () => {
+      await runAwsInvoiceSmoke(AWS_INVOICE_FIXTURE, NATIVE_ACCESS_TOKEN);
+    });
+  } else {
+    console.log(
+      '  - authenticated AWS invoice fixture check skipped (SMOKE_NATIVE_ACCESS_TOKEN or AWS_INVOICE_FIXTURE not set)',
+    );
+  }
 
   // Static SPA routes exist and serve HTML
   await check('GET / returns 200 with HTML', async () => {
@@ -153,6 +482,17 @@ async function main() {
     );
   });
 
+  for (const route of ['/aws/cost-explorer/', '/aws/billing-invoice/']) {
+    await check(`GET ${route} returns 200 with HTML`, async () => {
+      const res = await request(`${APP_URL}${route}`);
+      assert(res.status === 200, `Expected 200, got ${res.status}`);
+      assert(
+        res.body.includes('<!DOCTYPE html') || res.body.includes('<html'),
+        'Response is not HTML',
+      );
+    });
+  }
+
   // Auth deep-link: /auth/callback/ should return HTML (not 404)
   await check('GET /auth/callback/ returns 200 with HTML', async () => {
     const res = await request(`${APP_URL}/auth/callback/`);
@@ -179,8 +519,11 @@ async function main() {
 
   // Results
   const passed = results.filter((r) => r.passed).length;
-  const failed = results.filter((r) => !r.passed).length;
-  console.log(`\n${passed}/${results.length} checks passed`);
+  const skipped = results.filter((r) => r.skipped).length;
+  const failed = results.filter((r) => !r.passed && !r.skipped).length;
+  console.log(
+    `\n${passed}/${results.length - skipped} checks passed${skipped ? ` (${skipped} skipped)` : ''}`,
+  );
 
   if (failed > 0) {
     console.error(`${failed} check(s) failed — deployment is unhealthy`);
@@ -190,9 +533,14 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(
-    `Smoke test runner failed: ${err instanceof Error ? err.message : String(err)}`,
-  );
-  process.exitCode = 1;
-});
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  main().catch((err) => {
+    console.error(
+      `Smoke test runner failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    process.exitCode = 1;
+  });
+}

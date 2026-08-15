@@ -62,6 +62,7 @@ jobs:
           NEXT_PUBLIC_COGNITO_AUTHORITY: https://cognito-idp.ap-southeast-1.amazonaws.com/ap-southeast-1_ci
           NEXT_PUBLIC_COGNITO_CLIENT_ID: ci-placeholder-client-id
           NEXT_PUBLIC_APP_ORIGIN: https://next.cashight.nghuy.link
+          NEXT_PUBLIC_ENABLE_AWS_BILLING_INVOICE: 'false'
         run: NODE_OPTIONS=--disable-warning=DEP0205 pnpm build
 
       - name: Verify static export

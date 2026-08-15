@@ -37,21 +37,25 @@ export async function buildLambdas({ projectRoot = defaultProjectRoot } = {}) {
   const handlers = await discoverHandlers(projectRoot);
   await rm(outputRoot, { recursive: true, force: true });
   await mkdir(outputRoot, { recursive: true });
+  const pdfWorkerFunctions = new Set([
+    'parser-worker',
+    'invoice-parser-worker',
+  ]);
 
   for (const { functionName, handlerPath } of handlers) {
     const outputDirectory = path.join(outputRoot, functionName);
     await mkdir(outputDirectory, { recursive: true });
-    const workerSource = path.join(
-      projectRoot,
-      'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
-    );
-    if (functionName === 'parser-worker') {
+    if (pdfWorkerFunctions.has(functionName)) {
+      const workerSource = path.join(
+        projectRoot,
+        'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+      );
       try {
         await copyFile(workerSource, path.join(outputDirectory, 'pdf.worker.mjs'));
       } catch (error) {
         if (error && typeof error === 'object' && error.code === 'ENOENT') {
           throw new Error(
-            `pdf.worker.mjs is required for parser-worker: ${workerSource}`,
+            `pdf.worker.mjs is required for ${functionName}: ${workerSource}`,
           );
         }
         throw error;

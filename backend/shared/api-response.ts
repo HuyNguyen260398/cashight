@@ -11,6 +11,7 @@ export interface ApiErrorBody {
     code: string;
     message: string;
     requestId: string;
+    retryable?: true;
   };
 }
 
@@ -28,6 +29,7 @@ export class ApiError extends Error {
     public readonly code: string,
     public readonly statusCode: number,
     message: string,
+    public readonly retryable = false,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -75,7 +77,14 @@ export function errorResponse(error: unknown, requestId: string): ApiResponse {
   }
 
   const body: ApiErrorBody = {
-    error: { code, message, requestId },
+    error: {
+      code,
+      message,
+      requestId,
+      ...(error instanceof ApiError && error.retryable
+        ? { retryable: true as const }
+        : {}),
+    },
   };
   return jsonResponse(statusCode, body);
 }

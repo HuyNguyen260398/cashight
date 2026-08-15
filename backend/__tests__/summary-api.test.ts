@@ -11,6 +11,8 @@ const mockAuthorizedRecord = {
   PK: 'AUTHZ#user-123' as const,
   SK: 'PROFILE' as const,
   active: true as const,
+  workspaceId: 'primary' as const,
+  authProvider: 'COGNITO' as const,
   createdAt: '2026-06-27T00:00:00.000Z',
   updatedAt: '2026-06-27T00:00:00.000Z',
 };

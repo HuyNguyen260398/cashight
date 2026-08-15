@@ -1,4 +1,5 @@
 import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { MetricUnit } from '@aws-lambda-powertools/metrics';
 import { aggregate } from '@cashight/domain/aggregations';
 import { parseBankFromSearch } from '@cashight/domain/banks';
 import { parsePeriodFromSearch } from '@cashight/domain/period';
@@ -12,16 +13,23 @@ import { dynamoDocumentClient, s3Client } from '../../shared/clients';
 import { requiredEnvironmentValue } from '../../shared/config';
 import {
   getAuthorizedUser,
+  assertLegacyRecordOwner,
+  assertRecordOwner,
   queryUserStatementsForYear,
+  queryWorkspaceStatementsForYear,
   type StatementMetadataRecord,
 } from '../../shared/metadata';
+import { metrics } from '../../shared/observability';
 
 const MAX_CONCURRENCY = 5;
 
 export interface DashboardApiDependencies {
   getAuthorizedUser: (sub: string) => Promise<unknown>;
-  queryStatementsForYear: (sub: string, year: number) => Promise<StatementMetadataRecord[]>;
+  queryStatementsForYear: (workspaceId: 'primary', year: number) => Promise<StatementMetadataRecord[]>;
+  queryLegacyStatementsForYear: (sub: string, year: number) => Promise<StatementMetadataRecord[]>;
   getStatementObject: (objectKey: string) => Promise<Statement>;
+  enableLegacyWorkspaceFallback?: boolean;
+  onLegacyFallback?: () => void;
 }
 
 async function fetchConcurrent<T>(
@@ -51,17 +59,30 @@ export function createDashboardApiHandler(deps: DashboardApiDependencies) {
       'unknown';
 
     try {
-      const { claims } = await authorizeRequest(event, 'cashight/read', {
+      const { claims, authorization } = await authorizeRequest(event, 'cashight/read', {
         getAuthorizedUser: deps.getAuthorizedUser,
       });
-      const sub = claims.sub;
 
       const searchParams = buildSearchParams(event);
       const spec = parsePeriodFromSearch(searchParams);
       const bank = parseBankFromSearch(searchParams);
 
       // Query all metadata for the period's year then filter to the period
-      const allMeta = await deps.queryStatementsForYear(sub, spec.year);
+      let allMeta = await deps.queryStatementsForYear(
+        authorization.workspaceId,
+        spec.year,
+      );
+      let legacy = false;
+      if (allMeta.length === 0 && deps.enableLegacyWorkspaceFallback) {
+        allMeta = await deps.queryLegacyStatementsForYear(claims.sub, spec.year);
+        legacy = allMeta.length > 0;
+        if (legacy) deps.onLegacyFallback?.();
+      }
+
+      for (const meta of allMeta) {
+        if (legacy) assertLegacyRecordOwner(claims.sub, meta);
+        else assertRecordOwner(authorization.workspaceId, meta);
+      }
 
       // Fetch matching S3 objects with bounded concurrency
       const statements = await fetchConcurrent(
@@ -93,9 +114,16 @@ export async function handler(event: unknown): Promise<ApiResponse> {
   const dashboardHandler = createDashboardApiHandler({
     getAuthorizedUser: (sub) => getAuthorizedUser(dynamoDocumentClient, tableName, sub),
     queryStatementsForYear: (sub, year) =>
+      queryWorkspaceStatementsForYear(dynamoDocumentClient, tableName, sub, year),
+    queryLegacyStatementsForYear: (sub, year) =>
       queryUserStatementsForYear(dynamoDocumentClient, tableName, sub, year),
     getStatementObject: (objectKey) =>
       defaultGetStatementObject(statementBucket, objectKey),
+    enableLegacyWorkspaceFallback:
+      process.env.ENABLE_LEGACY_WORKSPACE_FALLBACK === 'true',
+    onLegacyFallback: () => {
+      metrics.addMetric('LegacyWorkspaceFallback', MetricUnit.Count, 1);
+    },
   });
   return dashboardHandler(event);
 }

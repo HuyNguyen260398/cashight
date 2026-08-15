@@ -92,6 +92,16 @@ Replace the Amplify-hosted Next.js SSR monolith with independently deployable st
 
 > **Milestone:** Cashight runs from CloudFront and the serverless backend with verified data parity, privacy, canary rollback, and Amplify safely decommissioned after the observation window.
 
+### Phase 10 — AWS cost and billing dashboards
+
+Add two AWS financial dashboards to the shipped serverless app. Establish stable workspace ownership and the nested Dashboard navigation first; Cost Explorer and Billing Invoice are then independent workstreams that may be implemented in parallel.
+
+- [ ] **[Step 30](./30-workspace-identity-and-dashboard-navigation.md)** — Stable Google/Cognito workspace mapping, copy-only data migration, capabilities API, and nested Dashboard menu *(6–10h)*
+- [ ] **[Step 31](./31-aws-cost-explorer-dashboard.md)** — Full-parity AWS Cost Explorer report for Cognito-native sessions through a read-only deployment-account Lambda role *(14–22h)* — depends on Step 30
+- [ ] **[Step 32](./32-aws-billing-invoice-dashboard.md)** — Known-layout AWS invoice upload/parser, monthly charts/history, and privacy-safe AI summary *(16–24h)* — depends on Step 30
+
+> **Milestone:** Cashight exposes Dashboard → Bank statements → TPB/VIB and Dashboard → AWS budget → Cost Explorer/Billing Invoice; Cost Explorer is native-Cognito gated, and the approved AWS invoice layout produces reconciled private monthly insights.
+
 ---
 
 ## Step dependencies
@@ -113,9 +123,12 @@ Replace the Amplify-hosted Next.js SSR monolith with independently deployable st
 21–27 ──▶ 28                    (28 assumes the shipped app UX exists)
 
 28 ──▶ 29                       (29 migrates the shipped application architecture)
+
+29 ──▶ 30 ──┬─▶ 31             (Cost Explorer after workspace/provider foundation)
+             └─▶ 32             (Billing Invoice may run in parallel with 31)
 ```
 
-Most steps are linear, but Step 04 (dashboard) and Step 05 (AI) could be parallelized once Step 03 is done if you want to context-switch. In Phase 4, Steps 12–16 are independent and can be tackled in any order (or parallel worktrees); the auth steps come last (Step 17 Google, then Step 18 Cognito which builds on it) because they gate the finished app, and Step 11 (deploy) comes after everything.
+Most steps are linear, but Step 04 (dashboard) and Step 05 (AI) could be parallelized once Step 03 is done if you want to context-switch. In Phase 4, Steps 12–16 are independent and can be tackled in any order (or parallel worktrees); the auth steps come last (Step 17 Google, then Step 18 Cognito which builds on it) because they gate the finished app, and Step 11 (deploy) comes after everything. In Phase 10, complete Step 30 first; Steps 31 and 32 are independent after that foundation and may run in parallel.
 
 ## How to use this plan
 
@@ -146,6 +159,7 @@ Rules:
 ## Reference documents
 
 - [Master implementation plan](./expense-tracker-implementation-plan.md) — the full architecture, design rationale, schemas, and merchant taxonomy
+- [AWS cost and billing dashboards design](../superpowers/specs/2026-08-03-aws-cost-billing-dashboards-design.md) — approved scope, privacy boundaries, data flows, and acceptance criteria for Steps 30–32
 - [Sample statement PDF](#) — the TPBank statement used to validate the parser
 
 ---

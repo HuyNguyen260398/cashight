@@ -150,7 +150,7 @@ jobs:
         run: |
           set -euo pipefail
           ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-          FUNCTIONS=(auth-guard uploads-api upload-status-api parser-worker statements-api dashboard-api summary-api)
+          FUNCTIONS=(auth-guard session-capabilities-api uploads-api upload-status-api parser-worker statements-api dashboard-api summary-api cost-explorer-api aws-invoices-api invoice-parser-worker aws-invoice-summary-api)
           DEPLOY_IDS=()
 
           for fn in "${FUNCTIONS[@]}"; do
@@ -253,6 +253,8 @@ jobs:
           NEXT_PUBLIC_COGNITO_AUTHORITY: ${{ vars.COGNITO_AUTHORITY }}
           NEXT_PUBLIC_COGNITO_CLIENT_ID: ${{ vars.COGNITO_SPA_CLIENT_ID }}
           NEXT_PUBLIC_APP_ORIGIN: https://cashight.nghuy.link
+          NEXT_PUBLIC_ENABLE_AWS_COST_EXPLORER: ${{ vars.NEXT_PUBLIC_ENABLE_AWS_COST_EXPLORER || 'false' }}
+          NEXT_PUBLIC_ENABLE_AWS_BILLING_INVOICE: ${{ vars.NEXT_PUBLIC_ENABLE_AWS_BILLING_INVOICE || 'false' }}
         run: NODE_OPTIONS=--disable-warning=DEP0205 pnpm build
 
       - name: Configure AWS credentials
@@ -297,6 +299,8 @@ jobs:
         env:
           APP_URL: https://next.cashight.nghuy.link
           API_URL: https://api.cashight.nghuy.link
+          SMOKE_REQUIRE_NATIVE_AUTH: 'true'
+          SMOKE_NATIVE_ACCESS_TOKEN: ${{ secrets.SMOKE_NATIVE_ACCESS_TOKEN }}
 
   # ── Release manifest ─────────────────────────────────────────────────────────
   release-manifest:

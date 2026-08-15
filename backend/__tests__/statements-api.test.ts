@@ -10,15 +10,17 @@ const mockAuthorizedRecord = {
   PK: 'AUTHZ#user-123' as const,
   SK: 'PROFILE' as const,
   active: true as const,
+  workspaceId: 'primary' as const,
+  authProvider: 'COGNITO' as const,
   createdAt: '2026-06-27T00:00:00.000Z',
   updatedAt: '2026-06-27T00:00:00.000Z',
 };
 
 const mockMetadataRecord = {
-  PK: 'USER#user-123' as const,
+  PK: 'WORKSPACE#primary' as const,
   SK: 'STATEMENT#2026-05#9674' as `STATEMENT#${string}#${string}`,
   statementId: '2026-05-9674',
-  objectKey: 'users/user-123/statements/9674/2026/2026-05.json',
+  objectKey: 'users/primary/statements/9674/2026/2026-05.json',
   cardLast4: '9674',
   statementDate: '2026-05-01',
   totalSpend: 26986712,
@@ -61,10 +63,14 @@ function makeDeps(overrides: Partial<StatementsApiDependencies> = {}): Statement
   return {
     getAuthorizedUser: vi.fn().mockResolvedValue(mockAuthorizedRecord),
     queryStatements: vi.fn().mockResolvedValue({ items: [mockMetadataRecord], nextCursor: null }),
+    queryLegacyStatements: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
     getStatementMetadata: vi.fn().mockResolvedValue(mockMetadataRecord),
+    getLegacyStatementMetadata: vi.fn().mockResolvedValue(undefined),
     getStatementObject: vi.fn().mockResolvedValue(mockStatement),
     deleteStatementObject: vi.fn().mockResolvedValue(undefined),
     deleteStatementMetadata: vi.fn().mockResolvedValue(undefined),
+    enableLegacyWorkspaceFallback: false,
+    onLegacyFallback: vi.fn(),
     ...overrides,
   };
 }
@@ -139,11 +145,54 @@ describe('GET /statements (list)', () => {
     expect(body.items).toHaveLength(1);
     expect(body.items[0].statementId).toBe('2026-05-9674');
     expect(body.nextCursor).toBeNull();
+    expect(deps.queryStatements).toHaveBeenCalledWith('primary', null);
+  });
+
+  it('uses a complete legacy list only when the workspace is empty', async () => {
+    const legacyRecord = {
+      ...mockMetadataRecord,
+      PK: 'USER#user-123' as const,
+      objectKey: 'users/user-123/statements/9674/2026/2026-05.json',
+    };
+    const onLegacyFallback = vi.fn();
+    const localDeps = makeDeps({
+      queryStatements: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
+      queryLegacyStatements: vi.fn().mockResolvedValue({
+        items: [legacyRecord],
+        nextCursor: null,
+      }),
+      enableLegacyWorkspaceFallback: true,
+      onLegacyFallback,
+    });
+
+    const res = await createStatementsApiHandler(localDeps)(makeListEvent());
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).items).toHaveLength(1);
+    expect(localDeps.queryLegacyStatements).toHaveBeenCalledWith(
+      'user-123',
+      null,
+    );
+    expect(onLegacyFallback).toHaveBeenCalledOnce();
+  });
+
+  it('does not merge a duplicate legacy list into workspace results', async () => {
+    const queryLegacyStatements = vi.fn();
+    const localDeps = makeDeps({
+      queryLegacyStatements,
+      enableLegacyWorkspaceFallback: true,
+    });
+
+    const res = await createStatementsApiHandler(localDeps)(makeListEvent());
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).items).toHaveLength(1);
+    expect(queryLegacyStatements).not.toHaveBeenCalled();
   });
 
   it('passes cursor to query function', async () => {
     const handler = createStatementsApiHandler(deps);
-    const cursor = Buffer.from(JSON.stringify({ PK: 'USER#user-123', SK: 'STATEMENT#2026-05#9674' })).toString('base64url');
+    const cursor = Buffer.from(JSON.stringify({ PK: 'WORKSPACE#primary', SK: 'STATEMENT#2026-05#9674' })).toString('base64url');
     await handler(makeListEvent({ cursor }));
     const queryCall = vi.mocked(deps.queryStatements).mock.calls[0];
     expect(queryCall[1]).toBeDefined(); // cursor was passed
@@ -156,7 +205,7 @@ describe('GET /statements (list)', () => {
   });
 
   it('returns nextCursor when there are more pages', async () => {
-    const nextKey = { PK: 'USER#user-123', SK: 'STATEMENT#2026-04#9674' };
+    const nextKey = { PK: 'WORKSPACE#primary', SK: 'STATEMENT#2026-04#9674' };
     const handler = createStatementsApiHandler(
       makeDeps({
         queryStatements: vi.fn().mockResolvedValue({ items: [mockMetadataRecord], nextCursor: nextKey }),
@@ -182,17 +231,44 @@ describe('GET /statements/{statementId}', () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it('returns 403 for a statement belonging to another user', async () => {
+  it('returns 403 for a statement belonging to another workspace', async () => {
     const handler = createStatementsApiHandler(
       makeDeps({
         getStatementMetadata: vi.fn().mockResolvedValue({
           ...mockMetadataRecord,
-          PK: 'USER#other-user' as `USER#${string}`,
+          PK: 'WORKSPACE#other' as `WORKSPACE#${string}`,
+          objectKey: 'users/other/statements/9674/2026/2026-05.json',
         }),
       }),
     );
     const res = await handler(makeDetailEvent('2026-05-9674'));
     expect(res.statusCode).toBe(403);
+  });
+
+  it('reads a legacy statement only when the workspace record is absent', async () => {
+    const legacyRecord = {
+      ...mockMetadataRecord,
+      PK: 'USER#user-123' as const,
+      objectKey: 'users/user-123/statements/9674/2026/2026-05.json',
+    };
+    const onLegacyFallback = vi.fn();
+    const localDeps = makeDeps({
+      getStatementMetadata: vi.fn().mockResolvedValue(undefined),
+      getLegacyStatementMetadata: vi.fn().mockResolvedValue(legacyRecord),
+      enableLegacyWorkspaceFallback: true,
+      onLegacyFallback,
+    });
+
+    const res = await createStatementsApiHandler(localDeps)(
+      makeDetailEvent('2026-05-9674'),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(localDeps.getLegacyStatementMetadata).toHaveBeenCalledWith(
+      'user-123',
+      '2026-05-9674',
+    );
+    expect(onLegacyFallback).toHaveBeenCalledOnce();
   });
 
   it('returns 400 for invalid statementId format', async () => {
@@ -246,12 +322,13 @@ describe('DELETE /statements/{statementId}', () => {
     expect(res.statusCode).toBe(200);
   });
 
-  it('returns 403 when statement belongs to another user', async () => {
+  it('returns 403 when statement belongs to another workspace', async () => {
     const handler = createStatementsApiHandler(
       makeDeps({
         getStatementMetadata: vi.fn().mockResolvedValue({
           ...mockMetadataRecord,
-          PK: 'USER#other-user' as `USER#${string}`,
+          PK: 'WORKSPACE#other' as `WORKSPACE#${string}`,
+          objectKey: 'users/other/statements/9674/2026/2026-05.json',
         }),
       }),
     );
