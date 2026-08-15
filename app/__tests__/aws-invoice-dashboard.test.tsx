@@ -55,17 +55,10 @@ vi.mock('@/app/components/aws-invoices/invoice-kpi-cards', () => ({
 vi.mock('@/app/components/aws-invoices/invoice-monthly-trend', () => ({
   InvoiceMonthlyTrend: () => <div>Trend panel</div>,
 }));
-vi.mock('@/app/components/aws-invoices/invoice-service-pie', () => ({
-  InvoiceServicePie: () => <div>Service chart</div>,
-}));
-vi.mock('@/app/components/aws-invoices/invoice-top-services', () => ({
-  InvoiceTopServices: () => <div>Top services chart</div>,
-}));
-vi.mock('@/app/components/aws-invoices/invoice-tax-composition', () => ({
-  InvoiceTaxComposition: () => <div>Tax chart</div>,
-}));
-vi.mock('@/app/components/aws-invoices/invoice-account-allocation', () => ({
-  InvoiceAccountAllocation: () => <div>Account chart</div>,
+vi.mock('@/app/components/aws-invoices/invoice-cost-usage-graph', () => ({
+  InvoiceCostUsageGraph: ({ yearMonth }: { yearMonth: string }) => (
+    <div>Cost and usage graph for {yearMonth}</div>
+  ),
 }));
 vi.mock('@/app/components/aws-invoices/invoice-services-table', () => ({
   InvoiceServicesTable: () => <div>Services table</div>,
@@ -148,7 +141,20 @@ describe('AWS invoice month state and dashboard composition', () => {
     expect(mocks.useInvoices).toHaveBeenCalledWith('2026-07');
     expect(
       Array.from(document.querySelectorAll('[data-dashboard-panel]')).map((node) => node.getAttribute('data-dashboard-panel')),
-    ).toEqual(['kpis', 'ai', 'trend', 'services', 'top-services', 'accounts', 'tax', 'table', 'history']);
+    ).toEqual(['kpis', 'ai', 'trend', 'cost-usage', 'table', 'history']);
+  });
+
+  it('scopes the cost and usage graph to the displayed month and drops the retired panels', () => {
+    render(<AwsInvoiceDashboard />);
+    expect(screen.getByText('Cost and usage graph for 2026-07')).toBeTruthy();
+    for (const heading of [
+      'Service breakdown',
+      'Top services',
+      'Linked account allocation',
+      'Charge and tax composition',
+    ]) {
+      expect(screen.queryByText(heading)).toBeNull();
+    }
   });
 
   it.each([

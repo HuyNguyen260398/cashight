@@ -6,10 +6,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AwsInvoiceDashboard } from '@cashight/domain/aws-invoices';
 
 import { InvoiceKpiCards } from '@/app/components/aws-invoices/invoice-kpi-cards';
-import { InvoiceServicePie } from '@/app/components/aws-invoices/invoice-service-pie';
-import { InvoiceTopServices } from '@/app/components/aws-invoices/invoice-top-services';
-import { InvoiceTaxComposition } from '@/app/components/aws-invoices/invoice-tax-composition';
-import { InvoiceAccountAllocation } from '@/app/components/aws-invoices/invoice-account-allocation';
 import { InvoiceMonthlyTrend } from '@/app/components/aws-invoices/invoice-monthly-trend';
 import { InvoiceServicesTable } from '@/app/components/aws-invoices/invoice-services-table';
 import { InvoiceHistory } from '@/app/components/aws-invoices/invoice-history';
@@ -132,35 +128,13 @@ describe('AWS invoice KPI and charts', () => {
     expect(screen.getByText('$12.00')).toBeTruthy();
   });
 
-  it('exposes exact chart summaries and masked account labels', () => {
-    render(
-      <>
-        <InvoiceServicePie dashboard={dashboard} />
-        <InvoiceTopServices dashboard={dashboard} />
-        <InvoiceTaxComposition dashboard={dashboard} />
-        <InvoiceAccountAllocation dashboard={dashboard} />
-        <InvoiceMonthlyTrend dashboard={dashboard} />
-      </>,
-    );
+  it('exposes exact chart summaries without leaking invoice identifiers', () => {
+    render(<InvoiceMonthlyTrend dashboard={dashboard} />);
 
-    expect(
-      screen.getByRole('img', { name: /service breakdown/i }),
-    ).toHaveTextContent('Compute: $77.00');
-    expect(
-      screen.getByRole('img', { name: /top services/i }),
-    ).toHaveTextContent('Compute: $77.00');
-    expect(
-      screen.getByRole('img', { name: /charge and tax composition/i }),
-    ).toHaveTextContent('Credits: $5.00');
-    expect(
-      screen.getByRole('img', { name: /linked account allocation/i }),
-    ).toHaveTextContent('•••• 1234: $127.00');
     expect(
       screen.getByRole('img', { name: /monthly invoice trend/i }),
     ).toHaveTextContent('2026-06: $100.00');
 
-    const topText = screen.getByRole('img', { name: /top services/i }).textContent;
-    expect(topText?.indexOf('Compute')).toBeLessThan(topText?.indexOf('Storage') ?? 0);
     expect(document.body.textContent).not.toMatch(/123456789012|invoiceNumber|billTo/i);
     expect(
       Array.from(document.querySelectorAll('[aria-label]'))
@@ -170,22 +144,9 @@ describe('AWS invoice KPI and charts', () => {
   });
 
   it('renders explicit empty chart states', () => {
-    const empty = {
-      ...dashboard,
-      serviceBreakdown: [],
-      topServices: [],
-      accountAllocations: [],
-      monthlyTrend: [],
-    };
-    render(
-      <>
-        <InvoiceServicePie dashboard={empty} />
-        <InvoiceTopServices dashboard={empty} />
-        <InvoiceAccountAllocation dashboard={empty} />
-        <InvoiceMonthlyTrend dashboard={empty} />
-      </>,
-    );
-    expect(screen.getAllByText(/No .* data/i)).toHaveLength(4);
+    const empty = { ...dashboard, monthlyTrend: [] };
+    render(<InvoiceMonthlyTrend dashboard={empty} />);
+    expect(screen.getAllByText(/No .* data/i)).toHaveLength(1);
   });
 });
 

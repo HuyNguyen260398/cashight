@@ -11,15 +11,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAwsInvoices } from '@/frontend/hooks/use-aws-invoices';
 import { AwsInvoiceUpload } from './aws-invoice-upload';
 import { AwsInvoiceAiSummary } from './aws-invoice-ai-summary';
-import { InvoiceAccountAllocation } from './invoice-account-allocation';
+import { InvoiceCostUsageGraph } from './invoice-cost-usage-graph';
 import { formatInvoiceMonth } from './invoice-format';
 import { InvoiceHistory } from './invoice-history';
 import { InvoiceKpiCards } from './invoice-kpi-cards';
 import { InvoiceMonthlyTrend } from './invoice-monthly-trend';
-import { InvoiceServicePie } from './invoice-service-pie';
 import { InvoiceServicesTable } from './invoice-services-table';
-import { InvoiceTaxComposition } from './invoice-tax-composition';
-import { InvoiceTopServices } from './invoice-top-services';
 
 export function parseInvoiceYearMonth(search: URLSearchParams): YearMonth | null {
   const year = search.get('year');
@@ -122,11 +119,8 @@ export function AwsInvoiceDashboard() {
           <RevealPanel delayIndex={0} className="col-span-12"><div data-dashboard-panel="kpis"><InvoiceKpiCards dashboard={dashboard} /></div></RevealPanel>
           <RevealPanel delayIndex={1} className="col-span-12"><div data-dashboard-panel="ai"><AwsInvoiceAiSummary yearMonth={requestedMonth} /></div></RevealPanel>
           <RevealPanel delayIndex={2} className="col-span-12"><div data-dashboard-panel="trend"><InvoiceMonthlyTrend dashboard={dashboard} /></div></RevealPanel>
-          <RevealPanel delayIndex={3} className="col-span-12 xl:col-span-6"><div data-dashboard-panel="services"><InvoiceServicePie dashboard={dashboard} /></div></RevealPanel>
-          <RevealPanel delayIndex={4} className="col-span-12 xl:col-span-6"><div data-dashboard-panel="top-services"><InvoiceTopServices dashboard={dashboard} /></div></RevealPanel>
-          <RevealPanel delayIndex={5} className="col-span-12 xl:col-span-6"><div data-dashboard-panel="accounts"><InvoiceAccountAllocation dashboard={dashboard} /></div></RevealPanel>
-          <RevealPanel delayIndex={6} className="col-span-12 xl:col-span-6"><div data-dashboard-panel="tax"><InvoiceTaxComposition dashboard={dashboard} /></div></RevealPanel>
-          <RevealPanel delayIndex={7} className="col-span-12"><div data-dashboard-panel="table"><InvoiceServicesTable services={dashboard.serviceDetails} currency={dashboard.selected.currency} /></div></RevealPanel>
+          <RevealPanel delayIndex={3} className="col-span-12"><div data-dashboard-panel="cost-usage"><InvoiceCostUsageGraph yearMonth={requestedMonth} /></div></RevealPanel>
+          <RevealPanel delayIndex={4} className="col-span-12"><div data-dashboard-panel="table"><InvoiceServicesTable services={dashboard.serviceDetails} currency={dashboard.selected.currency} /></div></RevealPanel>
         </div>
       )}
 

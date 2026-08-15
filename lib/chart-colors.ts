@@ -15,13 +15,6 @@ export const CHART_COLORS = {
 
 export const CHART_AXIS_COLOR = '#667085';
 
-/**
- * Hover cursor behind a bar. Recharts defaults to a solid light grey, which
- * reads as a white slab on the dark theme; a translucent slate tint stays
- * subtle against both surfaces.
- */
-export const CHART_CURSOR_FILL = 'rgba(148, 163, 184, 0.12)';
-
 // ── Brand ramp ────────────────────────────────────────────────────────────────
 
 type Rgb = [number, number, number];

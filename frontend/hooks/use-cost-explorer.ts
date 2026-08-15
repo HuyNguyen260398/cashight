@@ -93,7 +93,17 @@ async function parsedJson<T>(
   return schema.parse(await response.json());
 }
 
-export function useCostExplorer(): {
+export interface CostExplorerHookOptions {
+  /**
+   * Fetch the saved-report list on mount. Callers that render no saved-report
+   * UI — the invoice dashboard's embedded graph — pass `false` so the page does
+   * not spend a request whose result and errors nothing consumes. Read once, at
+   * mount: it identifies the call site, not a changing piece of state.
+   */
+  loadReports?: boolean;
+}
+
+export function useCostExplorer(options?: CostExplorerHookOptions): {
   state: CostExplorerHookState;
   reports: SavedCostReport[];
   reportsLoading: boolean;
@@ -109,11 +119,16 @@ export function useCostExplorer(): {
   exportCsv: (request?: CostExplorerReportRequest) => Promise<void>;
   cancel: () => void;
 } {
+  const loadReports = options?.loadReports ?? true;
   const [state, setState] = useState<CostExplorerHookState>(IDLE_STATE);
   const [reports, setReports] = useState<SavedCostReport[]>([]);
-  const [reportsLoading, setReportsLoading] = useState(true);
+  const [reportsLoading, setReportsLoading] = useState(loadReports);
   const [reportsError, setReportsError] =
     useState<CostExplorerClientError | null>(null);
+  // A ref rather than an effect dependency: the mount effect also owns the
+  // query abort, so re-running it would cancel an in-flight report. Never
+  // reassigned — the mount-time value is the one the effect wants.
+  const loadReportsRef = useRef(loadReports);
   const generationRef = useRef(0);
   const reportListGenerationRef = useRef(0);
   const controllerRef = useRef<AbortController | null>(null);
@@ -123,34 +138,36 @@ export function useCostExplorer(): {
   useEffect(() => {
     mountedRef.current = true;
     const generation = ++reportListGenerationRef.current;
-    const { apiBaseUrl } = getPublicConfig();
-    void apiFetch(`${apiBaseUrl}/aws/cost-explorer/reports`)
-      .then((response) => parsedJson(response, SavedCostReportsResponseSchema))
-      .then(({ items }) => {
-        if (
-          mountedRef.current &&
-          reportListGenerationRef.current === generation
-        ) {
-          setReports(sortReports(items));
-          setReportsError(null);
-        }
-      })
-      .catch((error: unknown) => {
-        if (
-          mountedRef.current &&
-          reportListGenerationRef.current === generation
-        ) {
-          setReportsError(clientError(error));
-        }
-      })
-      .finally(() => {
-        if (
-          mountedRef.current &&
-          reportListGenerationRef.current === generation
-        ) {
-          setReportsLoading(false);
-        }
-      });
+    if (loadReportsRef.current) {
+      const { apiBaseUrl } = getPublicConfig();
+      void apiFetch(`${apiBaseUrl}/aws/cost-explorer/reports`)
+        .then((response) => parsedJson(response, SavedCostReportsResponseSchema))
+        .then(({ items }) => {
+          if (
+            mountedRef.current &&
+            reportListGenerationRef.current === generation
+          ) {
+            setReports(sortReports(items));
+            setReportsError(null);
+          }
+        })
+        .catch((error: unknown) => {
+          if (
+            mountedRef.current &&
+            reportListGenerationRef.current === generation
+          ) {
+            setReportsError(clientError(error));
+          }
+        })
+        .finally(() => {
+          if (
+            mountedRef.current &&
+            reportListGenerationRef.current === generation
+          ) {
+            setReportsLoading(false);
+          }
+        });
+    }
 
     return () => {
       mountedRef.current = false;
