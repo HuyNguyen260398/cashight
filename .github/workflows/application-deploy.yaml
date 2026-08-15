@@ -153,6 +153,43 @@ jobs:
           FUNCTIONS=(auth-guard session-capabilities-api uploads-api upload-status-api parser-worker statements-api dashboard-api summary-api cost-explorer-api aws-invoices-api invoice-parser-worker aws-invoice-summary-api)
           DEPLOY_IDS=()
 
+          # Pre-flight: every target must already exist in AWS.
+          #
+          # Terraform creates these functions, their `live` alias, and their
+          # CodeDeploy group; Infrastructure Deploy is manual, so a release that
+          # adds a Lambda reaches this job before `terraform apply` has run.
+          # Without this gate the loop below publishes and traffic-shifts each
+          # function that does exist, then aborts on the first one that does
+          # not — leaving production half-deployed with no rollback trigger.
+          # Checking every target first makes that state unreachable.
+          echo "=== Verifying deploy targets exist ==="
+          MISSING=()
+          for fn in "${FUNCTIONS[@]}"; do
+            FUNCTION="cashight-${fn}"
+            aws lambda get-function --function-name "${FUNCTION}" >/dev/null 2>&1 \
+              || { MISSING+=("${FUNCTION} (function)"); continue; }
+            aws lambda get-alias --function-name "${FUNCTION}" --name live >/dev/null 2>&1 \
+              || MISSING+=("${FUNCTION} (live alias)")
+            # get-application, not get-deployment-group: the deploy role is
+            # granted codedeploy:GetApplication but not GetDeploymentGroup, and
+            # an AccessDenied here would read as "missing" and block every
+            # deploy. Terraform creates the application and its group together,
+            # so the application's absence is what flags a new Lambda.
+            aws deploy get-application --application-name "${FUNCTION}" >/dev/null 2>&1 \
+              || MISSING+=("${FUNCTION} (CodeDeploy application)")
+          done
+
+          if [ ${#MISSING[@]} -gt 0 ]; then
+            echo "::error::Deploy aborted before any change: ${#MISSING[@]} target(s) missing in AWS."
+            for entry in "${MISSING[@]}"; do
+              echo "  missing: ${entry}"
+            done
+            echo "Run the 'Infrastructure Deploy' workflow with action=apply to"
+            echo "create them, then re-run this deploy. Nothing was modified."
+            exit 1
+          fi
+          echo "All ${#FUNCTIONS[@]} deploy targets present"
+
           for fn in "${FUNCTIONS[@]}"; do
             FUNCTION="cashight-${fn}"
             echo "=== Deploying ${FUNCTION} ==="
