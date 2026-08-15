@@ -184,3 +184,59 @@ output "cognito_issuer" {
 output "cognito_hosted_ui_domain" {
   value = "https://${aws_cognito_user_pool_domain.users.domain}.auth.${var.region}.amazoncognito.com"
 }
+
+# ── Smoke-test machine client ────────────────────────────────────────────────
+# Deployment verification needs a token the API accepts, and the API requires
+# the cashight/* scopes. Cognito only puts custom scopes on tokens issued
+# through an OAuth flow: AdminInitiateAuth and the SRP/password flows return
+# `aws.cognito.signin.user.admin` alone, which authorizeRequest rejects. Client
+# credentials is therefore the only flow that yields a usable token without a
+# browser, and it needs no user password stored anywhere.
+#
+# This client can only mint tokens for itself. It has no explicit_auth_flows,
+# so it cannot authenticate a user, and no callback URLs, so it cannot take
+# part in a browser sign-in.
+resource "aws_cognito_user_pool_client" "smoke" {
+  name         = "${var.project_name}-smoke"
+  user_pool_id = aws_cognito_user_pool.users.id
+
+  generate_secret = true
+
+  allowed_oauth_flows                  = ["client_credentials"]
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_scopes                 = ["cashight/read", "cashight/write"]
+
+  enable_token_revocation = true
+  access_token_validity   = 1
+
+  token_validity_units {
+    access_token = "hours"
+  }
+
+  depends_on = [aws_cognito_resource_server.cashight]
+}
+
+# The API authorises on an AUTHZ record keyed by the token's `sub`, which for a
+# client-credentials token is the client id. auth-guard only writes these for
+# human sign-ins, so the machine client needs its own record or every smoke
+# request returns 403. authProvider is COGNITO because the token is issued by
+# the pool itself — this is what lets the Cost Explorer checks run.
+resource "aws_dynamodb_table_item" "smoke_authorization" {
+  table_name = aws_dynamodb_table.cashight.name
+  hash_key   = aws_dynamodb_table.cashight.hash_key
+  range_key  = aws_dynamodb_table.cashight.range_key
+
+  item = jsonencode({
+    PK           = { S = "AUTHZ#${aws_cognito_user_pool_client.smoke.id}" }
+    SK           = { S = "PROFILE" }
+    active       = { BOOL = true }
+    workspaceId  = { S = "primary" }
+    authProvider = { S = "COGNITO" }
+    createdAt    = { S = "2026-08-15T00:00:00.000Z" }
+    updatedAt    = { S = "2026-08-15T00:00:00.000Z" }
+  })
+}
+
+output "cognito_smoke_client_id" {
+  value = aws_cognito_user_pool_client.smoke.id
+}
