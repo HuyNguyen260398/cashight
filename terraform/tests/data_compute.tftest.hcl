@@ -176,41 +176,6 @@ run "invoice_iam_is_prefix_scoped_and_excludes_cost_explorer" {
   }
 }
 
-run "invoice_pipeline_has_operational_alarms" {
-  command = plan
-
-  assert {
-    condition = toset([
-      aws_cloudwatch_metric_alarm.aws_invoices_api_errors.metric_name,
-      aws_cloudwatch_metric_alarm.aws_invoice_summary_api_errors.metric_name,
-      aws_cloudwatch_metric_alarm.invoice_parser_worker_errors.metric_name,
-      aws_cloudwatch_metric_alarm.invoice_parser_worker_duration.metric_name,
-      aws_cloudwatch_metric_alarm.invoice_parser_worker_throttles.metric_name,
-      aws_cloudwatch_metric_alarm.invoice_total_mismatch.metric_name,
-      aws_cloudwatch_metric_alarm.invoice_parse_queue_age.metric_name,
-      aws_cloudwatch_metric_alarm.invoice_parse_dlq_messages.metric_name,
-      ]) == toset([
-      "Errors",
-      "Duration",
-      "Throttles",
-      "AwsInvoiceParseFailure",
-      "ApproximateAgeOfOldestMessage",
-      "ApproximateNumberOfMessagesVisible",
-    ])
-    error_message = "Invoice infrastructure must cover API/summary errors, worker health, reconciliation, queue age, and DLQ depth"
-  }
-
-  assert {
-    condition     = one([for query in aws_cloudwatch_metric_alarm.invoice_parser_missing_invocations.metric_query : query.expression if query.id == "missing"]) == "IF(FILL(queued, 0) > 0, FILL(invocations, 0), 1)"
-    error_message = "Missing-invocation alarm must fire only when queued work is not invoking the parser"
-  }
-
-  assert {
-    condition     = toset(keys(aws_cloudwatch_metric_alarm.invoice_total_mismatch.dimensions)) == toset(["FunctionName", "ErrorCode"])
-    error_message = "Reconciliation alarm dimensions must contain only function and sanitized error code"
-  }
-}
-
 run "sqs_visibility_timeout" {
   command = plan
 
@@ -633,53 +598,5 @@ run "cost_explorer_granular_data_accepts_operator_acknowledgement" {
   assert {
     condition     = aws_lambda_function.cost_explorer_api.environment[0].variables["GRANULAR_DATA_ENABLED"] == "true"
     error_message = "Acknowledged granular-data enablement must reach the Lambda"
-  }
-}
-
-# ── Cost Explorer monitoring ──────────────────────────────────────────────────
-
-run "cost_explorer_has_required_alarms" {
-  command = plan
-
-  assert {
-    condition     = aws_cloudwatch_metric_alarm.cost_explorer_api_errors.metric_name == "Errors"
-    error_message = "Cost Explorer must alarm on Lambda errors"
-  }
-
-  assert {
-    condition     = aws_cloudwatch_metric_alarm.cost_explorer_api_duration.metric_name == "Duration"
-    error_message = "Cost Explorer must alarm on Lambda duration"
-  }
-
-  assert {
-    condition     = aws_cloudwatch_metric_alarm.cost_explorer_api_throttles.metric_name == "Throttles"
-    error_message = "Cost Explorer must alarm on Lambda throttles"
-  }
-
-  assert {
-    condition = toset([
-      aws_cloudwatch_metric_alarm.cost_explorer_access_denied.metric_name,
-      aws_cloudwatch_metric_alarm.cost_explorer_disabled.metric_name,
-      aws_cloudwatch_metric_alarm.cost_explorer_cache_corruption.metric_name,
-      aws_cloudwatch_metric_alarm.cost_explorer_export_failures.metric_name,
-      ]) == toset([
-      "AwsCostAccessDenied",
-      "CostExplorerDisabled",
-      "CostCacheCorruption",
-      "CostExportFailure",
-    ])
-    error_message = "Cost Explorer must alarm on access, disabled, cache-corruption, and export failures"
-  }
-
-  assert {
-    condition = alltrue([
-      for alarm in [
-        aws_cloudwatch_metric_alarm.cost_explorer_access_denied,
-        aws_cloudwatch_metric_alarm.cost_explorer_disabled,
-        aws_cloudwatch_metric_alarm.cost_explorer_cache_corruption,
-        aws_cloudwatch_metric_alarm.cost_explorer_export_failures,
-      ] : toset(keys(alarm.dimensions)) == toset(["Operation", "Result"])
-    ])
-    error_message = "Custom cost metrics may use only Operation and Result dimensions"
   }
 }

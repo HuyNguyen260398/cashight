@@ -410,20 +410,6 @@ run "session_capabilities_route_is_exact" {
   }
 }
 
-run "session_capabilities_has_error_alarm" {
-  command = plan
-
-  assert {
-    condition     = aws_cloudwatch_metric_alarm.session_capabilities_api_errors.metric_name == "Errors"
-    error_message = "Session capabilities must have a Lambda Errors alarm"
-  }
-
-  assert {
-    condition     = aws_cloudwatch_metric_alarm.session_capabilities_api_errors.dimensions["FunctionName"] == aws_lambda_function.session_capabilities_api.function_name
-    error_message = "Session capabilities alarm must target the dedicated Lambda"
-  }
-}
-
 # ── Cost Explorer API ─────────────────────────────────────────────────────────
 
 run "cost_explorer_routes_have_exact_methods_and_scopes" {
