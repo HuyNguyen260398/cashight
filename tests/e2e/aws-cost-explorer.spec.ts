@@ -407,4 +407,62 @@ test.describe('AWS Cost Explorer browser parity', () => {
     );
     expect(costRequestCount).toBe(0);
   });
+
+  test('opens report parameters as a right-hand drawer below the sidebar breakpoint', async ({
+    page,
+  }) => {
+    const panel = page.locator('#cost-report-parameters');
+    const viewport = { width: 390, height: 844 };
+    // The panel slides, so poll until the transition settles rather than
+    // reading the box once and racing the animation.
+    const panelLeft = () =>
+      expect.poll(async () => {
+        const box = await panel.boundingBox();
+        return box ? Math.round(box.x) : null;
+      });
+    const panelRight = () =>
+      expect.poll(async () => {
+        const box = await panel.boundingBox();
+        return box ? Math.round(box.x + box.width) : null;
+      });
+
+    await page.setViewportSize(viewport);
+    await page.goto('/aws/cost-explorer/');
+    await expect(
+      page.getByRole('heading', { name: 'Cost and usage overview' }),
+    ).toBeVisible();
+
+    // Closed by default: the drawer overlays the report, so opening it unasked
+    // would bury the numbers the page exists for.
+    await expect(panel).toHaveAttribute('inert', '');
+    await panelLeft().toBe(viewport.width);
+
+    await page
+      .getByRole('button', { name: 'Show report parameters', exact: true })
+      .click();
+    await expect(panel).not.toHaveAttribute('inert', /.*/);
+    // Flush with the right edge once settled, leaving a strip of scrim to tap.
+    await panelRight().toBe(viewport.width);
+    const open = await panel.boundingBox();
+    expect(open?.x).toBeGreaterThan(0);
+    expect(open?.x).toBeLessThan(viewport.width / 2);
+
+    // The drawer sits off-canvas when closed; it must not widen the document.
+    const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    expect(scrollWidth).toBe(clientWidth);
+
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveAttribute('inert', '');
+    await panelLeft().toBe(viewport.width);
+
+    // At the sidebar breakpoint it is a static column again, with no scrim.
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto('/aws/cost-explorer/');
+    await expect(page.getByRole('heading', { name: 'Report parameters' })).toBeVisible();
+    await expect(panel).not.toHaveAttribute('inert', /.*/);
+    expect(await panel.evaluate((el) => getComputedStyle(el).position)).toBe('static');
+  });
 });

@@ -10,6 +10,7 @@ import {
   PanelRightClose,
   PanelRightOpen,
   RefreshCw,
+  X,
 } from 'lucide-react';
 
 import { ReportParameters } from './report-parameters';
@@ -30,6 +31,29 @@ import {
 import { cn } from '@/lib/utils';
 
 const PARAMETERS_PANEL_ID = 'cost-report-parameters';
+
+/**
+ * The width at which the parameters panel is a real sidebar column. Below it
+ * the panel would otherwise land beneath the charts, far past the fold, so it
+ * becomes a right-hand slide-over instead — the same drawer pattern the
+ * navigation uses in admin-shell.tsx, mirrored to the other edge.
+ */
+const SIDEBAR_QUERY = '(min-width: 1280px)';
+
+/**
+ * True where the panel is a sidebar column rather than a drawer.
+ *
+ * Guarded rather than called directly: matchMedia is absent in jsdom and in
+ * older browsers, and an unguarded call there takes the whole dashboard down
+ * with a TypeError. Falling back to the sidebar is the safe answer — it
+ * renders inline, needs no scrim, and matches the pre-drawer behaviour.
+ */
+function isSidebarLayout(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return true;
+  }
+  return window.matchMedia(SIDEBAR_QUERY).matches;
+}
 
 function PanelSkeleton({ label }: { label: string }) {
   return (
@@ -117,7 +141,27 @@ function NativeCostExplorerDashboard() {
     exportCsv,
   } = useCostExplorer();
   const cooldownActive = useRefreshCooldown(state.refreshCooldownUntil);
-  const [parametersVisible, setParametersVisible] = useState(true);
+  /**
+   * Open by default only where it is a sidebar. As a drawer it overlays the
+   * report, so opening it unasked would bury the numbers the page exists for.
+   *
+   * Reading layout in an initialiser is safe here: this component mounts only
+   * after the capabilities gate resolves, which is always client-side, so it
+   * never renders during prerender or hydration.
+   */
+  const [parametersVisible, setParametersVisible] = useState(isSidebarLayout);
+
+  // Escape closes the drawer, matching the navigation drawer's behaviour. It
+  // must not collapse the sidebar at xl, where nothing is overlaid.
+  useEffect(() => {
+    if (!parametersVisible) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || isSidebarLayout()) return;
+      setParametersVisible(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [parametersVisible]);
 
   /**
    * Everything in the request except `chartStyle` decides what AWS is asked for.
@@ -307,13 +351,50 @@ function NativeCostExplorerDashboard() {
           ) : null}
         </div>
 
-        {/* Hidden rather than unmounted, so collapsing the panel never discards
-            an unapplied draft. */}
+        {/* Tap-outside scrim for the drawer. Absent at xl, where the panel is
+            a column beside the report rather than over it. */}
+        {parametersVisible ? (
+          <button
+            type="button"
+            aria-hidden
+            tabIndex={-1}
+            className="fixed inset-0 z-40 cursor-default bg-gray-900/50 xl:hidden"
+            onClick={() => setParametersVisible(false)}
+          />
+        ) : null}
+
+        {/* One element, two layouts: a right-hand slide-over below xl, the
+            sidebar column at xl and up.
+
+            Never unmounted, and never display:none below xl — collapsing must
+            not discard an unapplied draft, and the panel has to stay in the box
+            tree for the slide to animate. `inert` is what keeps the off-screen
+            copy out of the tab order while it is closed. */}
         <aside
           id={PARAMETERS_PANEL_ID}
-          hidden={!parametersVisible}
-          className="col-span-12 xl:col-span-4"
+          // Not the `hidden` attribute: below xl the drawer has to stay in the
+          // box tree for the slide to animate, and `hidden` wins over any
+          // utility that would re-show it. `xl:hidden` drops the column where
+          // there is nothing to animate, and `inert` is what keeps the
+          // off-screen copy out of the tab order and the a11y tree.
+          inert={!parametersVisible}
+          className={cn(
+            'fixed inset-y-0 right-0 z-50 w-[min(26rem,100vw-2.5rem)] overflow-y-auto bg-gray-50 p-4 shadow-theme-lg transition-transform duration-300 dark:bg-gray-950',
+            'xl:static xl:z-auto xl:col-span-4 xl:w-auto xl:overflow-visible xl:bg-transparent xl:p-0 xl:shadow-none xl:transition-none dark:xl:bg-transparent',
+            parametersVisible ? 'translate-x-0' : 'translate-x-full xl:hidden',
+          )}
         >
+          <div className="mb-3 flex justify-end xl:hidden">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Close parameters drawer"
+              onClick={() => setParametersVisible(false)}
+            >
+              <X aria-hidden />
+            </Button>
+          </div>
           <ReportParameters
             initialRequest={initialRequest}
             granularDataEnabled={false}

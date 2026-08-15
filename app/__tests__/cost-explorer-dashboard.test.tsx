@@ -332,9 +332,13 @@ describe('Cost Explorer panel states', () => {
 
     await userEvent.click(toggle());
     expect(toggle()).toHaveAttribute('aria-expanded', 'false');
-    expect(
-      screen.queryByRole('heading', { name: 'Report parameters' }),
-    ).not.toBeInTheDocument();
+    // The panel stays mounted — below xl it is a slide-over that has to remain
+    // in the box tree to animate, and unmounting would drop the draft below.
+    // `inert` is what makes it unreachable while collapsed; the column itself
+    // is dropped by `xl:hidden`, which jsdom has no stylesheet to apply.
+    expect(screen.getByRole('complementary', { hidden: true })).toHaveAttribute(
+      'inert',
+    );
     // Collapsing is presentational only.
     expect(mockRun).toHaveBeenCalledTimes(1);
 
