@@ -100,7 +100,7 @@ export function createUploadsApiHandler(deps: UploadsApiDependencies) {
   };
 }
 
-function createDefaultPresign(uploadBucket: string) {
+export function createDefaultPresign(uploadBucket: string) {
   return async (params: {
     key: string;
     sha256Base64: string;

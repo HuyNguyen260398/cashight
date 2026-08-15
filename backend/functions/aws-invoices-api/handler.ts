@@ -325,7 +325,7 @@ export function createAwsInvoicesApiHandler(deps: AwsInvoicesApiDependencies) {
   };
 }
 
-function createDefaultPresign(uploadBucket: string) {
+export function createDefaultPresign(uploadBucket: string) {
   return async (params: {
     key: string;
     sha256Base64: string;
@@ -346,11 +346,14 @@ function createDefaultPresign(uploadBucket: string) {
     const url = await getSignedUrl(s3Client, command, {
       expiresIn: params.expiresInSeconds,
     });
+    // No x-amz-checksum-sha256 here: getSignedUrl puts ChecksumSHA256 in the
+    // URL's query string because it is not a signed header, so a client that
+    // also sends it as a header gets a 403 for signing an unsigned header. The
+    // checksum is still enforced through the query parameter.
     return {
       url,
       headers: {
         'Content-Type': params.contentType,
-        'x-amz-checksum-sha256': params.sha256Base64,
       },
       expiresAt,
     };
