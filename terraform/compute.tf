@@ -1069,6 +1069,18 @@ data "aws_iam_policy_document" "lambda_invoice_parser_worker_permissions" {
     actions   = ["s3:GetObject", "s3:PutObject"]
     resources = ["${aws_s3_bucket.statements.arn}/users/*/aws-invoices/*"]
   }
+  # Month-conflict detection reads the destination invoice, which does not exist
+  # on the first upload of a month. Without ListBucket, S3 answers that missing
+  # key with 403 AccessDenied rather than 404 NoSuchKey, and the worker — which
+  # only treats 404/NoSuchKey as absent — fails the job instead of writing it.
+  # No s3:prefix condition: the existence check carries no prefix in its request
+  # context, so a conditioned grant would never apply and the 403 would persist.
+  statement {
+    sid       = "S3ListStatementsBucket"
+    effect    = "Allow"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.statements.arn]
+  }
   statement {
     sid    = "DynamoDBInvoiceAccess"
     effect = "Allow"
