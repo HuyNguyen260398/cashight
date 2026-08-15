@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight, Cloud, FileQuestion } from 'lucide-react';
 import { RevealPanel } from '@/app/components/reveal-panel';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AWS_INVOICES_CHANGED_EVENT } from '@/frontend/hooks/use-aws-invoice-upload';
 import { useAwsInvoices } from '@/frontend/hooks/use-aws-invoices';
 import { AwsInvoiceUpload } from './aws-invoice-upload';
 import { AwsInvoiceAiSummary } from './aws-invoice-ai-summary';
@@ -71,6 +72,23 @@ export function AwsInvoiceDashboard() {
     const fallback = history[0]?.yearMonth ?? currentYearMonth();
     router.replace(invoiceMonthHref(fallback));
   }, [history, loading, requestedMonth, router]);
+
+  // An upload names its own month — the parser reads it off the invoice — and
+  // that is rarely the month on screen, since the invoice for a period arrives
+  // in the next one. Every panel here needs an invoice for the selected month,
+  // so without this the page sits on its empty state after a successful upload
+  // while history shows the record that was just created.
+  useEffect(() => {
+    function handleChanged(event: Event) {
+      const uploaded = (event as CustomEvent<{ yearMonth?: YearMonth }>).detail
+        ?.yearMonth;
+      if (!uploaded || uploaded === requestedMonth) return;
+      router.push(invoiceMonthHref(uploaded));
+    }
+    window.addEventListener(AWS_INVOICES_CHANGED_EVENT, handleChanged);
+    return () =>
+      window.removeEventListener(AWS_INVOICES_CHANGED_EVENT, handleChanged);
+  }, [requestedMonth, router]);
 
   function navigate(yearMonth: YearMonth) {
     router.push(invoiceMonthHref(yearMonth));
