@@ -51,8 +51,13 @@ const lambda = new LambdaClient({ region: REGION });
 
 const FUNCTION_NAMES = [
   'auth-guard',
+  'aws-invoice-summary-api',
+  'aws-invoices-api',
+  'cost-explorer-api',
+  'session-capabilities-api',
   'uploads-api',
   'upload-status-api',
+  'invoice-parser-worker',
   'parser-worker',
   'statements-api',
   'dashboard-api',

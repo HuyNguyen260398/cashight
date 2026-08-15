@@ -7,10 +7,13 @@ import {
   type UploadJobRecord,
 } from '../../shared/metadata';
 import { errorResponse, jsonResponse, ApiError, type ApiResponse } from '../../shared/api-response';
+import { metrics } from '../../shared/observability';
 
 export interface UploadStatusApiDependencies {
   getAuthorizedUser: (sub: string) => Promise<unknown>;
   getJobRecord: (jobId: string) => Promise<UploadJobRecord | undefined>;
+  enableLegacyWorkspaceFallback?: boolean;
+  onLegacyFallback?: () => void;
 }
 
 function jobToResponse(record: UploadJobRecord) {
@@ -33,7 +36,7 @@ export function createUploadStatusApiHandler(deps: UploadStatusApiDependencies) 
       'unknown';
 
     try {
-      const { claims } = await authorizeRequest(event, 'cashight/read', {
+      const { claims, authorization } = await authorizeRequest(event, 'cashight/read', {
         getAuthorizedUser: deps.getAuthorizedUser,
       });
 
@@ -49,7 +52,16 @@ export function createUploadStatusApiHandler(deps: UploadStatusApiDependencies) 
         throw new ApiError('NOT_FOUND', 404, 'Upload job not found.');
       }
 
-      if (record.sub !== claims.sub) {
+      if (record.owner) {
+        if (record.owner.workspaceId !== authorization.workspaceId) {
+          throw new ApiError('FORBIDDEN', 403, 'Access denied.');
+        }
+      } else if (
+        deps.enableLegacyWorkspaceFallback &&
+        record.sub === claims.sub
+      ) {
+        deps.onLegacyFallback?.();
+      } else {
         throw new ApiError('FORBIDDEN', 403, 'Access denied.');
       }
 
@@ -65,6 +77,12 @@ export async function handler(event: unknown): Promise<ApiResponse> {
   const statusHandler = createUploadStatusApiHandler({
     getAuthorizedUser: (sub) => getAuthorizedUser(dynamoDocumentClient, tableName, sub),
     getJobRecord: (jobId) => getUploadJobRecord(dynamoDocumentClient, tableName, jobId),
+    enableLegacyWorkspaceFallback:
+      process.env.ENABLE_LEGACY_WORKSPACE_FALLBACK === 'true',
+    onLegacyFallback: () => {
+      metrics.addMetric('LegacyWorkspaceFallback', MetricUnit.Count, 1);
+    },
   });
   return statusHandler(event);
 }
+import { MetricUnit } from '@aws-lambda-powertools/metrics';

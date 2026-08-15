@@ -45,7 +45,7 @@ const mockStatement: Statement = {
 const validJobRecord: UploadJobRecord = {
   PK: 'JOB#test-job-uuid',
   SK: 'METADATA',
-  sub: 'user-123',
+  owner: { workspaceId: 'primary', subject: 'user-123' },
   state: 'PENDING_UPLOAD',
   sha256: VALID_SHA256,
   force: false,
@@ -68,12 +68,14 @@ function makeDeps(overrides: Partial<ProcessJobDependencies> = {}): ProcessJobDe
     writeStatement: vi.fn().mockResolvedValue(undefined),
     writeMetadata: vi.fn().mockResolvedValue(undefined),
     computeSha256: vi.fn().mockResolvedValue(VALID_SHA256),
+    enableLegacyWorkspaceFallback: false,
+    onLegacyFallback: vi.fn(),
     now: () => NOW,
     ...overrides,
   };
 }
 
-const S3_KEY = 'uploads/user-123/test-job-uuid.pdf';
+const S3_KEY = 'uploads/statements/primary/test-job-uuid.pdf';
 
 describe('processJob', () => {
   let deps: ProcessJobDependencies;
@@ -92,12 +94,62 @@ describe('processJob', () => {
     expect(deps.parsePdf).toHaveBeenCalled();
     expect(deps.writeStatement).toHaveBeenCalled();
     expect(deps.writeMetadata).toHaveBeenCalled();
+    expect(deps.writeStatement).toHaveBeenCalledWith(
+      'users/primary/statements/9674/2026/2026-05.json',
+      mockStatement,
+    );
+    expect(deps.writeMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owner: { workspaceId: 'primary', subject: 'user-123' },
+      }),
+    );
     expect(deps.transitionToTerminal).toHaveBeenCalledWith(
       'test-job-uuid',
       'SUCCEEDED',
       expect.objectContaining({ statementId: expect.any(String) }),
     );
     expect(deps.deletePdf).toHaveBeenCalledWith(S3_KEY);
+  });
+
+  it('rejects a workspace upload key that does not match the job owner', async () => {
+    const localDeps = makeDeps({
+      getJobRecord: vi.fn().mockResolvedValue({
+        ...validJobRecord,
+        owner: { workspaceId: 'other', subject: 'user-123' },
+      }),
+    });
+
+    await expect(createProcessJob(localDeps)(S3_KEY)).rejects.toThrow(
+      'Upload job owner mismatch',
+    );
+    expect(localDeps.downloadPdf).not.toHaveBeenCalled();
+  });
+
+  it('accepts a matching legacy upload only while fallback is enabled', async () => {
+    const onLegacyFallback = vi.fn();
+    const localDeps = makeDeps({
+      getJobRecord: vi.fn().mockResolvedValue({
+        ...validJobRecord,
+        owner: undefined,
+        sub: 'user-123',
+      }),
+      enableLegacyWorkspaceFallback: true,
+      onLegacyFallback,
+    });
+
+    await createProcessJob(localDeps)('uploads/user-123/test-job-uuid.pdf');
+
+    expect(onLegacyFallback).toHaveBeenCalledOnce();
+    expect(localDeps.writeStatement).toHaveBeenCalledWith(
+      'users/primary/statements/9674/2026/2026-05.json',
+      mockStatement,
+    );
+  });
+
+  it('rejects a legacy upload path when fallback is disabled', async () => {
+    await expect(
+      createProcessJob(makeDeps())('uploads/user-123/test-job-uuid.pdf'),
+    ).rejects.toThrow('Unexpected S3 key format');
   });
 
   it('marks FAILED for wrong PDF password and deletes the PDF', async () => {

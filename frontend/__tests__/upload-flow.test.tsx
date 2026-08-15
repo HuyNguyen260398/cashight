@@ -8,6 +8,7 @@ import { useUploadJob } from '@/frontend/hooks/use-upload-job';
 import { useDashboard } from '@/frontend/hooks/use-dashboard';
 import { useStatements } from '@/frontend/hooks/use-statements';
 import { uploadErrorMessage } from '@cashight/domain/upload-error';
+import { toast } from 'sonner';
 
 // ── module-level mocks (hoisted) ──────────────────────────────────────────────
 
@@ -220,6 +221,31 @@ describe('useUploadJob', () => {
       ([url]) => url.includes('/uploads/'),
     );
     expect(pollCalls).toHaveLength(3);
+    expect(vi.mocked(sleep).mock.calls.map(([delay]) => delay)).toEqual([
+      1000,
+      2000,
+      4000,
+    ]);
+    expect(toast.success).toHaveBeenCalledWith('Statement saved');
+  });
+
+  it('cancels stale work when reset is called during hashing', async () => {
+    let finishHashing!: (value: ArrayBuffer) => void;
+    const file = makeFile();
+    vi.spyOn(file, 'arrayBuffer').mockReturnValue(
+      new Promise<ArrayBuffer>((resolve) => {
+        finishHashing = resolve;
+      }),
+    );
+    const { result } = renderHook(() => useUploadJob());
+
+    act(() => result.current.start(file));
+    act(() => result.current.reset());
+    await act(async () => finishHashing(new ArrayBuffer(0)));
+
+    expect(result.current.state.phase).toBe('idle');
+    expect(mockApiFetch).not.toHaveBeenCalled();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it('enters conflict phase when job state is CONFLICT', async () => {

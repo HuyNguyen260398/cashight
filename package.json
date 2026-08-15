@@ -16,6 +16,7 @@
     "cleanup:legacy-buckets:dry-run": "tsx scripts/delete-legacy-s3-buckets.ts --dry-run",
     "security:scan-logs": "tsx scripts/security-scan-logs.ts",
     "migrate:statements": "tsx scripts/migrate-statements.ts",
+    "migrate:workspace": "tsx scripts/migrate-workspace-ownership.ts",
     "reconcile:statements": "tsx scripts/reconcile-statements.ts",
     "deploy:frontend": "node scripts/deploy-frontend.mjs",
     "release:manifest": "node scripts/create-release-manifest.mjs",
@@ -23,12 +24,15 @@
     "test": "NODE_OPTIONS=--disable-warning=DEP0205 vitest run",
     "test:e2e": "playwright test",
     "test:e2e:current": "playwright test tests/e2e/current-production.spec.ts",
-    "test:watch": "NODE_OPTIONS=--disable-warning=DEP0205 vitest"
+    "test:watch": "NODE_OPTIONS=--disable-warning=DEP0205 vitest",
+    "test:aws-invoice-parser": "tsx scripts/test-aws-invoice-parser.ts"
   },
   "dependencies": {
     "@aws-lambda-powertools/logger": "^2.33.1",
     "@aws-lambda-powertools/metrics": "^2.33.1",
     "@aws-lambda-powertools/tracer": "^2.33.1",
+    "@aws-sdk/client-billing": "^3.1101.0",
+    "@aws-sdk/client-cost-explorer": "^3.1101.0",
     "@aws-sdk/client-dynamodb": "^3.1075.0",
     "@aws-sdk/client-sqs": "^3.1075.0",
     "@aws-sdk/client-ssm": "^3.1101.0",
@@ -71,6 +75,7 @@
     "@types/pdf-parse": "^1.1.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "aws-jwt-verify": "^5.2.1",
     "esbuild": "^0.28.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.12",

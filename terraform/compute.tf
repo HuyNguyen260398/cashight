@@ -151,6 +151,233 @@ resource "aws_lambda_alias" "auth_guard_live" {
   }
 }
 
+# ── session-capabilities-api ─────────────────────────────────────────────────
+
+resource "aws_iam_role" "lambda_session_capabilities_api" {
+  name               = "cashight-session-capabilities-api-role"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
+  tags               = { Project = var.project_name }
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_session_capabilities_api_basic" {
+  role       = aws_iam_role.lambda_session_capabilities_api.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "lambda_session_capabilities_api_xray" {
+  name   = "xray-write"
+  role   = aws_iam_role.lambda_session_capabilities_api.id
+  policy = data.aws_iam_policy_document.xray_write.json
+}
+
+data "aws_iam_policy_document" "lambda_session_capabilities_api_permissions" {
+  statement {
+    sid       = "ReadAuthorizationRecord"
+    effect    = "Allow"
+    actions   = ["dynamodb:GetItem"]
+    resources = [aws_dynamodb_table.cashight.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_session_capabilities_api_permissions" {
+  name   = "permissions"
+  role   = aws_iam_role.lambda_session_capabilities_api.id
+  policy = data.aws_iam_policy_document.lambda_session_capabilities_api_permissions.json
+}
+
+resource "aws_cloudwatch_log_group" "lambda_session_capabilities_api" {
+  name              = "/aws/lambda/cashight-session-capabilities-api"
+  retention_in_days = 30
+}
+
+resource "aws_lambda_function" "session_capabilities_api" {
+  function_name    = "cashight-session-capabilities-api"
+  role             = aws_iam_role.lambda_session_capabilities_api.arn
+  handler          = "index.handler"
+  runtime          = "nodejs22.x"
+  timeout          = 10
+  memory_size      = 256
+  publish          = true
+  filename         = data.archive_file.placeholder.output_path
+  source_code_hash = data.archive_file.placeholder.output_base64sha256
+
+  environment {
+    variables = {
+      TABLE_NAME                   = aws_dynamodb_table.cashight.name
+      ENABLE_LEGACY_AUTHZ_FALLBACK = tostring(var.enable_legacy_authz_fallback)
+    }
+  }
+
+  tracing_config {
+    mode = "Active"
+  }
+
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
+  }
+
+  depends_on = [aws_cloudwatch_log_group.lambda_session_capabilities_api]
+}
+
+resource "aws_lambda_alias" "session_capabilities_api_live" {
+  name             = "live"
+  function_name    = aws_lambda_function.session_capabilities_api.function_name
+  function_version = aws_lambda_function.session_capabilities_api.version
+
+  lifecycle {
+    ignore_changes = [function_version]
+  }
+}
+
+# ── cost-explorer-api ─────────────────────────────────────────────────────────
+
+resource "aws_iam_role" "lambda_cost_explorer_api" {
+  name               = "cashight-cost-explorer-api-role"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
+  tags               = { Project = var.project_name }
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_cost_explorer_api_basic" {
+  role       = aws_iam_role.lambda_cost_explorer_api.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "lambda_cost_explorer_api_xray" {
+  name   = "xray-write"
+  role   = aws_iam_role.lambda_cost_explorer_api.id
+  policy = data.aws_iam_policy_document.xray_write.json
+}
+
+data "aws_iam_policy_document" "lambda_cost_explorer_api_permissions" {
+  statement {
+    sid    = "CostExplorerRead"
+    effect = "Allow"
+    actions = [
+      "ce:GetCostAndUsage",
+      "ce:GetCostAndUsageWithResources",
+      "ce:GetCostForecast",
+      "ce:GetUsageForecast",
+      "ce:GetDimensionValues",
+      "ce:GetTags",
+      "ce:GetCostCategories",
+      "ce:GetCostAndUsageComparisons",
+      "ce:GetCostComparisonDrivers",
+    ]
+    resources = [
+      "arn:aws:billing::${data.aws_caller_identity.current.account_id}:billingview/*",
+    ]
+  }
+
+  statement {
+    sid       = "BillingList"
+    effect    = "Allow"
+    actions   = ["billing:ListBillingViews"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid       = "BillingViewRead"
+    effect    = "Allow"
+    actions   = ["billing:GetBillingView"]
+    resources = ["arn:aws:billing::${data.aws_caller_identity.current.account_id}:billingview/*"]
+  }
+
+  statement {
+    sid       = "ViewBilling"
+    effect    = "Allow"
+    actions   = ["aws-portal:ViewBilling"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "DynamoDBItems"
+    effect = "Allow"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:Query",
+      "dynamodb:TransactWriteItems",
+    ]
+    resources = [aws_dynamodb_table.cashight.arn]
+  }
+
+  statement {
+    sid       = "PrivateCsvExports"
+    effect    = "Allow"
+    actions   = ["s3:GetObject", "s3:PutObject"]
+    resources = ["${aws_s3_bucket.cost_exports.arn}/exports/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_cost_explorer_api_permissions" {
+  name   = "permissions"
+  role   = aws_iam_role.lambda_cost_explorer_api.id
+  policy = data.aws_iam_policy_document.lambda_cost_explorer_api_permissions.json
+}
+
+resource "aws_cloudwatch_log_group" "lambda_cost_explorer_api" {
+  #checkov:skip=CKV_AWS_158:Logs contain sanitized operational metadata only; AWS-managed encryption is sufficient for the required 30-day retention.
+  #checkov:skip=CKV_AWS_338:The Task 7 contract deliberately limits operational logs to 30 days for privacy and cost control.
+  name              = "/aws/lambda/cashight-cost-explorer-api"
+  retention_in_days = 30
+  tags              = { Project = var.project_name }
+}
+
+resource "aws_lambda_function" "cost_explorer_api" {
+  #checkov:skip=CKV_AWS_116:Synchronous API Gateway requests return typed failures to callers; an asynchronous DLQ is not applicable.
+  #checkov:skip=CKV_AWS_117:The Lambda calls public AWS Cost Explorer endpoints and needs no private resources; a VPC would require costly NAT egress.
+  #checkov:skip=CKV_AWS_173:Environment values are resource identifiers and boolean feature flags, never secrets.
+  #checkov:skip=CKV_AWS_272:Lambda publishes immutable versions behind a live alias; code-signing configuration is not established in the repository deployment standard.
+  function_name                  = "cashight-cost-explorer-api"
+  role                           = aws_iam_role.lambda_cost_explorer_api.arn
+  handler                        = "index.handler"
+  runtime                        = "nodejs22.x"
+  timeout                        = 28
+  memory_size                    = 1024
+  reserved_concurrent_executions = 2
+  publish                        = true
+  filename                       = data.archive_file.placeholder.output_path
+  source_code_hash               = data.archive_file.placeholder.output_base64sha256
+
+  environment {
+    variables = {
+      TABLE_NAME                   = aws_dynamodb_table.cashight.name
+      EXPORT_BUCKET                = aws_s3_bucket.cost_exports.bucket
+      GRANULAR_DATA_ENABLED        = tostring(var.enable_cost_explorer_granular_data)
+      ENABLE_LEGACY_AUTHZ_FALLBACK = tostring(var.enable_legacy_authz_fallback)
+    }
+  }
+
+  tracing_config {
+    mode = "Active"
+  }
+
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
+
+    precondition {
+      condition = (
+        !var.enable_cost_explorer_granular_data ||
+        var.cost_explorer_granular_data_enabled_out_of_band
+      )
+      error_message = "Granular Cost Explorer data may be enabled only after the operator confirms the AWS account preference was enabled out of band."
+    }
+  }
+
+  depends_on = [aws_cloudwatch_log_group.lambda_cost_explorer_api]
+}
+
+resource "aws_lambda_alias" "cost_explorer_api_live" {
+  name             = "live"
+  function_name    = aws_lambda_function.cost_explorer_api.function_name
+  function_version = aws_lambda_function.cost_explorer_api.version
+
+  lifecycle {
+    ignore_changes = [function_version]
+  }
+}
+
 # ── uploads-api ───────────────────────────────────────────────────────────────
 
 resource "aws_iam_role" "lambda_uploads_api" {
@@ -209,8 +436,9 @@ resource "aws_lambda_function" "uploads_api" {
 
   environment {
     variables = {
-      TABLE_NAME    = aws_dynamodb_table.cashight.name
-      UPLOAD_BUCKET = aws_s3_bucket.uploads.bucket
+      TABLE_NAME                   = aws_dynamodb_table.cashight.name
+      UPLOAD_BUCKET                = aws_s3_bucket.uploads.bucket
+      ENABLE_LEGACY_AUTHZ_FALLBACK = tostring(var.enable_legacy_authz_fallback)
     }
   }
 
@@ -287,7 +515,9 @@ resource "aws_lambda_function" "upload_status_api" {
 
   environment {
     variables = {
-      TABLE_NAME = aws_dynamodb_table.cashight.name
+      TABLE_NAME                       = aws_dynamodb_table.cashight.name
+      ENABLE_LEGACY_AUTHZ_FALLBACK     = tostring(var.enable_legacy_authz_fallback)
+      ENABLE_LEGACY_WORKSPACE_FALLBACK = tostring(var.enable_legacy_workspace_fallback)
     }
   }
 
@@ -403,10 +633,11 @@ resource "aws_lambda_function" "parser_worker" {
 
   environment {
     variables = {
-      TABLE_NAME         = aws_dynamodb_table.cashight.name
-      UPLOAD_BUCKET      = aws_s3_bucket.uploads.bucket
-      STATEMENTS_BUCKET  = aws_s3_bucket.statements.bucket
-      PDF_PASSWORD_PARAM = aws_ssm_parameter.pdf_password.name
+      TABLE_NAME                       = aws_dynamodb_table.cashight.name
+      UPLOAD_BUCKET                    = aws_s3_bucket.uploads.bucket
+      STATEMENTS_BUCKET                = aws_s3_bucket.statements.bucket
+      PDF_PASSWORD_PARAM               = aws_ssm_parameter.pdf_password.name
+      ENABLE_LEGACY_WORKSPACE_FALLBACK = tostring(var.enable_legacy_workspace_fallback)
     }
   }
 
@@ -499,8 +730,10 @@ resource "aws_lambda_function" "statements_api" {
 
   environment {
     variables = {
-      TABLE_NAME        = aws_dynamodb_table.cashight.name
-      STATEMENTS_BUCKET = aws_s3_bucket.statements.bucket
+      TABLE_NAME                       = aws_dynamodb_table.cashight.name
+      STATEMENTS_BUCKET                = aws_s3_bucket.statements.bucket
+      ENABLE_LEGACY_AUTHZ_FALLBACK     = tostring(var.enable_legacy_authz_fallback)
+      ENABLE_LEGACY_WORKSPACE_FALLBACK = tostring(var.enable_legacy_workspace_fallback)
     }
   }
 
@@ -583,8 +816,10 @@ resource "aws_lambda_function" "dashboard_api" {
 
   environment {
     variables = {
-      TABLE_NAME        = aws_dynamodb_table.cashight.name
-      STATEMENTS_BUCKET = aws_s3_bucket.statements.bucket
+      TABLE_NAME                       = aws_dynamodb_table.cashight.name
+      STATEMENTS_BUCKET                = aws_s3_bucket.statements.bucket
+      ENABLE_LEGACY_AUTHZ_FALLBACK     = tostring(var.enable_legacy_authz_fallback)
+      ENABLE_LEGACY_WORKSPACE_FALLBACK = tostring(var.enable_legacy_workspace_fallback)
     }
   }
 
@@ -674,9 +909,10 @@ resource "aws_lambda_function" "summary_api" {
 
   environment {
     variables = {
-      TABLE_NAME        = aws_dynamodb_table.cashight.name
-      STATEMENTS_BUCKET = aws_s3_bucket.statements.bucket
-      GEMINI_PARAM      = aws_ssm_parameter.gemini_api_key.name
+      TABLE_NAME                   = aws_dynamodb_table.cashight.name
+      STATEMENTS_BUCKET            = aws_s3_bucket.statements.bucket
+      GEMINI_PARAM                 = aws_ssm_parameter.gemini_api_key.name
+      ENABLE_LEGACY_AUTHZ_FALLBACK = tostring(var.enable_legacy_authz_fallback)
     }
   }
 
@@ -701,6 +937,313 @@ resource "aws_lambda_alias" "summary_api_live" {
   }
 }
 
+# ── aws-invoices-api ─────────────────────────────────────────────────────────
+
+resource "aws_iam_role" "lambda_aws_invoices_api" {
+  name               = "cashight-aws-invoices-api-role"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
+  tags               = { Project = var.project_name }
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_aws_invoices_api_basic" {
+  role       = aws_iam_role.lambda_aws_invoices_api.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "lambda_aws_invoices_api_xray" {
+  name   = "xray-write"
+  role   = aws_iam_role.lambda_aws_invoices_api.id
+  policy = data.aws_iam_policy_document.xray_write.json
+}
+
+data "aws_iam_policy_document" "lambda_aws_invoices_api_permissions" {
+  statement {
+    sid       = "S3WriteInvoiceUploads"
+    effect    = "Allow"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.uploads.arn}/uploads/aws-invoices/*"]
+  }
+  statement {
+    sid       = "S3ReadDeleteInvoices"
+    effect    = "Allow"
+    actions   = ["s3:GetObject", "s3:DeleteObject"]
+    resources = ["${aws_s3_bucket.statements.arn}/users/*/aws-invoices/*"]
+  }
+  statement {
+    sid    = "DynamoDBInvoiceAccess"
+    effect = "Allow"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:Query",
+      "dynamodb:UpdateItem",
+      "dynamodb:DeleteItem",
+    ]
+    resources = [aws_dynamodb_table.cashight.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_aws_invoices_api_permissions" {
+  name   = "permissions"
+  role   = aws_iam_role.lambda_aws_invoices_api.id
+  policy = data.aws_iam_policy_document.lambda_aws_invoices_api_permissions.json
+}
+
+resource "aws_cloudwatch_log_group" "lambda_aws_invoices_api" {
+  name              = "/aws/lambda/cashight-aws-invoices-api"
+  retention_in_days = 30
+}
+
+resource "aws_lambda_function" "aws_invoices_api" {
+  function_name    = "cashight-aws-invoices-api"
+  role             = aws_iam_role.lambda_aws_invoices_api.arn
+  handler          = "index.handler"
+  runtime          = "nodejs22.x"
+  timeout          = 30
+  memory_size      = 512
+  publish          = true
+  filename         = data.archive_file.placeholder.output_path
+  source_code_hash = data.archive_file.placeholder.output_base64sha256
+
+  environment {
+    variables = {
+      TABLE_NAME        = aws_dynamodb_table.cashight.name
+      UPLOAD_BUCKET     = aws_s3_bucket.uploads.bucket
+      STATEMENTS_BUCKET = aws_s3_bucket.statements.bucket
+    }
+  }
+
+  tracing_config {
+    mode = "Active"
+  }
+
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
+  }
+
+  depends_on = [aws_cloudwatch_log_group.lambda_aws_invoices_api]
+}
+
+resource "aws_lambda_alias" "aws_invoices_api_live" {
+  name             = "live"
+  function_name    = aws_lambda_function.aws_invoices_api.function_name
+  function_version = aws_lambda_function.aws_invoices_api.version
+
+  lifecycle {
+    ignore_changes = [function_version]
+  }
+}
+
+# ── invoice-parser-worker ─────────────────────────────────────────────────────
+
+resource "aws_iam_role" "lambda_invoice_parser_worker" {
+  name               = "cashight-invoice-parser-worker-role"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
+  tags               = { Project = var.project_name }
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_invoice_parser_worker_basic" {
+  role       = aws_iam_role.lambda_invoice_parser_worker.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "lambda_invoice_parser_worker_xray" {
+  name   = "xray-write"
+  role   = aws_iam_role.lambda_invoice_parser_worker.id
+  policy = data.aws_iam_policy_document.xray_write.json
+}
+
+data "aws_iam_policy_document" "lambda_invoice_parser_worker_permissions" {
+  statement {
+    sid       = "S3ReadDeleteInvoiceUploads"
+    effect    = "Allow"
+    actions   = ["s3:GetObject", "s3:DeleteObject"]
+    resources = ["${aws_s3_bucket.uploads.arn}/uploads/aws-invoices/*"]
+  }
+  statement {
+    sid       = "S3ReadWriteInvoices"
+    effect    = "Allow"
+    actions   = ["s3:GetObject", "s3:PutObject"]
+    resources = ["${aws_s3_bucket.statements.arn}/users/*/aws-invoices/*"]
+  }
+  statement {
+    sid    = "DynamoDBInvoiceAccess"
+    effect = "Allow"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+    ]
+    resources = [aws_dynamodb_table.cashight.arn]
+  }
+  statement {
+    sid    = "SQSConsumeInvoiceQueue"
+    effect = "Allow"
+    actions = [
+      "sqs:ReceiveMessage",
+      "sqs:DeleteMessage",
+      "sqs:GetQueueAttributes",
+      "sqs:ChangeMessageVisibility",
+    ]
+    resources = [aws_sqs_queue.invoice_parse.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_invoice_parser_worker_permissions" {
+  name   = "permissions"
+  role   = aws_iam_role.lambda_invoice_parser_worker.id
+  policy = data.aws_iam_policy_document.lambda_invoice_parser_worker_permissions.json
+}
+
+resource "aws_cloudwatch_log_group" "lambda_invoice_parser_worker" {
+  name              = "/aws/lambda/cashight-invoice-parser-worker"
+  retention_in_days = 30
+}
+
+resource "aws_lambda_function" "invoice_parser_worker" {
+  function_name                  = "cashight-invoice-parser-worker"
+  role                           = aws_iam_role.lambda_invoice_parser_worker.arn
+  handler                        = "index.handler"
+  runtime                        = "nodejs22.x"
+  timeout                        = 300
+  memory_size                    = 2048
+  reserved_concurrent_executions = 1
+  publish                        = true
+  filename                       = data.archive_file.placeholder.output_path
+  source_code_hash               = data.archive_file.placeholder.output_base64sha256
+
+  ephemeral_storage {
+    size = 1024
+  }
+
+  environment {
+    variables = {
+      TABLE_NAME        = aws_dynamodb_table.cashight.name
+      UPLOAD_BUCKET     = aws_s3_bucket.uploads.bucket
+      STATEMENTS_BUCKET = aws_s3_bucket.statements.bucket
+    }
+  }
+
+  tracing_config {
+    mode = "Active"
+  }
+
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
+  }
+
+  depends_on = [aws_cloudwatch_log_group.lambda_invoice_parser_worker]
+}
+
+resource "aws_lambda_alias" "invoice_parser_worker_live" {
+  name             = "live"
+  function_name    = aws_lambda_function.invoice_parser_worker.function_name
+  function_version = aws_lambda_function.invoice_parser_worker.version
+
+  lifecycle {
+    ignore_changes = [function_version]
+  }
+}
+
+resource "aws_lambda_event_source_mapping" "invoice_parser_worker_sqs" {
+  event_source_arn                   = aws_sqs_queue.invoice_parse.arn
+  function_name                      = aws_lambda_alias.invoice_parser_worker_live.arn
+  batch_size                         = 1
+  function_response_types            = ["ReportBatchItemFailures"]
+  maximum_batching_window_in_seconds = 0
+}
+
+# ── aws-invoice-summary-api ───────────────────────────────────────────────────
+
+resource "aws_iam_role" "lambda_aws_invoice_summary_api" {
+  name               = "cashight-aws-invoice-summary-api-role"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
+  tags               = { Project = var.project_name }
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_aws_invoice_summary_api_basic" {
+  role       = aws_iam_role.lambda_aws_invoice_summary_api.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "lambda_aws_invoice_summary_api_xray" {
+  name   = "xray-write"
+  role   = aws_iam_role.lambda_aws_invoice_summary_api.id
+  policy = data.aws_iam_policy_document.xray_write.json
+}
+
+data "aws_iam_policy_document" "lambda_aws_invoice_summary_api_permissions" {
+  statement {
+    sid       = "S3ReadInvoices"
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.statements.arn}/users/*/aws-invoices/*"]
+  }
+  statement {
+    sid       = "DynamoDBInvoiceRead"
+    effect    = "Allow"
+    actions   = ["dynamodb:GetItem", "dynamodb:Query"]
+    resources = [aws_dynamodb_table.cashight.arn]
+  }
+  statement {
+    sid       = "GetGeminiKey"
+    effect    = "Allow"
+    actions   = ["ssm:GetParameter"]
+    resources = [aws_ssm_parameter.gemini_api_key.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_aws_invoice_summary_api_permissions" {
+  name   = "permissions"
+  role   = aws_iam_role.lambda_aws_invoice_summary_api.id
+  policy = data.aws_iam_policy_document.lambda_aws_invoice_summary_api_permissions.json
+}
+
+resource "aws_cloudwatch_log_group" "lambda_aws_invoice_summary_api" {
+  name              = "/aws/lambda/cashight-aws-invoice-summary-api"
+  retention_in_days = 30
+}
+
+resource "aws_lambda_function" "aws_invoice_summary_api" {
+  function_name    = "cashight-aws-invoice-summary-api"
+  role             = aws_iam_role.lambda_aws_invoice_summary_api.arn
+  handler          = "index.handler"
+  runtime          = "nodejs22.x"
+  timeout          = 60
+  memory_size      = 512
+  publish          = true
+  filename         = data.archive_file.placeholder.output_path
+  source_code_hash = data.archive_file.placeholder.output_base64sha256
+
+  environment {
+    variables = {
+      TABLE_NAME        = aws_dynamodb_table.cashight.name
+      STATEMENTS_BUCKET = aws_s3_bucket.statements.bucket
+      GEMINI_PARAM      = aws_ssm_parameter.gemini_api_key.name
+    }
+  }
+
+  tracing_config {
+    mode = "Active"
+  }
+
+  lifecycle {
+    ignore_changes = [filename, source_code_hash]
+  }
+
+  depends_on = [aws_cloudwatch_log_group.lambda_aws_invoice_summary_api]
+}
+
+resource "aws_lambda_alias" "aws_invoice_summary_api_live" {
+  name             = "live"
+  function_name    = aws_lambda_function.aws_invoice_summary_api.function_name
+  function_version = aws_lambda_function.aws_invoice_summary_api.version
+
+  lifecycle {
+    ignore_changes = [function_version]
+  }
+}
+
 # ── Lambda invoke permissions ─────────────────────────────────────────────────
 
 # Cognito may invoke auth-guard (e.g. pre-token-generation or post-authentication
@@ -714,7 +1257,7 @@ resource "aws_lambda_permission" "cognito_auth_guard" {
   source_arn    = aws_cognito_user_pool.users.arn
 }
 
-# API Gateway invoke permissions for the remaining 5 API functions will be
+# API Gateway invoke permissions for the API functions are
 # added in Task 12 once aws_apigatewayv2_api.cashight is provisioned and its
 # execution ARN is known.
 
@@ -749,6 +1292,54 @@ resource "aws_codedeploy_app" "auth_guard" {
 resource "aws_codedeploy_deployment_group" "auth_guard" {
   app_name              = aws_codedeploy_app.auth_guard.name
   deployment_group_name = "cashight-auth-guard-live"
+  service_role_arn      = aws_iam_role.codedeploy.arn
+
+  deployment_config_name = "CodeDeployDefault.LambdaCanary10Percent5Minutes"
+
+  deployment_style {
+    deployment_option = "WITH_TRAFFIC_CONTROL"
+    deployment_type   = "BLUE_GREEN"
+  }
+
+  auto_rollback_configuration {
+    enabled = true
+    events  = ["DEPLOYMENT_FAILURE"]
+  }
+}
+
+# session-capabilities-api
+resource "aws_codedeploy_app" "session_capabilities_api" {
+  name             = "cashight-session-capabilities-api"
+  compute_platform = "Lambda"
+}
+
+resource "aws_codedeploy_deployment_group" "session_capabilities_api" {
+  app_name              = aws_codedeploy_app.session_capabilities_api.name
+  deployment_group_name = "cashight-session-capabilities-api-live"
+  service_role_arn      = aws_iam_role.codedeploy.arn
+
+  deployment_config_name = "CodeDeployDefault.LambdaCanary10Percent5Minutes"
+
+  deployment_style {
+    deployment_option = "WITH_TRAFFIC_CONTROL"
+    deployment_type   = "BLUE_GREEN"
+  }
+
+  auto_rollback_configuration {
+    enabled = true
+    events  = ["DEPLOYMENT_FAILURE"]
+  }
+}
+
+# cost-explorer-api
+resource "aws_codedeploy_app" "cost_explorer_api" {
+  name             = "cashight-cost-explorer-api"
+  compute_platform = "Lambda"
+}
+
+resource "aws_codedeploy_deployment_group" "cost_explorer_api" {
+  app_name              = aws_codedeploy_app.cost_explorer_api.name
+  deployment_group_name = "cashight-cost-explorer-api-live"
   service_role_arn      = aws_iam_role.codedeploy.arn
 
   deployment_config_name = "CodeDeployDefault.LambdaCanary10Percent5Minutes"
@@ -895,6 +1486,75 @@ resource "aws_codedeploy_deployment_group" "summary_api" {
   deployment_group_name = "cashight-summary-api-live"
   service_role_arn      = aws_iam_role.codedeploy.arn
 
+  deployment_config_name = "CodeDeployDefault.LambdaCanary10Percent5Minutes"
+
+  deployment_style {
+    deployment_option = "WITH_TRAFFIC_CONTROL"
+    deployment_type   = "BLUE_GREEN"
+  }
+
+  auto_rollback_configuration {
+    enabled = true
+    events  = ["DEPLOYMENT_FAILURE"]
+  }
+}
+
+# aws-invoices-api
+resource "aws_codedeploy_app" "aws_invoices_api" {
+  name             = "cashight-aws-invoices-api"
+  compute_platform = "Lambda"
+}
+
+resource "aws_codedeploy_deployment_group" "aws_invoices_api" {
+  app_name               = aws_codedeploy_app.aws_invoices_api.name
+  deployment_group_name  = "cashight-aws-invoices-api-live"
+  service_role_arn       = aws_iam_role.codedeploy.arn
+  deployment_config_name = "CodeDeployDefault.LambdaCanary10Percent5Minutes"
+
+  deployment_style {
+    deployment_option = "WITH_TRAFFIC_CONTROL"
+    deployment_type   = "BLUE_GREEN"
+  }
+
+  auto_rollback_configuration {
+    enabled = true
+    events  = ["DEPLOYMENT_FAILURE"]
+  }
+}
+
+# invoice-parser-worker
+resource "aws_codedeploy_app" "invoice_parser_worker" {
+  name             = "cashight-invoice-parser-worker"
+  compute_platform = "Lambda"
+}
+
+resource "aws_codedeploy_deployment_group" "invoice_parser_worker" {
+  app_name               = aws_codedeploy_app.invoice_parser_worker.name
+  deployment_group_name  = "cashight-invoice-parser-worker-live"
+  service_role_arn       = aws_iam_role.codedeploy.arn
+  deployment_config_name = "CodeDeployDefault.LambdaCanary10Percent5Minutes"
+
+  deployment_style {
+    deployment_option = "WITH_TRAFFIC_CONTROL"
+    deployment_type   = "BLUE_GREEN"
+  }
+
+  auto_rollback_configuration {
+    enabled = true
+    events  = ["DEPLOYMENT_FAILURE"]
+  }
+}
+
+# aws-invoice-summary-api
+resource "aws_codedeploy_app" "aws_invoice_summary_api" {
+  name             = "cashight-aws-invoice-summary-api"
+  compute_platform = "Lambda"
+}
+
+resource "aws_codedeploy_deployment_group" "aws_invoice_summary_api" {
+  app_name               = aws_codedeploy_app.aws_invoice_summary_api.name
+  deployment_group_name  = "cashight-aws-invoice-summary-api-live"
+  service_role_arn       = aws_iam_role.codedeploy.arn
   deployment_config_name = "CodeDeployDefault.LambdaCanary10Percent5Minutes"
 
   deployment_style {

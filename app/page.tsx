@@ -13,6 +13,7 @@ import { useDashboard } from '@/frontend/hooks/use-dashboard';
 import { apiFetch } from '@/frontend/api/client';
 import { getPublicConfig } from '@/frontend/auth/config';
 import { StatementsListResponseSchema } from '@/frontend/api/contracts';
+import { initialPeriodHref } from '@/frontend/lib/initial-period';
 import { ProtectedRoute } from '@/frontend/auth/protected-route';
 
 // ── Loading skeleton ─────────────────────────────────────────────────────────
@@ -36,6 +37,9 @@ function DashboardPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const hasPeriod = searchParams.has('period');
+  // Value-stable dep for the redirect effect — `searchParams` is a new object
+  // on every render.
+  const search = searchParams.toString();
 
   const spec = parsePeriodFromSearch(searchParams);
   // null when the URL names no bank — the API then picks one that has data.
@@ -63,11 +67,11 @@ function DashboardPageInner() {
       .then((data) => {
         if (cancelled) return;
         const parsed = StatementsListResponseSchema.parse(data);
-        if (parsed.items.length > 0) {
-          // Redirect to the most recent statement month.
-          const latest = parsed.items[0];
-          const [year, month] = latest.statementDate.split('-').map(Number);
-          router.replace(`/?period=month&year=${year}&month=${month}`);
+        // Redirect to the most recent month that the requested bank has data
+        // for, keeping the rest of the query string (notably `bank`) intact.
+        const href = initialPeriodHref(parsed.items, search, requestedBank);
+        if (href) {
+          router.replace(href);
         } else {
           setFetchCompleted(true);
         }
@@ -80,7 +84,7 @@ function DashboardPageInner() {
     return () => {
       cancelled = true;
     };
-  }, [hasPeriod, fetchCompleted, router]);
+  }, [hasPeriod, fetchCompleted, router, search, requestedBank]);
 
   const { data: view, loading: dashLoading, error } = useDashboard(
     hasPeriod ? spec : null,

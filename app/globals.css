@@ -245,3 +245,47 @@
 @utility surface-muted {
   @apply rounded-2xl border border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03];
 }
+
+/* Keep Recharts labels consistent with the local Geist UI and ensure keyboard
+   focus remains visible when SVG chart elements become interactive. */
+.cost-explorer-chart text {
+  font-family: var(--font-geist-sans), sans-serif;
+}
+
+.cost-explorer-chart :focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.aws-invoice-chart {
+  min-width: 0;
+}
+
+.aws-invoice-chart text {
+  font-family: var(--font-geist-sans), sans-serif;
+}
+
+/* The shared Table primitive owns horizontal overflow by default. Cost
+   Explorer uses one bounded two-axis scrollport so sticky period headers stay
+   attached to the viewport while wide breakdown data scrolls. */
+.cost-breakdown-scroll [data-slot="table-container"] {
+  overflow: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cost-explorer-chart *,
+  .cost-explorer-chart *::before,
+  .cost-explorer-chart *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .aws-invoice-chart *,
+  .aws-invoice-chart *::before,
+  .aws-invoice-chart *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

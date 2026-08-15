@@ -1,4 +1,5 @@
 import { GetObjectCommand, HeadObjectCommand, DeleteObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { MetricUnit } from '@aws-lambda-powertools/metrics';
 import { parseStatementPdf } from '@cashight/domain/parsers';
 
 import { dynamoDocumentClient, s3Client } from '../../shared/clients';
@@ -11,6 +12,7 @@ import {
 } from '../../shared/metadata';
 import { getSecretString } from '../../shared/secrets';
 import { statementId } from '../../shared/storage';
+import { metrics } from '../../shared/observability';
 import { createProcessJob, computeSha256 } from './process-job';
 
 interface SQSRecord {
@@ -114,11 +116,11 @@ function createProductionProcessJob(tableName: string, uploadBucket: string, sta
       );
     },
 
-    writeMetadata: async ({ sub, statement, objectKey, sha256, uploadedAt }) => {
+    writeMetadata: async ({ owner, statement, objectKey, sha256, uploadedAt }) => {
       const [year, month] = statement.statementDate.split('-').map(Number);
       const mm = String(month).padStart(2, '0');
       await putStatementMetadata(dynamoDocumentClient, tableName, {
-        PK: `USER#${sub}`,
+        PK: `WORKSPACE#${owner.workspaceId}`,
         SK: `STATEMENT#${year}-${mm}#${statement.cardLast4}`,
         statementId: statementId(statement.cardLast4, year, month),
         objectKey,
@@ -134,6 +136,11 @@ function createProductionProcessJob(tableName: string, uploadBucket: string, sta
 
     computeSha256,
     now: () => new Date(),
+    enableLegacyWorkspaceFallback:
+      process.env.ENABLE_LEGACY_WORKSPACE_FALLBACK === 'true',
+    onLegacyFallback: () => {
+      metrics.addMetric('LegacyWorkspaceFallback', MetricUnit.Count, 1);
+    },
   });
 }
 

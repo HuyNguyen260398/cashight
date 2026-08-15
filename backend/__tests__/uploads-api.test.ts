@@ -14,6 +14,8 @@ const mockAuthorizedRecord = {
   PK: 'AUTHZ#user-123' as const,
   SK: 'PROFILE' as const,
   active: true as const,
+  workspaceId: 'primary' as const,
+  authProvider: 'COGNITO' as const,
   createdAt: '2026-06-27T00:00:00.000Z',
   updatedAt: '2026-06-27T00:00:00.000Z',
 };
@@ -125,10 +127,16 @@ describe('POST /uploads', () => {
 
     const putCall = vi.mocked(deps.putJobRecord).mock.calls[0][0];
     expect(putCall.state).toBe('PENDING_UPLOAD');
-    expect(putCall.sub).toBe('user-123');
+    expect(putCall.owner).toEqual({
+      workspaceId: 'primary',
+      subject: 'user-123',
+    });
     expect(putCall.sha256).toBe(VALID_SHA256);
     expect(putCall.force).toBe(false);
     expect(putCall.expiresAtEpoch).toBe(SEVEN_DAYS_EPOCH);
+    expect(vi.mocked(deps.presign).mock.calls[0][0].key).toMatch(
+      /^uploads\/statements\/primary\/[0-9a-f-]{36}\.pdf$/,
+    );
   });
 
   it('returns job and presigned upload details without exposing S3 key', async () => {

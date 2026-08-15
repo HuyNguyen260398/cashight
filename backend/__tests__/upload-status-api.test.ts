@@ -9,6 +9,8 @@ const mockAuthorizedRecord = {
   PK: 'AUTHZ#user-123' as const,
   SK: 'PROFILE' as const,
   active: true as const,
+  workspaceId: 'primary' as const,
+  authProvider: 'COGNITO' as const,
   createdAt: '2026-06-27T00:00:00.000Z',
   updatedAt: '2026-06-27T00:00:00.000Z',
 };
@@ -16,7 +18,7 @@ const mockAuthorizedRecord = {
 const mockJobRecord = {
   PK: 'JOB#test-job-id' as const,
   SK: 'METADATA' as const,
-  sub: 'user-123',
+  owner: { workspaceId: 'primary' as const, subject: 'user-123' },
   state: 'PENDING_UPLOAD' as const,
   sha256: 'a'.repeat(64),
   force: false,
@@ -29,6 +31,8 @@ function makeDeps(overrides: Partial<UploadStatusApiDependencies> = {}): UploadS
   return {
     getAuthorizedUser: vi.fn().mockResolvedValue(mockAuthorizedRecord),
     getJobRecord: vi.fn().mockResolvedValue(mockJobRecord),
+    enableLegacyWorkspaceFallback: false,
+    onLegacyFallback: vi.fn(),
     ...overrides,
   };
 }
@@ -84,13 +88,52 @@ describe('GET /uploads/{jobId}', () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it('returns 403 for a job belonging to another user', async () => {
+  it('returns 403 for a job belonging to another workspace', async () => {
     const handler = createUploadStatusApiHandler(
       makeDeps({
-        getJobRecord: vi.fn().mockResolvedValue({ ...mockJobRecord, sub: 'other-user' }),
+        getJobRecord: vi.fn().mockResolvedValue({
+          ...mockJobRecord,
+          owner: { workspaceId: 'other', subject: 'other-user' },
+        }),
       }),
     );
     const res = await handler(makeEvent('test-job-id'));
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('accepts a same-subject legacy job only while fallback is enabled', async () => {
+    const onLegacyFallback = vi.fn();
+    const handler = createUploadStatusApiHandler(
+      makeDeps({
+        getJobRecord: vi.fn().mockResolvedValue({
+          ...mockJobRecord,
+          owner: undefined,
+          sub: 'user-123',
+        }),
+        enableLegacyWorkspaceFallback: true,
+        onLegacyFallback,
+      }),
+    );
+
+    const res = await handler(makeEvent('test-job-id'));
+
+    expect(res.statusCode).toBe(200);
+    expect(onLegacyFallback).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a legacy job when fallback is disabled', async () => {
+    const handler = createUploadStatusApiHandler(
+      makeDeps({
+        getJobRecord: vi.fn().mockResolvedValue({
+          ...mockJobRecord,
+          owner: undefined,
+          sub: 'user-123',
+        }),
+      }),
+    );
+
+    const res = await handler(makeEvent('test-job-id'));
+
     expect(res.statusCode).toBe(403);
   });
 

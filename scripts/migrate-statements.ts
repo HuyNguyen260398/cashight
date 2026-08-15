@@ -37,7 +37,10 @@ import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 
 import { StatementSchema } from '@cashight/domain/schemas';
 import { putStatementMetadata } from '../backend/shared/metadata';
-import { getAuthorizedUser, parseAuthorizedUserRecord } from '../backend/shared/metadata';
+import {
+  getAuthorizedUser,
+  parseLegacyAuthorizedUserRecord,
+} from '../backend/shared/metadata';
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -165,7 +168,9 @@ export async function executeMigration(
   // Authorization gate — must be active before any write
   if (!opts.dryRun) {
     const authzRaw = await deps.getAuthzRecord(ctx.tableName, ctx.sub);
-    const authz = parseAuthorizedUserRecord(authzRaw);
+    // This Step 29 migration intentionally runs before workspace/provider
+    // backfill, so its authorization gate validates the legacy record shape.
+    const authz = parseLegacyAuthorizedUserRecord(authzRaw);
     if (!authz) {
       report.abortReason = `No active authorization record found for sub. Create AUTHZ#${ctx.sub}/PROFILE with active=true in DynamoDB before running with --apply.`;
       return report;

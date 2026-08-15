@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { BarChart3, ShieldCheck } from 'lucide-react';
 import { getOidcManager } from '@/frontend/auth/oidc';
+import { allowlistedOidcReturnTo } from '@/frontend/auth/return-to';
 
 /** Reads ?error= from the URL and renders the error banner when present. */
 function SignInError() {
@@ -20,7 +21,10 @@ function SignInError() {
   );
 }
 
-export default function SignInPage() {
+function SignInActions() {
+  const searchParams = useSearchParams();
+  const returnTo = allowlistedOidcReturnTo(searchParams.get('returnTo'));
+
   function handleGoogle() {
     const manager = getOidcManager();
     void manager.signinRedirect({
@@ -30,9 +34,33 @@ export default function SignInPage() {
 
   function handleCognito() {
     const manager = getOidcManager();
-    void manager.signinRedirect();
+    void manager.signinRedirect(
+      returnTo ? { state: { returnTo } } : undefined,
+    );
   }
 
+  return (
+    <>
+      <div className="mt-6">
+        <Button type="button" className="w-full" onClick={handleGoogle}>
+          Sign in with Google
+        </Button>
+      </div>
+      <div className="mt-3">
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={handleCognito}
+        >
+          Sign in with Cognito
+        </Button>
+      </div>
+    </>
+  );
+}
+
+export default function SignInPage() {
   return (
     <main className="flex min-h-dvh items-center justify-center bg-gray-50 px-4 py-12 dark:bg-gray-950">
       <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-8 text-center shadow-theme-lg dark:border-gray-800 dark:bg-white/[0.03]">
@@ -52,21 +80,9 @@ export default function SignInPage() {
         <Suspense fallback={null}>
           <SignInError />
         </Suspense>
-        <div className="mt-6">
-          <Button type="button" className="w-full" onClick={handleGoogle}>
-            Sign in with Google
-          </Button>
-        </div>
-        <div className="mt-3">
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            onClick={handleCognito}
-          >
-            Sign in with Cognito
-          </Button>
-        </div>
+        <Suspense fallback={null}>
+          <SignInActions />
+        </Suspense>
       </div>
     </main>
   );

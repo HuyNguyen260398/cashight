@@ -1,4 +1,5 @@
 import { DeleteObjectCommand, GetObjectCommand, S3ServiceException } from '@aws-sdk/client-s3';
+import { MetricUnit } from '@aws-lambda-powertools/metrics';
 import type { Statement } from '@cashight/domain/schemas';
 import { z } from 'zod';
 
@@ -7,12 +8,17 @@ import { authorizeRequest } from '../../shared/auth-claims';
 import { dynamoDocumentClient, s3Client } from '../../shared/clients';
 import { requiredEnvironmentValue } from '../../shared/config';
 import {
-  deleteStatementMetadata,
+  deleteWorkspaceStatementMetadata,
+  assertLegacyRecordOwner,
+  assertRecordOwner,
   getAuthorizedUser,
   getStatementMetadataById,
+  getWorkspaceStatementMetadataById,
   queryUserStatements,
+  queryWorkspaceStatements,
   type StatementMetadataRecord,
 } from '../../shared/metadata';
+import { metrics } from '../../shared/observability';
 import { parseStatementObject } from '../../shared/storage';
 
 const STATEMENT_ID_SCHEMA = z.string().regex(/^\d{4}-\d{2}-\d{4}$/);
@@ -25,14 +31,22 @@ const cursorSchema = z.object({
 export interface StatementsApiDependencies {
   getAuthorizedUser: (sub: string) => Promise<unknown>;
   queryStatements: (
+    workspaceId: 'primary',
+    cursor: Record<string, unknown> | null,
+    limit?: number,
+  ) => Promise<{ items: StatementMetadataRecord[]; nextCursor: Record<string, unknown> | null }>;
+  queryLegacyStatements: (
     sub: string,
     cursor: Record<string, unknown> | null,
     limit?: number,
   ) => Promise<{ items: StatementMetadataRecord[]; nextCursor: Record<string, unknown> | null }>;
-  getStatementMetadata: (sub: string, statementId: string) => Promise<StatementMetadataRecord | undefined>;
+  getStatementMetadata: (workspaceId: 'primary', statementId: string) => Promise<StatementMetadataRecord | undefined>;
+  getLegacyStatementMetadata: (sub: string, statementId: string) => Promise<StatementMetadataRecord | undefined>;
   getStatementObject: (objectKey: string) => Promise<Statement>;
   deleteStatementObject: (objectKey: string) => Promise<void>;
-  deleteStatementMetadata: (sub: string, statementId: string) => Promise<void>;
+  deleteStatementMetadata: (workspaceId: 'primary', statementId: string) => Promise<void>;
+  enableLegacyWorkspaceFallback?: boolean;
+  onLegacyFallback?: () => void;
 }
 
 function parseCursor(raw: string | undefined): Record<string, unknown> | null {
@@ -86,10 +100,9 @@ export function createStatementsApiHandler(deps: StatementsApiDependencies) {
       'unknown';
 
     try {
-      const { claims } = await authorizeRequest(event, 'cashight/read', {
+      const { claims, authorization } = await authorizeRequest(event, 'cashight/read', {
         getAuthorizedUser: deps.getAuthorizedUser,
       });
-      const sub = claims.sub;
       const method = getMethod(event);
       const statementIdParam = getPathParam(event, 'statementId');
 
@@ -97,7 +110,25 @@ export function createStatementsApiHandler(deps: StatementsApiDependencies) {
         // List endpoint
         const rawCursor = getQueryParam(event, 'cursor');
         const cursor = parseCursor(rawCursor);
-        const { items, nextCursor } = await deps.queryStatements(sub, cursor);
+        let { items, nextCursor } = await deps.queryStatements(
+          authorization.workspaceId,
+          cursor,
+        );
+        let legacy = false;
+        if (items.length === 0 && deps.enableLegacyWorkspaceFallback) {
+          const legacyResult = await deps.queryLegacyStatements(
+            claims.sub,
+            cursor,
+          );
+          items = legacyResult.items;
+          nextCursor = legacyResult.nextCursor;
+          legacy = items.length > 0;
+          if (legacy) deps.onLegacyFallback?.();
+        }
+        for (const item of items) {
+          if (legacy) assertLegacyRecordOwner(claims.sub, item);
+          else assertRecordOwner(authorization.workspaceId, item);
+        }
         return jsonResponse(200, {
           items: items.map(metaToSummary),
           nextCursor: nextCursor ? encodeCursor(nextCursor) : null,
@@ -109,17 +140,35 @@ export function createStatementsApiHandler(deps: StatementsApiDependencies) {
         throw new ApiError('INVALID_REQUEST', 400, 'Invalid statementId format.');
       }
 
-      const record = await deps.getStatementMetadata(sub, statementIdParam);
+      let record = await deps.getStatementMetadata(
+        authorization.workspaceId,
+        statementIdParam,
+      );
+      let legacy = false;
+      if (
+        !record &&
+        method === 'GET' &&
+        deps.enableLegacyWorkspaceFallback
+      ) {
+        record = await deps.getLegacyStatementMetadata(
+          claims.sub,
+          statementIdParam,
+        );
+        legacy = record !== undefined;
+        if (legacy) deps.onLegacyFallback?.();
+      }
       if (!record) {
         throw new ApiError('NOT_FOUND', 404, 'Statement not found.');
       }
-      if (record.PK !== `USER#${sub}`) {
-        throw new ApiError('FORBIDDEN', 403, 'Access denied.');
-      }
+      if (legacy) assertLegacyRecordOwner(claims.sub, record);
+      else assertRecordOwner(authorization.workspaceId, record);
 
       if (method === 'DELETE') {
         await deps.deleteStatementObject(record.objectKey);
-        await deps.deleteStatementMetadata(sub, statementIdParam);
+        await deps.deleteStatementMetadata(
+          authorization.workspaceId,
+          statementIdParam,
+        );
         return jsonResponse(200, { statementId: statementIdParam, deleted: true });
       }
 
@@ -154,15 +203,34 @@ export async function handler(event: unknown): Promise<ApiResponse> {
   const statementsHandler = createStatementsApiHandler({
     getAuthorizedUser: (sub) => getAuthorizedUser(dynamoDocumentClient, tableName, sub),
     queryStatements: (sub, cursor, limit) =>
+      queryWorkspaceStatements(dynamoDocumentClient, tableName, sub, cursor, limit),
+    queryLegacyStatements: (sub, cursor, limit) =>
       queryUserStatements(dynamoDocumentClient, tableName, sub, cursor, limit),
     getStatementMetadata: (sub, statementId) =>
+      getWorkspaceStatementMetadataById(
+        dynamoDocumentClient,
+        tableName,
+        sub,
+        statementId,
+      ),
+    getLegacyStatementMetadata: (sub, statementId) =>
       getStatementMetadataById(dynamoDocumentClient, tableName, sub, statementId),
     getStatementObject: (objectKey) =>
       defaultGetStatementObject(statementBucket, objectKey),
     deleteStatementObject: (objectKey) =>
       defaultDeleteStatementObject(statementBucket, objectKey),
     deleteStatementMetadata: (sub, statementId) =>
-      deleteStatementMetadata(dynamoDocumentClient, tableName, sub, statementId),
+      deleteWorkspaceStatementMetadata(
+        dynamoDocumentClient,
+        tableName,
+        sub,
+        statementId,
+      ),
+    enableLegacyWorkspaceFallback:
+      process.env.ENABLE_LEGACY_WORKSPACE_FALLBACK === 'true',
+    onLegacyFallback: () => {
+      metrics.addMetric('LegacyWorkspaceFallback', MetricUnit.Count, 1);
+    },
   });
   return statementsHandler(event);
 }
