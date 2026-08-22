@@ -51,7 +51,7 @@
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "5.4.296",
     "radix-ui": "^1.6.7",
-    "react": "19.2.7",
+    "react": "19.2.8",
     "react-dom": "19.2.7",
     "react-dropzone": "^19.1.1",
     "recharts": "^3.8.1",
