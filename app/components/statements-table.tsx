@@ -29,6 +29,7 @@ import {
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
 import { formatVND, formatDate } from '@/lib/format';
+import { statementDashboardHref } from '@/frontend/lib/dashboard-routes';
 import { bankShortName, type BankCode } from '@/lib/banks';
 
 export type StatementRow = {
@@ -187,7 +188,7 @@ export function StatementsTable({
                 </TableCell>
                 <TableCell>
                   <Link
-                    href={`/?period=month&year=${row.year}&month=${row.month}`}
+                    href={statementDashboardHref(row)}
                     className="font-medium text-brand-500 underline-offset-4 hover:underline dark:text-brand-400"
                   >
                     {row.year}-{mm}

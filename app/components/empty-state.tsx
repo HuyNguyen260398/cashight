@@ -15,7 +15,7 @@ export function EmptyState() {
         Upload a statement to get started.
       </p>
       <Button asChild>
-        <Link href="/upload">Upload statement</Link>
+        <Link href="#statement-upload">Upload statement</Link>
       </Button>
     </div>
   );
