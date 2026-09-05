@@ -47,24 +47,33 @@ function BankDashboardContent() {
   const { data: view, loading: dashboardLoading, error, refresh: refreshDashboard } = useDashboard(hasPeriod ? spec : null, requestedBank);
   const emptyCollection = !history.loading && !history.error && history.items.length === 0;
   const effectiveBank = requestedBank ?? view?.selectedBank ?? (emptyCollection ? DEFAULT_BANK : null);
-  const [pendingUpload, setPendingUpload] = useState<UploadJob | null>(null);
+  const [pendingUpload, setPendingUpload] = useState<{ job: UploadJob; search: string } | null>(null);
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
   const activeSearch = useRef<string | null>(search);
+  const uploadNavigation = useRef(false);
+
+  // A retry belongs to the view where the upload finished. Reset it before
+  // rendering a different period so it cannot block later initial navigation.
+  if (pendingUpload && pendingUpload.search !== search) {
+    setPendingUpload(null);
+    setUploadNotice(null);
+  }
 
   useEffect(() => {
     activeSearch.current = search;
+    uploadNavigation.current = false;
     return () => { activeSearch.current = null; };
   }, [search]);
 
   useEffect(() => {
-    if (hasPeriod || history.loading || history.refreshing || history.error || pendingUpload) return;
+    if (uploadNavigation.current || hasPeriod || history.loading || history.refreshing || history.error || pendingUpload) return;
     const href = initialPeriodHref(history.items, search, requestedBank);
     if (href) router.replace(`${href}${window.location.hash}`);
   }, [hasPeriod, history.loading, history.refreshing, history.error, history.items, pendingUpload, search, requestedBank, router]);
 
   const handleUploadSucceeded = useCallback((job: UploadJob) => {
     if (activeSearch.current !== search) return;
-    setPendingUpload(job);
+    setPendingUpload({ job, search });
     setUploadNotice(null);
     refreshDashboard();
     void (async () => {
@@ -77,6 +86,8 @@ function BankDashboardContent() {
           return;
         }
         const row = statementRows([item], item.bank)[0];
+        uploadNavigation.current = true;
+        setPendingUpload(null);
         router.push(statementDashboardHref(row));
       } catch {
         if (activeSearch.current === search) {
@@ -119,7 +130,7 @@ function BankDashboardContent() {
       {uploadNotice ? (
         <div role="status" className="surface-card space-y-3 p-5">
           <p className="text-sm text-gray-700 dark:text-gray-300">{uploadNotice}</p>
-          <Button variant="outline" onClick={() => { if (pendingUpload) handleUploadSucceeded(pendingUpload); }}>Refresh saved statement</Button>
+          <Button variant="outline" onClick={() => { if (pendingUpload) handleUploadSucceeded(pendingUpload.job); }}>Refresh saved statement</Button>
         </div>
       ) : null}
 
