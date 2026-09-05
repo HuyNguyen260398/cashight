@@ -6,7 +6,6 @@ import { computeSha256 } from '@/frontend/lib/sha256';
 import { sleep } from '@/frontend/lib/sleep';
 import { useUploadJob } from '@/frontend/hooks/use-upload-job';
 import { useDashboard } from '@/frontend/hooks/use-dashboard';
-import { useStatements } from '@/frontend/hooks/use-statements';
 import { uploadErrorMessage } from '@cashight/domain/upload-error';
 import { toast } from 'sonner';
 
@@ -518,99 +517,5 @@ describe('useDashboard', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.data?.label).toBe('2026');
     expect(mockApiFetch).toHaveBeenCalledTimes(2);
-  });
-});
-
-// ── useStatements ─────────────────────────────────────────────────────────────
-
-const STATEMENT_ITEM = {
-  statementId: 'statements/9674/2026/2026-05.json',
-  cardLast4: '9674',
-  statementDate: '2026-05-01',
-  totalSpend: 26986712,
-  transactionCount: 41,
-  uploadedAt: '2026-06-01T00:00:00.000Z',
-};
-
-describe('useStatements', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-  });
-
-  it('returns items after the initial load', async () => {
-    mockApiFetch.mockResolvedValueOnce(
-      jsonResponse({ items: [STATEMENT_ITEM], nextCursor: null }),
-    );
-
-    const { result } = renderHook(() => useStatements());
-
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    expect(result.current.items).toHaveLength(1);
-    expect(result.current.items[0].cardLast4).toBe('9674');
-    expect(result.current.nextCursor).toBeNull();
-    expect(result.current.error).toBeNull();
-  });
-
-  it('deleteStatement calls DELETE and removes the item from the list', async () => {
-    mockApiFetch
-      .mockResolvedValueOnce(
-        jsonResponse({ items: [STATEMENT_ITEM], nextCursor: null }),
-      )
-      .mockResolvedValueOnce(new Response('', { status: 200 }));
-
-    const { result } = renderHook(() => useStatements());
-
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.items).toHaveLength(1);
-
-    await act(async () => {
-      await result.current.deleteStatement(STATEMENT_ITEM.statementId);
-    });
-
-    const deleteCalls = (mockApiFetch.mock.calls as Array<[string, RequestInit]>).filter(
-      ([, init]) => init?.method === 'DELETE',
-    );
-    expect(deleteCalls).toHaveLength(1);
-    expect(deleteCalls[0][0]).toContain(
-      encodeURIComponent(STATEMENT_ITEM.statementId),
-    );
-
-    // Item optimistically removed from list.
-    expect(result.current.items).toHaveLength(0);
-  });
-
-  it('loadMore fetches with cursor and appends items', async () => {
-    const ITEM_2 = {
-      ...STATEMENT_ITEM,
-      statementId: 'statements/9674/2025/2025-12.json',
-      statementDate: '2025-12-01',
-    };
-    const CURSOR = 'eyJrZXkiOiAic3RhdGVtZW50cy85Njc0LzIwMjYvMjAyNi0wNS5qc29uIn0=';
-
-    mockApiFetch
-      .mockResolvedValueOnce(
-        jsonResponse({ items: [STATEMENT_ITEM], nextCursor: CURSOR }),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({ items: [ITEM_2], nextCursor: null }),
-      );
-
-    const { result } = renderHook(() => useStatements());
-
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.items).toHaveLength(1);
-    expect(result.current.nextCursor).toBe(CURSOR);
-
-    act(() => {
-      result.current.loadMore();
-    });
-
-    await waitFor(() => expect(result.current.items).toHaveLength(2));
-
-    // Second call must include cursor param.
-    const loadMoreUrl = (mockApiFetch.mock.calls as Array<[string]>)[1][0];
-    expect(loadMoreUrl).toContain('cursor=');
-    expect(result.current.nextCursor).toBeNull();
   });
 });

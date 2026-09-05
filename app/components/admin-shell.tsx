@@ -12,11 +12,9 @@ import {
 import {
   BarChart3,
   ChevronDown,
-  FileText,
   LogOut,
   MoreHorizontal,
   ShieldCheck,
-  UploadCloud,
   X,
 } from 'lucide-react';
 
@@ -24,25 +22,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from './theme-toggle';
 import { DashboardNav } from './dashboard-nav';
-
-const navItems = [
-  {
-    href: '/upload',
-    label: 'Upload',
-    description: 'Parse PDF',
-    icon: UploadCloud,
-  },
-  {
-    href: '/statements',
-    label: 'Statements',
-    description: 'Saved months',
-    icon: FileText,
-  },
-] as const;
-
-function isActive(pathname: string, href: string) {
-  return href === '/' ? pathname === '/' : pathname.startsWith(href);
-}
+import { DEFAULT_DASHBOARD_HREF } from '@/frontend/lib/dashboard-routes';
 
 function initialsFor(email: string) {
   const [name] = email.split('@');
@@ -122,45 +102,7 @@ function SidebarContent({
               onNavigate={onNavigate}
             />
           </Suspense>
-          {navItems.map((item) => {
-            const active = isActive(pathname, item.href);
-            const Icon = item.icon;
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  onClick={onNavigate}
-                  aria-current={active ? 'page' : undefined}
-                  title={collapsed ? item.label : undefined}
-                  className={cn(
-                    'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                    collapsed && 'justify-center px-2',
-                    active
-                      ? 'bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400'
-                      : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-white/5 dark:hover:text-white',
-                  )}
-                >
-                  <Icon
-                    className={cn(
-                      'size-5 shrink-0',
-                      active
-                        ? 'text-brand-500 dark:text-brand-400'
-                        : 'text-gray-500 group-hover:text-gray-700 dark:text-gray-400 dark:group-hover:text-gray-300',
-                    )}
-                    aria-hidden
-                  />
-                  {!collapsed ? (
-                    <span className="min-w-0">
-                      <span className="block truncate">{item.label}</span>
-                      <span className="block truncate text-xs font-normal text-gray-500 dark:text-gray-400">
-                        {item.description}
-                      </span>
-                    </span>
-                  ) : null}
-                </Link>
-              </li>
-            );
-          })}
+
         </ul>
       </nav>
     </div>
@@ -252,35 +194,13 @@ function UserDropdown({
           <ul className="flex flex-col gap-1 border-y border-gray-200 py-3 dark:border-gray-800">
             <li>
               <Link
-                href="/upload"
-                role="menuitem"
-                className={itemClassName}
-                onClick={() => setOpen(false)}
-              >
-                <UploadCloud className={iconClassName} aria-hidden />
-                Upload statement
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="/statements"
-                role="menuitem"
-                className={itemClassName}
-                onClick={() => setOpen(false)}
-              >
-                <FileText className={iconClassName} aria-hidden />
-                Statements
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="/"
+                href={DEFAULT_DASHBOARD_HREF}
                 role="menuitem"
                 className={itemClassName}
                 onClick={() => setOpen(false)}
               >
                 <ShieldCheck className={iconClassName} aria-hidden />
-                Spending dashboard
+                Cost Explorer
               </Link>
             </li>
           </ul>

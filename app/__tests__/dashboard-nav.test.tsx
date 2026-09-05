@@ -142,19 +142,14 @@ describe('DashboardNav accessibility interactions', () => {
 });
 
 describe('AdminShell navigation integration', () => {
-  it('preserves the existing top-level Upload and Statements utilities', () => {
-    render(
-      <AdminShell email="huy@example.com" signOutAction={vi.fn()}>
-        <main>Content</main>
-      </AdminShell>,
-    );
-
-    const desktopNavigation = screen.getAllByRole('navigation')[0];
-    expect(
-      within(desktopNavigation).getByRole('link', { name: /Upload/ }),
-    ).toHaveAttribute('href', '/upload');
-    expect(
-      within(desktopNavigation).getByRole('link', { name: /Statements/ }),
-    ).toHaveAttribute('href', '/statements');
+  it('removes standalone utilities from both sidebar and account menu', async () => {
+    render(<AdminShell email="huy@example.com" signOutAction={vi.fn()}><main>Content</main></AdminShell>);
+    const navigation = screen.getAllByRole('navigation')[0];
+    expect(within(navigation).queryByRole('link', { name: /Upload/ })).not.toBeInTheDocument();
+    expect(within(navigation).queryByRole('link', { name: /Statements/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /huy@example.com/i }));
+    const menu = screen.getByRole('menu');
+    expect(within(menu).queryByRole('menuitem', { name: /Upload|Statements/ })).not.toBeInTheDocument();
+    expect(within(menu).getByRole('menuitem', { name: 'Cost Explorer' })).toHaveAttribute('href', '/aws/cost-explorer');
   });
 });
