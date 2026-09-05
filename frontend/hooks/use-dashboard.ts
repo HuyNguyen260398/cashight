@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '@/frontend/api/client';
 import { getPublicConfig } from '@/frontend/auth/config';
 import { AggregatedViewSchema } from '@cashight/domain/schemas';
@@ -43,7 +43,11 @@ export function useDashboard(
   data: AggregatedView | null;
   loading: boolean;
   error: string | null;
+  refresh: () => void;
 } {
+  const [refreshEpoch, setRefreshEpoch] = useState(0);
+  const refresh = useCallback(() => setRefreshEpoch((value) => value + 1), []);
+
   // Track what was last successfully (or erroneously) loaded.
   const [loaded, setLoaded] = useState<LoadedState>({
     requestKey: null,
@@ -53,7 +57,7 @@ export function useDashboard(
 
   // Stable string key for the current request. `bank` is included so switching
   // banks refetches rather than reusing the previous view.
-  const requestKey = spec ? JSON.stringify({ spec, bank }) : null;
+  const requestKey = spec ? JSON.stringify({ spec, bank, refreshEpoch }) : null;
 
   // Loading is true when we have a request that hasn't been loaded yet.
   const loading = requestKey !== null && loaded.requestKey !== requestKey;
@@ -97,6 +101,7 @@ export function useDashboard(
   // request is loading, the previous data is stale — return null instead.
   const isCurrent = loaded.requestKey === requestKey;
   return {
+    refresh,
     data: isCurrent ? loaded.data : null,
     loading,
     error: isCurrent ? loaded.error : null,

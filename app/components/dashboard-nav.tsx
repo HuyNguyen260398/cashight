@@ -9,19 +9,19 @@ import { cn } from '@/lib/utils';
 
 const dashboardGroups = [
   {
-    id: 'bank-statements',
-    label: 'Bank statements',
-    children: [
-      { label: 'TPB', href: '/?bank=TPBank', bank: 'TPBank' },
-      { label: 'VIB', href: '/?bank=VIB', bank: 'VIB' },
-    ],
-  },
-  {
     id: 'aws-budget',
     label: 'AWS budget',
     children: [
       { label: 'Cost Explorer', href: '/aws/cost-explorer/' },
       { label: 'Billing Invoice', href: '/aws/billing-invoice/' },
+    ],
+  },
+  {
+    id: 'bank-statements',
+    label: 'Bank statements',
+    children: [
+      { label: 'TPB', href: '/?bank=TPBank', bank: 'TPBank' },
+      { label: 'VIB', href: '/?bank=VIB', bank: 'VIB' },
     ],
   },
 ] as const;
@@ -45,27 +45,29 @@ function leafIsActive(
   return pathname === leaf.href || pathname.startsWith(leaf.href);
 }
 
-export function DashboardNav({
-  pathname,
-  collapsed,
-  onNavigate,
-}: {
+type DashboardNavProps = {
   pathname: string;
   collapsed: boolean;
   onNavigate?: () => void;
-}) {
+};
+
+export function DashboardNav(props: DashboardNavProps) {
   const searchParams = useSearchParams();
   const bank = searchParams.get('bank');
+  return <DashboardNavTree key={`${props.pathname}:${bank}`} {...props} bank={bank} />;
+}
+
+function DashboardNavTree({ pathname, collapsed, onNavigate, bank }: DashboardNavProps & { bank: string | null }) {
   const activeGroup = activeGroupFor(pathname, bank);
   const [dashboardOpen, setDashboardOpen] = useState(true);
   const [openGroups, setOpenGroups] = useState<Record<GroupId, boolean>>({
-    'bank-statements': false,
-    'aws-budget': false,
+    'bank-statements': true,
+    'aws-budget': true,
   });
   const [flyoutOpen, setFlyoutOpen] = useState(false);
   const flyoutButtonRef = useRef<HTMLButtonElement>(null);
   const id = useId();
-  const dashboardExpanded = dashboardOpen || activeGroup !== null;
+  const dashboardExpanded = dashboardOpen;
 
   useEffect(() => {
     if (!flyoutOpen) return;
@@ -173,7 +175,7 @@ export function DashboardNav({
       {dashboardExpanded ? (
         <div id={`${id}-dashboard-groups`} className="ml-4 mt-1 border-l border-gray-200 pl-3 dark:border-gray-800">
           {dashboardGroups.map((group) => {
-            const expanded = openGroups[group.id] || activeGroup === group.id;
+            const expanded = openGroups[group.id];
             return (
               <div key={group.id}>
                 <button

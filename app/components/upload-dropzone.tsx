@@ -15,6 +15,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { buttonVariants } from '@/components/ui/button';
+import { bankShortName, type BankCode } from '@/lib/banks';
+import type { UploadJob } from '@/frontend/api/contracts';
 import { useUploadJob } from '@/frontend/hooks/use-upload-job';
 
 /**
@@ -25,10 +27,13 @@ import { useUploadJob } from '@/frontend/hooks/use-upload-job';
  *   4. Poll GET /uploads/:jobId until terminal state
  *
  * On CONFLICT the user is prompted to confirm before force-overwriting.
- * No onParsed callback — the component manages its own lifecycle.
+ * A success callback lets the dashboard refresh metadata and select the saved month.
  */
-export function UploadDropzone() {
-  const { state, start, reset } = useUploadJob();
+export function UploadDropzone({ bank, onSucceeded }: {
+  bank?: BankCode;
+  onSucceeded?: (job: UploadJob) => void;
+} = {}) {
+  const { state, start, reset } = useUploadJob(onSucceeded);
 
   const isWorking = state.phase === 'working';
 
@@ -94,7 +99,7 @@ export function UploadDropzone() {
         {...getRootProps()}
         className="cursor-pointer rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 p-8 text-center transition hover:border-brand-300 hover:bg-brand-25 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:border-brand-800 dark:hover:bg-brand-500/10 md:p-12"
       >
-        <input {...getInputProps()} />
+        <input {...getInputProps()} aria-label="Statement PDF" />
         {isWorking ? (
           <div className="flex flex-col items-center gap-3 text-gray-500 dark:text-gray-400">
             <Loader2 className="size-9 animate-spin text-brand-500" />
@@ -113,10 +118,10 @@ export function UploadDropzone() {
               <FileUp className="size-7" aria-hidden />
             </div>
             <p className="text-base font-semibold text-gray-900 dark:text-white/90">
-              Drag a TPBank statement PDF here
+              Drag a {bank ? bankShortName(bank) : 'TPB or VIB'} statement PDF here
             </p>
             <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-              or click to select a PDF file up to 5 MB
+              or click to select a PDF file up to 5 MB. The bank is detected automatically.
             </p>
             <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-success-50 px-3 py-1 text-xs font-medium text-success-700 dark:bg-success-500/10 dark:text-success-500">
               <ShieldCheck className="size-3.5" aria-hidden />

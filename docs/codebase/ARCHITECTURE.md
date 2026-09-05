@@ -4,6 +4,20 @@
 > to a static Next.js SPA on CloudFront/S3 with a Lambda + API Gateway backend.
 > The Amplify app remains in standby until Phase 10 decommission.
 
+## Dashboard entry points and composition (Step 33, 2026-09-05)
+
+Normal login and bare `/` open `/aws/cost-explorer/`. The existing strict OIDC return allowlist, native-Cognito AWS capability check, and feature flags remain enforced. A Google session sees the existing reauthentication prompt on Cost Explorer; this navigation change grants no additional AWS access.
+
+The Dashboard menu starts fully expanded, with AWS budget (Cost Explorer, Billing Invoice) before Bank statements (TPB, VIB). Bank dashboards retain `/?bank=TPBank` and `/?bank=VIB`, including period query parameters and period-only bookmarks. The API still resolves an unspecified bank.
+
+`BankStatementDashboard` composes upload above existing spending analytics and statement history below. Upload/history remain available for empty or failed analytics. `useBankStatements` fetches all validated `/statements` metadata pages atomically; `statementRows` filters by the selected bank before the table sorts/paginates at 12 rows. History spans all uploaded months for that bank. Complete metadata also supplies initial-month selection and maps a successful upload job's statement ID to its detected bank/month.
+
+Successful uploads refresh client data and navigate to the saved statement's bank/month. Successful deletions update history and refresh analytics while retaining the selected period. Request generation/abort guards suppress stale loads, and upload callbacks cannot navigate a different active view. Refresh errors retain the previous complete metadata snapshot and offer retry. No raw statement bodies are fetched for history.
+
+Standalone Upload/Statements UI has been removed from the sidebar, account menu, and route pages. `/upload/` and `/statements/` remain protected static redirect pages for old bookmarks, preserving query context and pointing to `#statement-upload` and `#statement-history` respectively. Empty-state actions use those inline sections and bank-preserving latest-month links.
+
+See [Step 33](../plans/33-dashboard-consolidation.md) for exact files, verification results, operational limitations, and rollback scope. All backend contracts and persisted data are unchanged by this frontend update.
+
 ## Core Sections (Required)
 
 ### 1) Architectural Style

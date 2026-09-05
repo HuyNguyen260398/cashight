@@ -23,6 +23,8 @@ const requiredPages = [
   'out/auth/callback/index.html',
   'out/upload/index.html',
   'out/statements/index.html',
+  'out/aws/cost-explorer/index.html',
+  'out/aws/billing-invoice/index.html',
 ];
 
 let failed = false;

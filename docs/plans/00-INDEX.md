@@ -104,6 +104,12 @@ Add two AWS financial dashboards to the shipped serverless app. Establish stable
 
 ---
 
+### Phase 11 — Dashboard consolidation
+
+- [x] **[Step 33](./33-dashboard-consolidation.md)** — Cost Explorer default landing, expanded AWS-first navigation, and embedded bank-specific upload/history — depends on the shipped Steps 30–32 components. Implemented and verified on 2026-09-05: 954 unit/component tests passed, 1 skipped, and 19 browser tests passed.
+
+See [dashboard consolidation design](../superpowers/specs/2026-09-05-dashboard-consolidation-design.md). This update supersedes Step 30's bank-first ordering and standalone Upload/Statements utilities; its auth and workspace constraints remain in force.
+
 ## Step dependencies
 
 ```
@@ -126,6 +132,8 @@ Add two AWS financial dashboards to the shipped serverless app. Establish stable
 
 29 ──▶ 30 ──┬─▶ 31             (Cost Explorer after workspace/provider foundation)
              └─▶ 32             (Billing Invoice may run in parallel with 31)
+
+30–32 ──▶ 33                    (default landing and bank dashboard consolidation)
 ```
 
 Most steps are linear, but Step 04 (dashboard) and Step 05 (AI) could be parallelized once Step 03 is done if you want to context-switch. In Phase 4, Steps 12–16 are independent and can be tackled in any order (or parallel worktrees); the auth steps come last (Step 17 Google, then Step 18 Cognito which builds on it) because they gate the finished app, and Step 11 (deploy) comes after everything. In Phase 10, complete Step 30 first; Steps 31 and 32 are independent after that foundation and may run in parallel.
