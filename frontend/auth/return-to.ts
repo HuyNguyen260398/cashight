@@ -1,4 +1,6 @@
-export const OIDC_RETURN_ROUTES = ['/aws/cost-explorer/'] as const;
+import { DEFAULT_DASHBOARD_HREF } from '@/frontend/lib/dashboard-routes';
+
+export const OIDC_RETURN_ROUTES = [DEFAULT_DASHBOARD_HREF] as const;
 
 export type OidcReturnRoute = (typeof OIDC_RETURN_ROUTES)[number];
 
@@ -11,10 +13,10 @@ export function allowlistedOidcReturnTo(
     : null;
 }
 
-export function resolveOidcCallbackReturn(state: unknown): OidcReturnRoute | '/' {
-  if (!state || typeof state !== 'object' || Array.isArray(state)) return '/';
+export function resolveOidcCallbackReturn(state: unknown): OidcReturnRoute {
+  if (!state || typeof state !== 'object' || Array.isArray(state)) return DEFAULT_DASHBOARD_HREF;
   const returnTo = allowlistedOidcReturnTo(
     (state as { returnTo?: unknown }).returnTo,
   );
-  return returnTo ?? '/';
+  return returnTo ?? DEFAULT_DASHBOARD_HREF;
 }

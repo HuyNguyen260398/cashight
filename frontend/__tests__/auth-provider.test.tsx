@@ -226,10 +226,10 @@ describe('AuthCallbackPage', () => {
     });
   });
 
-  it('calls signinRedirectCallback and redirects to / on success', async () => {
+  it('calls signinRedirectCallback and redirects to Cost Explorer on success', async () => {
     mockSigninRedirectCallback.mockResolvedValue(undefined);
     render(<CallbackPage />);
-    await waitFor(() => expect(window.location.href).toBe('/'));
+    await waitFor(() => expect(window.location.href).toBe('/aws/cost-explorer/'));
     expect(mockSigninRedirectCallback).toHaveBeenCalledOnce();
   });
 
@@ -248,7 +248,7 @@ describe('AuthCallbackPage', () => {
       state: { returnTo: 'https://attacker.example/callback' },
     });
     render(<CallbackPage />);
-    await waitFor(() => expect(window.location.href).toBe('/'));
+    await waitFor(() => expect(window.location.href).toBe('/aws/cost-explorer/'));
   });
 
   it('redirects to /signin?error=callback when callback fails', async () => {

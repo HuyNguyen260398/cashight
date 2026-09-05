@@ -27,7 +27,6 @@ describe('DashboardNav hierarchy and active routes', () => {
 
   it('renders the approved bank and AWS hierarchy with exact leaf links', async () => {
     search = 'bank=VIB';
-    const user = userEvent.setup();
     render(<DashboardNav pathname="/" collapsed={false} />);
 
     expect(
@@ -50,7 +49,9 @@ describe('DashboardNav hierarchy and active routes', () => {
     );
     expect(screen.queryByText('All banks')).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'AWS budget' }));
+    expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual([
+      'Cost Explorer', 'Billing Invoice', 'TPB', 'VIB',
+    ]);
     expect(screen.getByRole('link', { name: 'Cost Explorer' })).toHaveAttribute(
       'href',
       '/aws/cost-explorer',
@@ -58,6 +59,18 @@ describe('DashboardNav hierarchy and active routes', () => {
     expect(
       screen.getByRole('link', { name: 'Billing Invoice' }),
     ).toHaveAttribute('href', '/aws/billing-invoice');
+  });
+
+  it('allows collapsing active ancestors and reopens them for another route', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<DashboardNav pathname="/aws/cost-explorer/" collapsed={false} />);
+    await user.click(screen.getByRole('button', { name: 'AWS budget' }));
+    expect(screen.queryByRole('link', { name: 'Cost Explorer' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Dashboard' }));
+    expect(screen.getByRole('button', { name: 'Dashboard' })).toHaveAttribute('aria-expanded', 'false');
+    rerender(<DashboardNav pathname="/aws/billing-invoice/" collapsed={false} />);
+    expect(screen.getByRole('link', { name: 'Billing Invoice' })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'TPB' })).toBeVisible();
   });
 
   it('automatically expands and marks an active AWS descendant', () => {
@@ -118,6 +131,7 @@ describe('DashboardNav accessibility interactions', () => {
       />,
     );
 
+    await user.click(screen.getByRole('button', { name: 'Bank statements' }));
     await user.click(screen.getByRole('button', { name: 'Bank statements' }));
     expect(onNavigate).not.toHaveBeenCalled();
     const tpbLink = screen.getByRole('link', { name: 'TPB' });
