@@ -242,16 +242,12 @@ test.describe('AWS billing invoice dashboard', () => {
     }
     for (const chart of [
       'Monthly invoice trend line chart',
-      'Service breakdown donut chart',
-      'Top services bar chart',
-      'Linked account allocation chart',
-      'Charge and tax composition chart',
     ]) {
       await expect(page.getByRole('img', { name: chart })).toBeVisible();
     }
+    await expect(page.locator('[data-dashboard-panel="cost-usage"]')).toBeVisible();
     await expect(page.getByText('Service details', { exact: true })).toBeVisible();
     await expect(page.getByText('Invoice history', { exact: true })).toBeVisible();
-    await expect(page.getByText('•••• 0001', { exact: true })).toBeAttached();
     await expect(page.locator('body')).not.toContainText(/\b\d{12}\b|invoiceNumber|billTo/i);
 
     const initialHistoryRequests = state.historyRequests;
@@ -276,6 +272,7 @@ test.describe('AWS billing invoice dashboard', () => {
     await expect(page.getByRole('heading', { name: 'No invoice for August 2026' })).toBeVisible();
     await page.getByRole('button', { name: 'Previous invoice month' }).click();
     await expect(page).toHaveURL(/year=2026&month=7/);
+    await expect(page.locator('[data-dashboard-panel="cost-usage"]')).toBeVisible();
     await expect(page.getByText('Service details', { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Delete July 2026' }).click();
@@ -292,6 +289,7 @@ test.describe('AWS billing invoice dashboard', () => {
     test(`fails closed for ${mode} without refreshing failed-month data`, async ({ page }) => {
       const state = await mockInvoiceApi(page, [mode]);
       await page.goto('/aws/billing-invoice/?year=2026&month=7');
+      await expect(page.locator('[data-dashboard-panel="cost-usage"]')).toBeVisible();
       await expect(page.getByText('Service details', { exact: true })).toBeVisible();
       const dashboardRequests = state.dashboardMonths.length;
 

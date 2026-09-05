@@ -106,7 +106,7 @@ Add two AWS financial dashboards to the shipped serverless app. Establish stable
 
 ### Phase 11 — Dashboard consolidation
 
-- [ ] **[Step 33](./33-dashboard-consolidation.md)** — Cost Explorer default landing, expanded AWS-first navigation, and embedded bank-specific upload/history — depends on the shipped Steps 30–32 components. Design and implementation plan proposed on 2026-09-05; implementation has not started.
+- [x] **[Step 33](./33-dashboard-consolidation.md)** — Cost Explorer default landing, expanded AWS-first navigation, and embedded bank-specific upload/history — depends on the shipped Steps 30–32 components. Implemented and verified on 2026-09-05: 954 unit/component tests passed, 1 skipped, and 19 browser tests passed.
 
 See [dashboard consolidation design](../superpowers/specs/2026-09-05-dashboard-consolidation-design.md). This update supersedes Step 30's bank-first ordering and standalone Upload/Statements utilities; its auth and workspace constraints remain in force.
 

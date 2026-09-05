@@ -1,7 +1,7 @@
 # Dashboard consolidation design
 
 Date: 2026-09-05
-Status: Proposed for review; implementation is not part of this planning task.
+Status: Implemented and verified on 2026-09-05 following user-authorized inline execution.
 Implementation plan: [Step 33](../../plans/33-dashboard-consolidation.md)
 
 ## Intent and requirements
@@ -82,7 +82,7 @@ Use the complete metadata list with `initialPeriodHref()` so a selected bank who
 
 ## Upload and mutation behavior
 
-Recommended assumption pending optional user feedback: uploading the other bank's PDF is allowed; parser-detected bank remains authoritative and successful upload opens that bank and month. Do not infer the bank from the filename or stamp the current bank onto parser output.
+Implemented behavior from the authorized plan: uploading the other bank's PDF is allowed; parser-detected bank remains authoritative and successful upload opens that bank and month. Do not infer the bank from the filename or stamp the current bank onto parser output.
 
 Pass an optional success callback through `UploadDropzone` and `useUploadJob` to the existing upload engine. On success, refresh metadata and analytics. Match `job.statementId` to the refreshed metadata to obtain bank and statement date, then navigate to that bank/month. If the ID is absent or not yet visible, stay on the current selection, show that the statement was saved but its view could not be located, and provide retry. A refresh error must not turn a successful upload into a failed upload or invite accidental duplicate submission.
 

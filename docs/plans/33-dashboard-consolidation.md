@@ -1,6 +1,6 @@
 # Dashboard Consolidation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Make AWS Cost Explorer the default dashboard and integrate bank-specific upload and statement history into TPB and VIB dashboards.
 
@@ -10,7 +10,7 @@
 
 **Spec:** [Dashboard consolidation design](../superpowers/specs/2026-09-05-dashboard-consolidation-design.md)
 
-**Status:** Proposed; planning only. Tasks below have not been implemented or tested.
+**Status:** Implemented and verified on 2026-09-05 using inline execution. See the execution record below.
 
 **Prerequisites:** Shipped Steps 30–32 navigation, auth, Cost Explorer, and Billing Invoice components. The index still has unchecked entries for those steps; inspect actual code rather than interpreting tracker state as missing implementation. Baseline inspected at `f8a844d` on 2026-09-05.
 
@@ -36,7 +36,7 @@
 | R6: All Dashboard descendants visible initially | Task 1 | Initial disclosure state, pointer/keyboard, mobile/flyout tests |
 | R7: Retire standalone utilities | Tasks 4, 5 | No live utility links; redirect-only legacy routes |
 
-Defaults for review: history spans all months for the selected bank; legacy utility URLs redirect into the integrated sections; a PDF from the other bank opens its parser-detected bank/month after success. These are proposed choices, not separately confirmed preferences.
+Implemented defaults: history spans all months for the selected bank; legacy utility URLs redirect into the integrated sections; a PDF from the other bank opens its parser-detected bank/month after success. These choices were included in the plan the user authorized for inline execution.
 
 Keep existing bank URLs (`/?bank=TPBank`, `/?bank=VIB`) instead of adding a new route. Load all metadata pages and reuse the table's 12-row pagination instead of adding a bank-filtered backend endpoint. See the design for tradeoffs and error behavior.
 
@@ -74,7 +74,7 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
 
 **Interfaces:** Export `DEFAULT_DASHBOARD_HREF`, `hasBankDashboardContext(search: URLSearchParams): boolean`, `statementDashboardHref(row: Pick<StatementRow, 'bank' | 'year' | 'month'>): string`, and `legacyStatementHref(search: URLSearchParams, section: 'statement-upload' | 'statement-history'): string` from the route helper. Import `StatementRow` as a type only and use domain bank helpers for normalization/defaults. `resolveOidcCallbackReturn(state)` returns the existing allowlisted route union with Cost Explorer as its fallback.
 
-- [ ] Add behavior tests before changing routing:
+- [x] Add behavior tests before changing routing:
 
   ```ts
   expect(resolveOidcCallbackReturn(undefined)).toBe('/aws/cost-explorer/');
@@ -92,8 +92,8 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
   ```
 
   Add null, primitive, array, malformed-state, valid-return, invalid-bank, and bare compatibility URL cases. Existing external-return callback assertions must now expect Cost Explorer instead of `/`.
-- [ ] Run `pnpm test frontend/__tests__/dashboard-routes.test.ts frontend/__tests__/return-to.test.ts frontend/__tests__/auth-provider.test.tsx`; confirm failures correspond to changed behavior.
-- [ ] Implement URL helpers and callback fallback:
+- [x] Run `pnpm test frontend/__tests__/dashboard-routes.test.ts frontend/__tests__/return-to.test.ts frontend/__tests__/auth-provider.test.tsx`; confirm failures correspond to changed behavior.
+- [x] Implement URL helpers and callback fallback:
 
   ```ts
   export const DEFAULT_DASHBOARD_HREF = '/aws/cost-explorer/' as const;
@@ -106,8 +106,8 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
   ```
 
   Reuse the existing allowlist for callback state; do not add arbitrary `returnTo` support or change authentication provider permissions.
-- [ ] Update navigation tests to assert visible initial links in order `Cost Explorer`, `Billing Invoice`, `TPB`, `VIB` without expansion clicks. Cover collapse/reopen of Dashboard and the active group, active descendants, flyout Escape/focus return, mobile leaf close, and trailing-slash route expectations. Existing tests contain assumptions about initially closed groups and some slashless AWS hrefs; update those intentionally.
-- [ ] Put the AWS group first and initialize both groups to true. Replace unconditional `state || activeGroup` expansion with explicit user-controlled state. Use a route identity key (`pathname` plus parsed bank) for the disclosure state so a new route resets to expanded defaults; on an unchanged route clicks must collapse normally. Keep flyout open state independently false initially.
+- [x] Update navigation tests to assert visible initial links in order `Cost Explorer`, `Billing Invoice`, `TPB`, `VIB` without expansion clicks. Cover collapse/reopen of Dashboard and the active group, active descendants, flyout Escape/focus return, mobile leaf close, and trailing-slash route expectations. Existing tests contain assumptions about initially closed groups and some slashless AWS hrefs; update those intentionally.
+- [x] Put the AWS group first and initialize both groups to true. Replace unconditional `state || activeGroup` expansion with explicit user-controlled state. Use a route identity key (`pathname` plus parsed bank) for the disclosure state so a new route resets to expanded defaults; on an unchanged route clicks must collapse normally. Keep flyout open state independently false initially.
 
   ```ts
   const initiallyOpen = { 'aws-budget': true, 'bank-statements': true };
@@ -115,7 +115,7 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
   // pathname + bank. Its route key changes only on a navigation identity change.
   ```
 
-- [ ] Run the three frontend tests above and `pnpm test app/__tests__/dashboard-nav.test.tsx`; run lint/build before the task commit. Suggested commit: `feat(navigation): default to Cost Explorer and expand AWS-first menus`.
+- [x] Run the three frontend tests above and `pnpm test app/__tests__/dashboard-nav.test.tsx`; run lint/build before the task commit. Suggested commit: `feat(navigation): default to Cost Explorer and expand AWS-first menus`.
 
 ### Task 2: Complete metadata loading and bank-isolated history state
 
@@ -123,7 +123,7 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
 
 **Interfaces:** `loadStatementHistory(signal?: AbortSignal): Promise<StatementListItem[]>`; `statementRows(items: StatementListItem[], bank: BankCode): StatementRow[]`. `useBankStatements()` returns `{ items: StatementListItem[]; loading: boolean; refreshing: boolean; error: string | null; refresh: () => Promise<StatementListItem[]>; deleteStatement: (id: string) => Promise<void> }`. Extend the existing `useDashboard(spec, bank)` result with `refresh: () => void` without changing existing parameters.
 
-- [ ] Write cursor traversal tests with synthetic metadata. In a Vitest test, mock `apiFetch` and `getPublicConfig`, then use the real response schema:
+- [x] Write cursor traversal tests with synthetic metadata. In a Vitest test, mock `apiFetch` and `getPublicConfig`, then use the real response schema:
 
   ```ts
   const row = (bank: 'TPBank' | 'VIB', statementId: string) => ({
@@ -142,8 +142,8 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
   ```
 
   Also test duplicate IDs, missing bank -> TPBank, invalid payload, network failure on later page, repeated non-null cursor rejection, and cancellation. Do not return a partial list after any page fails.
-- [ ] Run `pnpm test frontend/__tests__/statement-history.test.ts` and observe the expected failure.
-- [ ] Implement cursor exhaustion with schema validation and an abort signal on every `apiFetch`. Build a fresh URL for each cursor; never interpret cursor contents. Accumulate in a Map keyed by statementId and publish only after `nextCursor === null`.
+- [x] Run `pnpm test frontend/__tests__/statement-history.test.ts` and observe the expected failure.
+- [x] Implement cursor exhaustion with schema validation and an abort signal on every `apiFetch`. Build a fresh URL for each cursor; never interpret cursor contents. Accumulate in a Map keyed by statementId and publish only after `nextCursor === null`.
 
   ```ts
   const url = new URL(`${getPublicConfig().apiBaseUrl}/statements`);
@@ -154,8 +154,8 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
   // Convert year/month from statementDate only in the row mapping helper.
   ```
 
-- [ ] Add hook tests with deferred responses: refresh B wins over refresh A; unmount aborts fetches; delete cancels older loads; failed DELETE retains the row; a refresh failure preserves last complete metadata and exposes an error. Implement request-generation guards and AbortController cleanup. After successful deletion invalidate prior loads and remove the ID immediately; reject deletion errors for the parent/table to report. A later refresh error must be surfaced separately from a DELETE error.
-- [ ] Test `useDashboard.refresh()` refetching an unchanged bank and period. Add a refresh epoch to the existing request key and effect dependencies; retain current stale-bank/period suppression:
+- [x] Add hook tests with deferred responses: refresh B wins over refresh A; unmount aborts fetches; delete cancels older loads; failed DELETE retains the row; a refresh failure preserves last complete metadata and exposes an error. Implement request-generation guards and AbortController cleanup. After successful deletion invalidate prior loads and remove the ID immediately; reject deletion errors for the parent/table to report. A later refresh error must be surfaced separately from a DELETE error.
+- [x] Test `useDashboard.refresh()` refetching an unchanged bank and period. Add a refresh epoch to the existing request key and effect dependencies; retain current stale-bank/period suppression:
 
   ```ts
   const [refreshEpoch, setRefreshEpoch] = useState(0);
@@ -163,7 +163,7 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
   const requestKey = spec ? JSON.stringify({ spec, bank, refreshEpoch }) : null;
   ```
 
-- [ ] Run `pnpm test frontend/__tests__/statement-history.test.ts frontend/__tests__/use-bank-statements.test.tsx frontend/__tests__/use-dashboard.test.tsx`; run lint, typecheck, and build before commit. Suggested commit: `feat(statements): load complete history and refresh client dashboard data`.
+- [x] Run `pnpm test frontend/__tests__/statement-history.test.ts frontend/__tests__/use-bank-statements.test.tsx frontend/__tests__/use-dashboard.test.tsx`; run lint, typecheck, and build before commit. Suggested commit: `feat(statements): load complete history and refresh client dashboard data`.
 
 ### Task 3: Embedded upload callback and bank-aware copy
 
@@ -171,7 +171,7 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
 
 **Interfaces:** `useUploadJob(onSucceeded?: (job: UploadJob) => void)` retains its existing state/start/reset result. `UploadDropzone({ bank, onSucceeded }: { bank?: BankCode; onSucceeded?: (job: UploadJob) => void })` supports existing no-prop callers until Task 4. The callback is synchronous at the engine boundary; page-owned async refresh catches its own errors.
 
-- [ ] Extend upload-flow tests to assert callback exactly once on SUCCEEDED and never on conflict/failure. Retain all existing presign headers, checksum, timeout, and forced-overwrite checks. Use the existing flow fixture/harness and a spy callback; assert its payload is the final parsed job:
+- [x] Extend upload-flow tests to assert callback exactly once on SUCCEEDED and never on conflict/failure. Retain all existing presign headers, checksum, timeout, and forced-overwrite checks. Use the existing flow fixture/harness and a spy callback; assert its payload is the final parsed job:
 
   ```ts
   const onSucceeded = vi.fn();
@@ -181,8 +181,8 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
   expect(onSucceeded).toHaveBeenCalledWith(expect.objectContaining({ state: 'SUCCEEDED' }));
   ```
 
-- [ ] Run `pnpm test frontend/__tests__/upload-flow.test.tsx` before implementing the callback change.
-- [ ] Forward the callback using stable options and the already-supported engine API:
+- [x] Run `pnpm test frontend/__tests__/upload-flow.test.tsx` before implementing the callback change.
+- [x] Forward the callback using stable options and the already-supported engine API:
 
   ```ts
   const options = useMemo(
@@ -193,8 +193,8 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
   ```
 
   Add the React `useMemo` import and `UploadJob` type to the hook's existing imports. Pass the dropzone callback to `useUploadJob(onSucceeded)`. Do not change the shared invoice upload engine unless a regression proves a change necessary.
-- [ ] Replace TPBank-only uploader text with `bank ? bankShortName(bank) : 'TPB or VIB'` and explain that issuer is detected automatically. Add an accessible input label, retain the 5 MB/PDF restrictions, progress/status/error feedback, duplicate confirmation, and automatic reset. Test TPB, VIB, and unspecified-bank copy.
-- [ ] Run `pnpm test frontend/__tests__/upload-flow.test.tsx app/__tests__/upload-dropzone.test.tsx frontend/__tests__/aws-invoice-flow.test.tsx`; run lint/typecheck/build before commit. Suggested commit: `feat(upload): support embedded bank-aware statement uploads`.
+- [x] Replace TPBank-only uploader text with `bank ? bankShortName(bank) : 'TPB or VIB'` and explain that issuer is detected automatically. Add an accessible input label, retain the 5 MB/PDF restrictions, progress/status/error feedback, duplicate confirmation, and automatic reset. Test TPB, VIB, and unspecified-bank copy.
+- [x] Run `pnpm test frontend/__tests__/upload-flow.test.tsx app/__tests__/upload-dropzone.test.tsx frontend/__tests__/aws-invoice-flow.test.tsx`; run lint/typecheck/build before commit. Suggested commit: `feat(upload): support embedded bank-aware statement uploads`.
 
 ### Task 4: Compose both bank dashboards and refresh mutations
 
@@ -202,8 +202,8 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
 
 **Interfaces:** `BankStatementDashboard()` reads query state and owns `useBankStatements()` plus `useDashboard()`. `BankStatementHistory({ items, bank, loading, error, onRetry, onDelete })` accepts metadata items, `BankCode | null`, booleans/error state, `onRetry: () => void`, and `onDelete: (id: string) => Promise<void>`. It uses `statementRows()` and never renders all-bank rows. Extend empty-period props with `bank: BankCode`; empty-state upload links use `#statement-upload`.
 
-- [ ] Add failing composition tests in jsdom, mocking hooks and Next navigation. Assert for both banks that upload and history exist when analytics is loaded, empty, loading, or failed. Mock mixed-bank records, switch query and API selectedBank, and verify no opposite-bank row flash. With an unspecified bank and pending API response, assert no history rows before resolution.
-- [ ] Add table link regression coverage:
+- [x] Add failing composition tests in jsdom, mocking hooks and Next navigation. Assert for both banks that upload and history exist when analytics is loaded, empty, loading, or failed. Mock mixed-bank records, switch query and API selectedBank, and verify no opposite-bank row flash. With an unspecified bank and pending API response, assert no history rows before resolution.
+- [x] Add table link regression coverage:
 
   ```tsx
   render(<StatementsTable rows={[{
@@ -217,8 +217,8 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
   ```
 
   Test 13 selected-bank rows plus other-bank rows to prove filtering precedes 12-row pagination; changing banks resets to page 1. Test sort order and deletion cancellation.
-- [ ] Run the five new app tests and initial-period tests, confirming the new assertions fail before implementation.
-- [ ] Extract existing bank logic and skeleton from `app/page.tsx`. Keep `ProtectedRoute` outside the child owning all API hooks. The home dispatcher renders Cost Explorer navigation only when bank context is absent:
+- [x] Run the five new app tests and initial-period tests, confirming the new assertions fail before implementation.
+- [x] Extract existing bank logic and skeleton from `app/page.tsx`. Keep `ProtectedRoute` outside the child owning all API hooks. The home dispatcher renders Cost Explorer navigation only when bank context is absent:
 
   ```tsx
   function HomeInner() {
@@ -234,7 +234,7 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
   ```
 
   Remove the duplicate one-page fetch from the extracted bank component. Run `initialPeriodHref(items, search, requestedBank)` after complete metadata loads; preserve `window.location.hash` on replacement. An initial fetch failure renders an error with retry rather than “No statements.” Recalculate initial-period selection when bank/query changes; do not retain the old one-shot `fetchCompleted` behavior across banks.
-- [ ] Compose sections, with bank scoping before table rendering:
+- [x] Compose sections, with bank scoping before table rendering:
 
   ```tsx
   <section id="statement-upload" className="scroll-mt-24" aria-label="Upload statement">
@@ -251,11 +251,11 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
   ```
 
   `effectiveBank` is the explicit parsed bank first, otherwise `view.selectedBank`; only a confirmed empty collection may fall back to `DEFAULT_BANK`. Do not use the last bank's view while loading another one. History's section ID is `statement-history`; render its own empty/loading/error/retry states. Use the domain short name in the bank heading. Keep bank and period selectors functional.
-- [ ] Implement upload completion as page-owned async work, catching all refresh errors. Call `useBankStatements().refresh()`, find the returned metadata by `job.statementId`, convert via `statementRows`, navigate with `statementDashboardHref`, and trigger `useDashboard().refresh()` even if the URL is unchanged. If ID/metadata is missing or refresh fails, retain the current URL and show a saved-but-view-not-refreshed message with retry; never throw back into the upload engine.
-- [ ] Implement delegated deletion: await DELETE, remove metadata through the hook, then refresh analytics. Keep current bank/period even when emptied. A failed DELETE propagates to the existing table catch so it retains the row/dialog and shows one failure toast. A successful DELETE shows one success toast; later analytics refresh failure uses the dashboard error UI. Never rely on the table's fallback `router.refresh()` for this flow.
-- [ ] Update table href to `statementDashboardHref(row)` and empty-state links to inline anchors. Build “Go to latest” with explicit bank, e.g. `/?bank=${bank}`; it must not open Cost Explorer.
-- [ ] Test same-month overwrite refresh, another-month upload navigation, cross-bank upload navigation, missing completion ID, history refresh failure, stale async work after unmount, deleting last statement, and API-selected bank on period-only URLs. Guard late upload completion work after bank navigation/unmount with a generation/ref cleanup so old callbacks do not redirect a new page.
-- [ ] Run `pnpm test app/__tests__/bank-statement-dashboard.test.tsx app/__tests__/bank-statement-history.test.tsx app/__tests__/home-routing.test.tsx app/__tests__/statements-table.test.tsx frontend/__tests__/initial-period.test.ts app/__tests__/bank-selector.test.tsx app/__tests__/period-selector.test.tsx`; run lint/typecheck/build before commit. Suggested commit: `feat(dashboard): integrate bank uploads and filtered statement history`.
+- [x] Implement upload completion as page-owned async work, catching all refresh errors. Call `useBankStatements().refresh()`, find the returned metadata by `job.statementId`, convert via `statementRows`, navigate with `statementDashboardHref`, and trigger `useDashboard().refresh()` even if the URL is unchanged. If ID/metadata is missing or refresh fails, retain the current URL and show a saved-but-view-not-refreshed message with retry; never throw back into the upload engine.
+- [x] Implement delegated deletion: await DELETE, remove metadata through the hook, then refresh analytics. Keep current bank/period even when emptied. A failed DELETE propagates to the existing table catch so it retains the row/dialog and shows one failure toast. A successful DELETE shows one success toast; later analytics refresh failure uses the dashboard error UI. Never rely on the table's fallback `router.refresh()` for this flow.
+- [x] Update table href to `statementDashboardHref(row)` and empty-state links to inline anchors. Build “Go to latest” with explicit bank, e.g. `/?bank=${bank}`; it must not open Cost Explorer.
+- [x] Test same-month overwrite refresh, another-month upload navigation, cross-bank upload navigation, missing completion ID, history refresh failure, stale async work after unmount, deleting last statement, and API-selected bank on period-only URLs. Guard late upload completion work after bank navigation/unmount with a generation/ref cleanup so old callbacks do not redirect a new page.
+- [x] Run `pnpm test app/__tests__/bank-statement-dashboard.test.tsx app/__tests__/bank-statement-history.test.tsx app/__tests__/home-routing.test.tsx app/__tests__/statements-table.test.tsx frontend/__tests__/initial-period.test.ts app/__tests__/bank-selector.test.tsx app/__tests__/period-selector.test.tsx`; run lint/typecheck/build before commit. Suggested commit: `feat(dashboard): integrate bank uploads and filtered statement history`.
 
 ### Task 5: Retire standalone utility pages and remove all live links
 
@@ -263,9 +263,9 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
 
 **Interfaces:** `LegacyStatementRedirect({ section }: { section: 'statement-upload' | 'statement-history' })` wraps an inner `useSearchParams`/effect component with `ProtectedRoute` and `Suspense`, then `router.replace(legacyStatementHref(search, section))`.
 
-- [ ] Add redirect tests for each route, explicit bank/period retention, bare default-bank destination, section fragment, unauthenticated guard, and absence of standalone upload/library headings. Add shell assertions that neither sidebar nor account menu includes links to retired routes.
-- [ ] Run `pnpm test app/__tests__/legacy-statement-redirect.test.tsx app/__tests__/dashboard-nav.test.tsx` to establish failures.
-- [ ] Replace page contents with the shared redirect wrapper:
+- [x] Add redirect tests for each route, explicit bank/period retention, bare default-bank destination, section fragment, unauthenticated guard, and absence of standalone upload/library headings. Add shell assertions that neither sidebar nor account menu includes links to retired routes.
+- [x] Run `pnpm test app/__tests__/legacy-statement-redirect.test.tsx app/__tests__/dashboard-nav.test.tsx` to establish failures.
+- [x] Replace page contents with the shared redirect wrapper:
 
   ```tsx
   export default function UploadPage() {
@@ -277,9 +277,9 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
   ```
 
   These exports belong in their respective route files, with the component import. The protected inner redirect effect depends on a stable query string and section. Keep redirect HTML in the static build for old bookmarks.
-- [ ] Remove `navItems` utility entries and their unused mapping/icons/helpers; remove corresponding account menu links. Change its remaining “Spending dashboard” entry to “Cost Explorer” pointing at `DEFAULT_DASHBOARD_HREF`. Preserve sign-out, theme, identity display, sidebar controls, and mobile behavior.
-- [ ] Search `rg -n '/upload|/statements|useStatements' app frontend tests scripts docs/codebase`. Distinguish frontend page links from required `/uploads` and `/statements` API paths. Remove the old hook only if no live imports remain. Update production smoke expectations to keep legacy routes auth-protected without expecting legacy dashboard content.
-- [ ] Retain `out/upload/index.html` and `out/statements/index.html` export checks and add `out/aws/cost-explorer/index.html` and `out/aws/billing-invoice/index.html`. Run focused app tests, lint/typecheck/build and `pnpm verify:static` before commit. Suggested commit: `refactor(navigation): retire standalone statement utility dashboards`.
+- [x] Remove `navItems` utility entries and their unused mapping/icons/helpers; remove corresponding account menu links. Change its remaining “Spending dashboard” entry to “Cost Explorer” pointing at `DEFAULT_DASHBOARD_HREF`. Preserve sign-out, theme, identity display, sidebar controls, and mobile behavior.
+- [x] Search `rg -n '/upload|/statements|useStatements' app frontend tests scripts docs/codebase`. Distinguish frontend page links from required `/uploads` and `/statements` API paths. Remove the old hook only if no live imports remain. Update production smoke expectations to keep legacy routes auth-protected without expecting legacy dashboard content.
+- [x] Retain `out/upload/index.html` and `out/statements/index.html` export checks and add `out/aws/cost-explorer/index.html` and `out/aws/billing-invoice/index.html`. Run focused app tests, lint/typecheck/build and `pnpm verify:static` before commit. Suggested commit: `refactor(navigation): retire standalone statement utility dashboards`.
 
 ### Task 6: Browser acceptance, documentation, and release readiness
 
@@ -287,8 +287,8 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
 
 **Interfaces:** Browser coverage uses existing local fake APIs or explicitly intercepted synthetic metadata/upload jobs. No real AWS Cost Explorer calls, real PDFs, or production mutations are needed for acceptance.
 
-- [ ] Update browser expectations for initially expanded groups; remove unconditional “expand Bank statements” clicks. Assert AWS-first link order, all initial descendants, desktop flyout, keyboard collapse/reopen, mobile drawer and active bank retention after initial-period redirects.
-- [ ] Add a bare-home test:
+- [x] Update browser expectations for initially expanded groups; remove unconditional “expand Bank statements” clicks. Assert AWS-first link order, all initial descendants, desktop flyout, keyboard collapse/reopen, mobile drawer and active bank retention after initial-period redirects.
+- [x] Add a bare-home test:
 
   ```ts
   test('opens Cost Explorer by default', async ({ page }) => {
@@ -299,9 +299,9 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
   ```
 
   Add both-bank browser scenarios with synthetic intercepted pages: first metadata page contains only the opposite bank, selected-bank records occur later, and history stays correct after sorting/pagination. Mock auth callback/provider behavior at component level for normal/Google login; auth bypass alone does not prove the real callback behavior.
-- [ ] Browser-test inline upload, completed upload navigation, selected-bank row navigation, deletion confirmation, zero-data upload access, history retry, and old utility URL section anchors. Intercept upload/poll responses with existing schema-valid synthetic jobs and a synthetic File; do not require private fixture PDFs. Verify no browser console errors.
-- [ ] Check desktop and mobile layouts in light/dark themes; capture screenshots of TPB and VIB pages showing upload, analytics, and history. Verify focus visibility, labels, 390px viewport overflow, and section anchors with the sticky shell.
-- [ ] Run final verification:
+- [x] Browser-test inline upload, completed upload navigation, selected-bank row navigation, deletion confirmation, zero-data upload access, history retry, and old utility URL section anchors. Intercept upload/poll responses with existing schema-valid synthetic jobs and a synthetic File; do not require private fixture PDFs. Verify no browser console errors.
+- [x] Check desktop and mobile layouts in light/dark themes; capture screenshots of TPB and VIB pages showing upload, analytics, and history. Verify focus visibility, labels, 390px viewport overflow, and section anchors with the sticky shell.
+- [x] Run final verification:
 
   ```bash
   pnpm lint
@@ -313,8 +313,8 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
   ```
 
   Expected: exit 0 for every command. Record any unavailable environment or pre-existing failure accurately; do not claim it passed. The existing Playwright config pins fake Cost Explorer mode and isolated ports; keep those protections. No Terraform apply is part of verification.
-- [ ] Update current codebase docs to describe Cost Explorer home, the AWS-first expanded menu, bank upload/history, and redirect-only legacy routes. Mark Step 33 complete only after implementation and all acceptance criteria pass. Leave Steps 30–32 historical requirements intact; link the new design as the navigation/utilities superseding decision.
-- [ ] Commit verification/docs with `test(dashboard): cover consolidated bank workflows and default landing`. Include screenshots and actual check results in any implementation PR. State that auth capability enforcement and API/storage contracts are unchanged, no infrastructure/config migration is required, and Google login still requires native Cognito reauthentication for AWS costs.
+- [x] Update current codebase docs to describe Cost Explorer home, the AWS-first expanded menu, bank upload/history, and redirect-only legacy routes. Mark Step 33 complete only after implementation and all acceptance criteria pass. Leave Steps 30–32 historical requirements intact; link the new design as the navigation/utilities superseding decision.
+- [x] Commit verification/docs with `test(dashboard): cover consolidated bank workflows and default landing`. Include screenshots and actual check results in any implementation PR. State that auth capability enforcement and API/storage contracts are unchanged, no infrastructure/config migration is required, and Google login still requires native Cognito reauthentication for AWS costs.
 
 ## Completion criteria and rollback
 
@@ -328,4 +328,45 @@ Test files are named in their owning tasks below. Existing `frontend/auth/auth-p
 
 ## Planning verification record
 
-Repository navigation, auth return handling, bank page, upload engine, statement API pagination, table links, static export checks, existing tests, and Steps 30–32 were inspected. This document and its linked design are the deliverables of the current task. Application verification commands above are execution requirements, not claims of checks already run.
+Repository navigation, auth return handling, bank page, upload engine, statement API pagination, table links, static export checks, existing tests, and Steps 30–32 were inspected. This was the original planning inspection. The subsequent implementation and actual verification results are recorded below.
+
+
+## Execution record — 2026-09-05
+
+All six tasks are complete on `docs/dashboard-consolidation-plan`. The user requested inline execution, so implementation and final review stayed in the existing branch without subagents. No production deployment, API change, data migration, auth capability change, or infrastructure change was made.
+
+### Verification results
+
+| Check | Result |
+| --- | --- |
+| Vitest | 96 files passed; 954 tests passed, 1 fixture-dependent test skipped |
+| ESLint | Exit 0; five pre-existing unused-import warnings in operational scripts |
+| TypeScript | `tsc --noEmit` exited 0 |
+| Next.js production build | Exit 0; static pages generated |
+| Static export verifier | Exit 0; root, sign-in, callback, both AWS pages, and both legacy redirects present |
+| Playwright | All 19 tests passed across navigation, bank dashboards, AWS invoice, and Cost Explorer suites |
+| Git whitespace checks | Passed |
+
+The system pnpm launcher failed while fetching/verifying the pinned pnpm 11.2.2 release. The repository's package-manager pin and dependency files were left unchanged. Verification used the already-installed tools under Node 24.20.0:
+
+```bash
+/opt/homebrew/opt/node@24/bin/node node_modules/vitest/vitest.mjs run
+/opt/homebrew/opt/node@24/bin/node node_modules/eslint/bin/eslint.js
+/opt/homebrew/opt/node@24/bin/node node_modules/typescript/bin/tsc --noEmit
+/opt/homebrew/opt/node@24/bin/node node_modules/next/dist/bin/next build
+/opt/homebrew/opt/node@24/bin/node scripts/verify-static-export.mjs
+PATH=/opt/homebrew/opt/node@24/bin:$PATH /opt/homebrew/opt/node@24/bin/node node_modules/@playwright/test/cli.js test tests/e2e/dashboard-navigation.spec.ts tests/e2e/bank-statement-dashboard.spec.ts tests/e2e/aws-billing-invoice.spec.ts tests/e2e/aws-cost-explorer.spec.ts
+```
+
+The build and browser servers required execution outside the filesystem/process sandbox. Browser tests retained the existing local auth bypass and fake Cost Explorer mode; no real AWS billing calls or private PDFs were used.
+
+### Implementation adjustments and review findings
+
+- Route/return tests share `frontend/__tests__/dashboard-routes.test.ts` plus the existing callback tests. Table-link, pagination, sorting-context, and delete-confirmation coverage lives in `app/__tests__/bank-statement-history.test.tsx`; no duplicate standalone table test file was necessary.
+- The production page-availability smoke test already checks only successful route loading. It remains valid for redirect-only pages and required no edit.
+- Browser testing reproduced and fixed two related stale-upload-state cases: successful upload prevented later latest-month navigation, and a retry notice persisted after manual period navigation. Successful navigation now clears the pending job and retry state resets when its originating query changes.
+- Old bank upload callbacks cannot navigate a newly selected bank; browser tests cover completion after navigation and first upload from an empty collection.
+- The pre-existing AWS invoice browser test expected four removed chart panels and a removed linked-account badge. Assertions now follow the current invoice page's monthly trend and cost/usage panel; upload conflict/force, month navigation, history, deletion, AI, and privacy assertions remain covered.
+- The mobile width check waits for the shell's breakpoint padding transition to settle. Screenshots use reduced motion so off-screen reveal panels are visible in full-page captures.
+- Desktop light and mobile dark TPB/VIB screenshots were generated and visually inspected under the gitignored `test-results/bank-statement-dashboard-b-86e22-t-mobile-light-dark-layouts/` directory. They contain synthetic metadata only.
+- Inline review checked URL context, strict bank filtering before pagination, complete cursor traversal, request cancellation, same-period mutation refreshes, guarded legacy pages, and unchanged backend/privacy boundaries. No unresolved implementation findings remain.

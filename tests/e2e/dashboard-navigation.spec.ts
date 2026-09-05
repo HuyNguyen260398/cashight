@@ -10,6 +10,15 @@ function captureBrowserErrors(page: Page): string[] {
 }
 
 test.describe('dashboard navigation', () => {
+  test('opens Cost Explorer from bare home', async ({ page }) => {
+    await page.goto('/');
+    await expect(page).toHaveURL(/\/aws\/cost-explorer\/$/);
+    await expect(page.getByRole('heading', { name: 'AWS Cost Explorer' })).toBeVisible();
+    await expect(page.getByRole('navigation').getByRole('link')).toHaveText([
+      'Cost Explorer', 'Billing Invoice', 'TPB', 'VIB',
+    ]);
+  });
+
   test('supports expanded hierarchy, active descendants, and bank query links', async ({
     page,
   }) => {
@@ -34,14 +43,13 @@ test.describe('dashboard navigation', () => {
       name: 'Bank statements',
     });
     await bankStatements.focus();
-    await page.keyboard.press('Enter');
     await expect(bankStatements).toHaveAttribute('aria-expanded', 'true');
     await expect(navigation.getByRole('link', { name: 'TPB' })).toHaveAttribute(
       'href',
       '/?bank=TPBank',
     );
     await navigation.getByRole('link', { name: 'VIB' }).click();
-    await expect(page).toHaveURL(/\?bank=VIB$/);
+    await expect(page).toHaveURL(/\?bank=VIB(?:&|$)/);
     await expect(
       page.getByRole('navigation').getByRole('link', { name: 'VIB' }),
     ).toHaveAttribute('aria-current', 'page');
@@ -86,10 +94,9 @@ test.describe('dashboard navigation', () => {
     await expect(
       navigation.getByRole('link', { name: 'Billing Invoice' }),
     ).toHaveAttribute('aria-current', 'page');
-    await navigation.getByRole('button', { name: 'Bank statements' }).click();
     await navigation.getByRole('link', { name: 'TPB' }).click();
 
-    await expect(page).toHaveURL(/\?bank=TPBank$/);
+    await expect(page).toHaveURL(/\?bank=TPBank(?:&|$)/);
     await expect(
       page.getByRole('button', { name: 'Open navigation' }),
     ).toBeVisible();
