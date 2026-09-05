@@ -139,6 +139,21 @@ describe('useUploadJob', () => {
     globalThis.fetch = originalFetch;
   });
 
+  it.each(['SUCCEEDED', 'CONFLICT', 'FAILED'])('notifies the parent only on success (%s)', async (state) => {
+    const onSucceeded = vi.fn();
+    mockApiFetch.mockResolvedValueOnce(jsonResponse(makeCreateResponse()))
+      .mockResolvedValueOnce(jsonResponse(makeJobResponse(state, { statementId: '2026-07-2222' })));
+    const { result } = renderHook(() => useUploadJob(onSucceeded));
+    act(() => result.current.start(makeFile()));
+    await waitFor(() => expect(result.current.state.phase).not.toBe('working'));
+    if (state === 'SUCCEEDED') {
+      expect(onSucceeded).toHaveBeenCalledTimes(1);
+      expect(onSucceeded).toHaveBeenCalledWith(expect.objectContaining({ statementId: '2026-07-2222' }));
+    } else {
+      expect(onSucceeded).not.toHaveBeenCalled();
+    }
+  });
+
   it('starts in idle phase', () => {
     const { result } = renderHook(() => useUploadJob());
     expect(result.current.state.phase).toBe('idle');

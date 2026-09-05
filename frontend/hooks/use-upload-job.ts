@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { uploadErrorMessage } from '@cashight/domain/upload-error';
 
 import {
@@ -42,10 +43,11 @@ const statementUploadOptions = {
   },
 };
 
-export function useUploadJob(): {
+export function useUploadJob(onSucceeded?: (job: UploadJob) => void): {
   state: UploadJobHookState;
   start: (file: File, force?: boolean) => void;
   reset: () => void;
 } {
-  return usePdfUploadJob(statementUploadOptions);
+  const options = useMemo(() => ({ ...statementUploadOptions, onSucceeded }), [onSucceeded]);
+  return usePdfUploadJob(options);
 }
