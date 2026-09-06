@@ -52,6 +52,11 @@ Upload a statement, get back KPI cards, category breakdowns, top merchants, and 
 
 Cashight is a **static SPA plus serverless microservices**. The Next.js app is a static export (`output: 'export'`) served from S3 via CloudFront — there is no Next.js server process. All authenticated logic runs in purpose-built Lambda functions behind a Regional REST API, and pure domain logic lives in `packages/domain/`, shared by both the browser bundle and the Lambda handlers.
 
+![Cashight AWS architecture](docs/diagrams/cashight-aws-architecture.png)
+
+> The diagram above is generated from [`docs/diagrams/build.mjs`](docs/diagrams/build.mjs); the editable source is
+> [`docs/diagrams/cashight-aws-architecture.drawio`](docs/diagrams/cashight-aws-architecture.drawio).
+
 ```
 PDF upload (browser SPA)
   → SHA-256 digest (crypto.subtle)
@@ -87,13 +92,18 @@ AI summary
 
 | Lambda | Responsibility |
 | --- | --- |
-| `auth-guard` | API Gateway authorizer — validates the Cognito token and the email allowlist |
+| `auth-guard` | Cognito `pre_sign_up` / `pre_token_generation` trigger — enforces the email allowlist and stamps workspace claims (API Gateway itself uses a native Cognito user-pool authorizer) |
 | `uploads-api` | Creates the job record and issues the presigned upload URL |
 | `upload-status-api` | Serves job state for browser polling |
 | `parser-worker` | SQS consumer: parse → categorize → validate → persist |
 | `statements-api` | List and delete persisted statements |
 | `dashboard-api` | Period aggregation for the dashboard |
 | `summary-api` | Streams the Gemini summary |
+| `session-capabilities-api` | Reports which features the signed-in session may use |
+| `cost-explorer-api` | Read-only AWS Cost Explorer / Billing queries, cached in DynamoDB |
+| `aws-invoices-api` | Lists and serves parsed AWS invoices |
+| `invoice-parser-worker` | SQS consumer for uploaded AWS invoice PDFs |
+| `aws-invoice-summary-api` | Streams the Gemini summary for AWS invoices |
 
 ### Design rules
 
@@ -103,7 +113,7 @@ AI summary
 - **Aggregation functions are pure** — no I/O, new objects only.
 - **Region is `ap-southeast-1`** (Singapore) everywhere, for proximity to HCMC.
 
-**Stack**: Next.js 16 (App Router, static export) · React 19 · TypeScript · Tailwind 4 · shadcn/ui · Recharts · Zod · `pdf-parse` · `@google/genai` · `oidc-client-ts` · AWS Lambda (Node 22) · API Gateway · S3 · DynamoDB · SQS · CloudFront · Cognito · WAF · Secrets Manager · Terraform · Vitest.
+**Stack**: Next.js 16 (App Router, static export) · React 19 · TypeScript · Tailwind 4 · shadcn/ui · Recharts · Zod · `pdf-parse` · `@google/genai` · `oidc-client-ts` · AWS Lambda (Node 22) · API Gateway · S3 · DynamoDB · SQS · CloudFront · Cognito · SSM Parameter Store · CodeDeploy · Terraform · Vitest.
 
 > [!TIP]
 > Full architecture documentation lives in [`docs/codebase/`](./docs/codebase/) — stack, structure, conventions, integrations, testing, concerns, and Mermaid diagrams.
