@@ -1,5 +1,4 @@
 import { GetObjectCommand } from '@aws-sdk/client-s3';
-import { MetricUnit } from '@aws-lambda-powertools/metrics';
 import { aggregate } from '@cashight/domain/aggregations';
 import { parseBankFromSearch } from '@cashight/domain/banks';
 import { parsePeriodFromSearch } from '@cashight/domain/period';
@@ -19,7 +18,7 @@ import {
   queryWorkspaceStatementsForYear,
   type StatementMetadataRecord,
 } from '../../shared/metadata';
-import { metrics } from '../../shared/observability';
+import { MetricUnit, metrics } from '../../shared/observability';
 
 const MAX_CONCURRENCY = 5;
 

@@ -28,9 +28,6 @@
     "test:aws-invoice-parser": "tsx scripts/test-aws-invoice-parser.ts"
   },
   "dependencies": {
-    "@aws-lambda-powertools/logger": "^2.33.1",
-    "@aws-lambda-powertools/metrics": "^2.33.1",
-    "@aws-lambda-powertools/tracer": "^2.33.1",
     "@aws-sdk/client-billing": "^3.1101.0",
     "@aws-sdk/client-cost-explorer": "^3.1101.0",
     "@aws-sdk/client-dynamodb": "^3.1075.0",
@@ -40,6 +37,12 @@
     "@aws-sdk/s3-request-presigner": "^3.1075.0",
     "@cashight/domain": "workspace:*",
     "@google/genai": "^2.6.0",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.223.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.223.0",
+    "@opentelemetry/resources": "^2.12.0",
+    "@opentelemetry/sdk-metrics": "^2.12.0",
+    "@opentelemetry/sdk-trace-node": "^2.12.0",
     "aws-jwt-verify": "^5.2.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

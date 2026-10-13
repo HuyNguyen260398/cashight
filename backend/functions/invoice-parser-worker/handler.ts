@@ -15,6 +15,7 @@ import {
   putAwsInvoiceMetadata,
   transitionAwsInvoiceJobState,
 } from '../../shared/metadata';
+import { MetricUnit, metrics } from '../../shared/observability';
 import { parseAwsInvoiceObject } from '../../shared/storage';
 import { computeSha256, createInvoiceProcessJob } from './process-job';
 
@@ -65,6 +66,7 @@ export function emitAwsInvoiceParseFailureMetric(
       AwsInvoiceParseFailure: 1,
     }),
   );
+  metrics.addMetric('AwsInvoiceParseFailure', MetricUnit.Count, 1, { error_code: errorCode });
 }
 
 function extractS3Key(body: string): string {

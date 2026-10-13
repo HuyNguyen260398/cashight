@@ -1,4 +1,3 @@
-import { MetricUnit } from '@aws-lambda-powertools/metrics';
 import type { AuthProvider } from '@cashight/domain/workspace';
 
 import { ApiError } from './api-response';
@@ -10,7 +9,7 @@ import {
   parseAuthorizedUserRecord,
   type AuthorizedUserRecord,
 } from './metadata';
-import { metrics } from './observability';
+import { MetricUnit, metrics } from './observability';
 
 export type RequiredScope = 'cashight/read' | 'cashight/write';
 
