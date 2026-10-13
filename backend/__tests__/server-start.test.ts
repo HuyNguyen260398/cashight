@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { assertRequiredEnv } from '../server/required-env';
 import { apiConfigFromEnv } from '../server/start-api';
 import { workerConfigFromEnv } from '../server/start-worker';
 
@@ -52,5 +53,27 @@ describe('workerConfigFromEnv', () => {
     expect(() =>
       workerConfigFromEnv({ QUEUE_URL: 'https://sqs/q', MAX_PROCESSING_SECONDS: '360' }),
     ).toThrow('Invalid configuration: MAX_PROCESSING_SECONDS');
+  });
+});
+
+describe('assertRequiredEnv', () => {
+  it('passes when every name is set', () => {
+    expect(() => assertRequiredEnv(['A', 'B'], { A: 'x', B: 'y' })).not.toThrow();
+  });
+
+  it('passes for an empty list', () => {
+    expect(() => assertRequiredEnv([], {})).not.toThrow();
+  });
+
+  it('names the first missing variable', () => {
+    expect(() => assertRequiredEnv(['A', 'B', 'C'], { A: 'x' })).toThrow(
+      'Missing required configuration: B',
+    );
+  });
+
+  it('treats a blank value as missing', () => {
+    expect(() => assertRequiredEnv(['A'], { A: '   ' })).toThrow(
+      'Missing required configuration: A',
+    );
   });
 });

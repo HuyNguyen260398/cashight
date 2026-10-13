@@ -97,10 +97,27 @@ jobs:
       - name: Build image
         run: docker build -t cashight-backend:ci .
 
+      - name: Worker files are in the image
+        run: |
+          # pdfjs loads pdf.worker.mjs lazily, so a missing file only fails the
+          # first PDF parse. The image has no shell; its entrypoint is node.
+          docker run --rm cashight-backend:ci -e "
+            const fs = require('node:fs');
+            const need = ['/app/parser-worker/pdf.worker.mjs', '/app/invoice-parser-worker/pdf.worker.mjs'];
+            const forbid = ['/app/api/pdf.worker.mjs', '/app/aws-api/pdf.worker.mjs'];
+            const missing = need.filter((p) => !fs.existsSync(p));
+            const unexpected = forbid.filter((p) => fs.existsSync(p));
+            if (missing.length) console.error('missing from image: ' + missing.join(', '));
+            if (unexpected.length) console.error('unexpected in image: ' + unexpected.join(', '));
+            process.exit(missing.length || unexpected.length ? 1 : 0);
+          "
+
       - name: API answers probes and enforces auth
         run: |
           docker run -d --name api -p 8080:8080 \
             -e COGNITO_USER_POOL_ID=ap-southeast-1_ci -e COGNITO_CLIENT_IDS=ci-client \
+            -e TABLE_NAME=ci-table -e STATEMENTS_BUCKET=ci-statements \
+            -e UPLOAD_BUCKET=ci-uploads -e GEMINI_PARAM=/ci/gemini \
             cashight-backend:ci
           for attempt in $(seq 1 20); do
             curl -fsS http://127.0.0.1:8080/healthz && break
@@ -116,6 +133,9 @@ jobs:
         run: |
           docker run -d --name aws-api -p 8081:8080 \
             -e COGNITO_USER_POOL_ID=ap-southeast-1_ci -e COGNITO_CLIENT_IDS=ci-client \
+            -e TABLE_NAME=ci-table -e STATEMENTS_BUCKET=ci-statements \
+            -e UPLOAD_BUCKET=ci-uploads -e GEMINI_PARAM=/ci/gemini \
+            -e EXPORT_BUCKET=ci-exports \
             -e ALLOWED_ORIGIN=https://cashight-v2.nghuy.link \
             cashight-backend:ci /app/aws-api/index.js
           for attempt in $(seq 1 20); do
@@ -136,6 +156,8 @@ jobs:
         run: |
           docker run -d --name api-default -p 8082:8080 \
             -e COGNITO_USER_POOL_ID=ap-southeast-1_ci -e COGNITO_CLIENT_IDS=ci-client \
+            -e TABLE_NAME=ci-table -e STATEMENTS_BUCKET=ci-statements \
+            -e UPLOAD_BUCKET=ci-uploads -e GEMINI_PARAM=/ci/gemini \
             cashight-backend:ci
           for attempt in $(seq 1 20); do
             curl -fsS http://127.0.0.1:8082/healthz && break
@@ -146,6 +168,8 @@ jobs:
           docker rm -f api-default
           out=$(timeout 20 docker run --rm \
             -e COGNITO_USER_POOL_ID=ap-southeast-1_ci -e COGNITO_CLIENT_IDS=ci-client \
+            -e TABLE_NAME=ci-table -e STATEMENTS_BUCKET=ci-statements \
+            -e UPLOAD_BUCKET=ci-uploads -e GEMINI_PARAM=/ci/gemini \
             -e ALLOWED_ORIGIN='*' cashight-backend:ci 2>&1) && status=0 || status=$?
           echo "$out"
           # 1 = refused to start. 124 would mean it started and was still serving.

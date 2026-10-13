@@ -2,6 +2,7 @@ import { logger } from '../shared/observability';
 import { createApiServer, type ApiHandler } from './http-server';
 import { createAccessTokenVerifier, verifierConfigFromEnv } from './jwt';
 import { createRateLimiter } from './rate-limit';
+import { assertRequiredEnv } from './required-env';
 import type { HandlerName } from './routes';
 import { startTelemetry } from './telemetry';
 
@@ -28,7 +29,9 @@ export function apiConfigFromEnv(env: Environment = process.env) {
 export async function startApiService(
   serviceName: string,
   handlers: Partial<Record<HandlerName, ApiHandler>>,
+  requiredEnv: readonly string[],
 ): Promise<void> {
+  assertRequiredEnv(requiredEnv);
   const config = apiConfigFromEnv();
   const verifierConfig = verifierConfigFromEnv();
   // Telemetry first: instruments created before it are permanent no-ops.

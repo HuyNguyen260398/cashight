@@ -8,7 +8,7 @@ startApiService('cashight-aws-api', {
   costExplorer,
   awsInvoices,
   awsInvoiceSummaries,
-}).catch((error: unknown) => {
+}, ['TABLE_NAME', 'STATEMENTS_BUCKET', 'UPLOAD_BUCKET', 'EXPORT_BUCKET', 'GEMINI_PARAM']).catch((error: unknown) => {
   logger.error('startup failed', { reason: error instanceof Error ? error.message : 'unknown' });
   process.exit(1);
 });
