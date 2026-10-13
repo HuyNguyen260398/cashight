@@ -19,6 +19,7 @@ import {
 import { logger } from '../shared/observability';
 import {
   AuthError,
+  VerifierUnavailableError,
   bearerToken,
   type AccessTokenVerifier,
   type AuthorizerClaims,
@@ -52,6 +53,9 @@ const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
 
 class PayloadTooLargeError extends Error {}
 
+/** The client sent something unusable or went away; not a server fault. */
+class BadRequestError extends Error {}
+
 interface Outcome {
   status: number;
   route: string;
@@ -59,24 +63,43 @@ interface Outcome {
 
 function readBody(request: http.IncomingMessage, maxBytes: number): Promise<string> {
   return new Promise((resolve, reject) => {
+    const declared = request.headers['content-length'];
+    if (declared !== undefined && Number(declared) > maxBytes) {
+      reject(new PayloadTooLargeError());
+      return;
+    }
+
     const chunks: Buffer[] = [];
     let size = 0;
-    let tooLarge = false;
-    request.on('data', (chunk: Buffer) => {
+    let settled = false;
+    const finish = (action: () => void): void => {
+      if (settled) return;
+      settled = true;
+      request.off('data', onData);
+      request.off('end', onEnd);
+      request.off('error', onError);
+      request.off('close', onClose);
+      action();
+    };
+    const onData = (chunk: Buffer): void => {
       size += chunk.length;
       if (size > maxBytes) {
-        // Stop buffering but keep draining so the 413 can be delivered.
-        tooLarge = true;
+        // Reject now; waiting for `end` would let a client hold the connection.
         chunks.length = 0;
+        request.pause();
+        finish(() => reject(new PayloadTooLargeError()));
         return;
       }
       chunks.push(chunk);
-    });
-    request.on('end', () => {
-      if (tooLarge) reject(new PayloadTooLargeError());
-      else resolve(Buffer.concat(chunks).toString('utf8'));
-    });
-    request.on('error', reject);
+    };
+    const onEnd = (): void => finish(() => resolve(Buffer.concat(chunks).toString('utf8')));
+    const onError = (): void => finish(() => reject(new BadRequestError()));
+    // A client that aborts mid-body closes the request without `end`.
+    const onClose = (): void => finish(() => reject(new BadRequestError()));
+    request.on('data', onData);
+    request.on('end', onEnd);
+    request.on('error', onError);
+    request.on('close', onClose);
   });
 }
 
@@ -112,7 +135,12 @@ export function createApiServer(options: ApiServerOptions): http.Server {
   // starts are permanently no-ops.
   const duration = otelMetrics
     .getMeter('cashight')
-    .createHistogram('http.server.request.duration', { unit: 's' });
+    .createHistogram('http.server.request.duration', {
+      unit: 's',
+      advice: {
+        explicitBucketBoundaries: [0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10],
+      },
+    });
   const tracer = trace.getTracer('cashight');
 
   async function dispatch(
@@ -122,7 +150,18 @@ export function createApiServer(options: ApiServerOptions): http.Server {
     onRoute: (name: string) => void,
   ): Promise<Outcome> {
     const method = request.method ?? 'GET';
-    const url = new URL(request.url ?? '/', 'http://internal');
+    let url: URL;
+    try {
+      url = new URL(request.url ?? '/', 'http://internal');
+    } catch {
+      // e.g. a request target of `//`.
+      const status = writeError(
+        response,
+        requestId,
+        new ApiError('BAD_REQUEST', 400, 'The request target is invalid.'),
+      );
+      return { status, route: 'unmatched' };
+    }
 
     if (method === 'OPTIONS') {
       response.writeHead(204, CORS_HEADERS);
@@ -169,6 +208,22 @@ export function createApiServer(options: ApiServerOptions): http.Server {
       if (!token) throw new AuthError('Missing bearer token.');
       claims = await verifier.verify(token);
     } catch (error) {
+      if (error instanceof VerifierUnavailableError) {
+        // An outage on our side must not look like a bad credential (401 signs
+        // the user out). Name only: never the token or the message.
+        logger.warn('token verifier unavailable', {
+          requestId,
+          route,
+          errorName: error.name,
+        });
+        const status = writeError(
+          response,
+          requestId,
+          new ApiError('SERVICE_UNAVAILABLE', 503, 'The service is temporarily unavailable.', true),
+          { 'Retry-After': '5' },
+        );
+        return { status, route };
+      }
       if (!(error instanceof AuthError)) throw error;
       const status = writeError(
         response,
@@ -183,7 +238,23 @@ export function createApiServer(options: ApiServerOptions): http.Server {
       try {
         body = await readBody(request, maxBodyBytes);
       } catch (error) {
+        if (error instanceof BadRequestError) {
+          // The client went away mid-body; there may be nobody to answer.
+          if (response.writableEnded || response.destroyed || !response.socket?.writable) {
+            return { status: 400, route };
+          }
+          const status = writeError(
+            response,
+            requestId,
+            new ApiError('BAD_REQUEST', 400, 'The request could not be read.'),
+            { Connection: 'close' },
+          );
+          return { status, route };
+        }
         if (!(error instanceof PayloadTooLargeError)) throw error;
+        // Once the 413 is flushed, drop the connection: the rest of the body
+        // is unwanted and a client must not be able to keep the socket open.
+        response.once('finish', () => request.destroy());
         const status = writeError(
           response,
           requestId,

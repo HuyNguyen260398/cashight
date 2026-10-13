@@ -1,8 +1,11 @@
 import { createSign, generateKeyPairSync } from 'node:crypto';
+import { FetchError } from 'aws-jwt-verify/error';
+import { SimpleJwksCache } from 'aws-jwt-verify/jwk';
 import { describe, expect, it } from 'vitest';
 
 import {
   AuthError,
+  VerifierUnavailableError,
   bearerToken,
   createAccessTokenVerifier,
   verifierConfigFromEnv,
@@ -91,6 +94,38 @@ describe('createAccessTokenVerifier', () => {
     const token = signToken({ client_id: 'someone-else' });
     const error = await verifier.verify(token).catch((caught: unknown) => caught);
     expect((error as Error).message).not.toContain(token);
+  });
+});
+
+function verifierWithFetcher(fetch: () => Promise<ArrayBuffer>) {
+  return createAccessTokenVerifier(
+    { userPoolId: USER_POOL_ID, clientIds: [CLIENT_ID] },
+    { jwksCache: new SimpleJwksCache({ fetcher: { fetch } }) },
+  );
+}
+
+describe('JWKS retrieval', () => {
+  it('reports an unreachable JWKS endpoint as unavailable, not as a bad token', async () => {
+    const unreachable = verifierWithFetcher(async () => {
+      throw new FetchError('jwks', 'connect ECONNREFUSED');
+    });
+    const error = await unreachable.verify(signToken()).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(VerifierUnavailableError);
+    expect(error).not.toBeInstanceOf(AuthError);
+  });
+
+  it('still rejects a kid missing from a successfully fetched JWKS as a bad token', async () => {
+    const empty = verifierWithFetcher(async () =>
+      new TextEncoder().encode(JSON.stringify({ keys: [] })).buffer as ArrayBuffer,
+    );
+    await expect(empty.verify(signToken())).rejects.toBeInstanceOf(AuthError);
+  });
+
+  it('fails closed to 401 on an error it does not recognise', async () => {
+    const odd = verifierWithFetcher(async () => {
+      throw new TypeError('something unexpected');
+    });
+    await expect(odd.verify(signToken())).rejects.toBeInstanceOf(AuthError);
   });
 });
 

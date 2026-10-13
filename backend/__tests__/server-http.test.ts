@@ -1,10 +1,10 @@
+import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type http from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { jsonResponse } from '../shared/api-response';
 import { createApiServer, type ApiHandler, type ApiServerOptions } from '../server/http-server';
-import { AuthError, type AccessTokenVerifier } from '../server/jwt';
+import { AuthError, VerifierUnavailableError, type AccessTokenVerifier } from '../server/jwt';
 
 const CLAIMS = { sub: 'user-123', token_use: 'access' as const, scope: 'cashight/read' };
 
@@ -106,6 +106,32 @@ describe('authentication', () => {
     expect(res.status).toBe(401);
     expect((await errorOf(res)).code).toBe('UNAUTHORIZED');
     expect(dashboard).not.toHaveBeenCalled();
+  });
+});
+
+describe('verifier outage', () => {
+  it('answers 503 with Retry-After, never calls the handler and never logs the token', async () => {
+    const dashboard = vi.fn<ApiHandler>();
+    const base = await start({
+      handlers: { dashboard },
+      verifier: {
+        verify: async () => {
+          throw new VerifierUnavailableError('Token keys unavailable (FetchError).');
+        },
+      },
+    });
+    const res = await fetch(`${base}/dashboard`, {
+      headers: { Authorization: 'Bearer secret-token-value' },
+    });
+    expect(res.status).toBe(503);
+    expect(res.headers.get('retry-after')).toBe('5');
+    expect(await errorOf(res)).toMatchObject({ code: 'SERVICE_UNAVAILABLE', retryable: true });
+    expect(dashboard).not.toHaveBeenCalled();
+    const logged = vi.mocked(process.stdout.write).mock.calls.map((call) => String(call[0])).join('');
+    expect(logged).toContain('token verifier unavailable');
+    expect(logged).toContain('VerifierUnavailableError');
+    expect(logged).toContain('"route":"dashboard"');
+    expect(logged).not.toContain('secret-token-value');
   });
 });
 
@@ -219,5 +245,111 @@ describe('limits and failures', () => {
     expect(logged).not.toContain('zzz');
     expect(logged).not.toContain('good');
     expect(logged).not.toContain('4111');
+  });
+});
+
+interface RawResult {
+  status?: number;
+  closedWithoutResponse: boolean;
+}
+
+/** Sends a raw request; resolves on a response or when the connection closes. */
+function rawRequest(
+  base: string,
+  options: http.RequestOptions,
+  write: (request: http.ClientRequest) => void,
+): { result: Promise<RawResult>; request: http.ClientRequest } {
+  const url = new URL(base);
+  const agent = new http.Agent({ keepAlive: false });
+  const request = http.request({
+    host: url.hostname,
+    port: url.port,
+    agent,
+    headers: auth,
+    ...options,
+  });
+  const result = new Promise<RawResult>((resolve) => {
+    request.on('response', (response) => {
+      response.resume();
+      resolve({ status: response.statusCode, closedWithoutResponse: false });
+    });
+    request.on('error', () => resolve({ closedWithoutResponse: true }));
+    request.on('close', () => resolve({ closedWithoutResponse: true }));
+  });
+  write(request);
+  return { result, request };
+}
+
+describe('request body limits', () => {
+  it('accepts a body exactly at the limit', async () => {
+    const uploads = vi.fn<ApiHandler>(async () => jsonResponse(201, {}));
+    const base = await start({ handlers: { uploads }, maxBodyBytes: 16 });
+    const res = await fetch(`${base}/uploads`, { method: 'POST', headers: auth, body: 'x'.repeat(16) });
+    expect(res.status).toBe(201);
+    expect((uploads.mock.calls[0][0] as ProxyEvent).body).toBe('x'.repeat(16));
+  });
+
+  it('rejects one byte over the limit before reading it', async () => {
+    const uploads = vi.fn<ApiHandler>();
+    const base = await start({ handlers: { uploads }, maxBodyBytes: 16 });
+    const res = await fetch(`${base}/uploads`, { method: 'POST', headers: auth, body: 'x'.repeat(17) });
+    expect(res.status).toBe(413);
+    expect(uploads).not.toHaveBeenCalled();
+  });
+
+  it('ends the exchange promptly when a chunked body never ends', async () => {
+    const uploads = vi.fn<ApiHandler>();
+    const base = await start({ handlers: { uploads }, maxBodyBytes: 1024 });
+    let timer: NodeJS.Timeout | undefined;
+    const { result, request } = rawRequest(
+      base,
+      { method: 'POST', path: '/uploads' },
+      (req) => {
+        // No Content-Length: chunked. Keep sending, never call end().
+        req.write('x'.repeat(512));
+        timer = setInterval(() => {
+          if (!req.destroyed) req.write('x'.repeat(512));
+        }, 10);
+      },
+    );
+    const started = Date.now();
+    try {
+      const outcome = await result;
+      expect(Date.now() - started).toBeLessThan(2000);
+      // Either the 413 reached the client or the connection was closed on it.
+      if (!outcome.closedWithoutResponse) expect(outcome.status).toBe(413);
+      expect(uploads).not.toHaveBeenCalled();
+    } finally {
+      clearInterval(timer);
+      request.destroy();
+    }
+  });
+
+  it('answers 400 or 404, never 500, for a request target that is not a URL', async () => {
+    const base = await start();
+    const { result } = rawRequest(base, { method: 'GET', path: '//' }, (req) => req.end());
+    const outcome = await result;
+    expect([400, 404]).toContain(outcome.status);
+    const logged = vi.mocked(process.stdout.write).mock.calls.map((call) => String(call[0])).join('');
+    expect(logged).not.toContain('unhandled request error');
+    expect(logged).not.toContain('"status":500');
+  });
+
+  it('treats a client that aborts mid-body as a client error, not a 500', async () => {
+    const uploads = vi.fn<ApiHandler>();
+    const base = await start({ handlers: { uploads } });
+    const { request } = rawRequest(
+      base,
+      { method: 'POST', path: '/uploads', headers: { ...auth, 'content-length': '100' } },
+      (req) => req.write('partial'),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    request.destroy();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(uploads).not.toHaveBeenCalled();
+    const logged = vi.mocked(process.stdout.write).mock.calls.map((call) => String(call[0])).join('');
+    expect(logged).not.toContain('unhandled request error');
+    expect(logged).not.toContain('"status":500');
+    expect(logged).toContain('"status":400');
   });
 });

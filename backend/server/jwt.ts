@@ -6,6 +6,12 @@
  * backend/shared/auth-claims.ts keeps enforcing scope and token_use unchanged.
  */
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
+import {
+  FetchError,
+  JwksNotAvailableInCacheError,
+  WaitPeriodNotYetEndedJwkError,
+} from 'aws-jwt-verify/error';
+import type { SimpleJwksCache } from 'aws-jwt-verify/jwk';
 
 import { requiredEnvironmentValue } from '../shared/config';
 
@@ -22,6 +28,31 @@ export class AuthError extends Error {
     super(message);
     this.name = 'AuthError';
   }
+}
+
+/**
+ * The token could not be judged because the signing keys could not be
+ * retrieved (Cognito's JWKS endpoint is unreachable). This is an outage, not a
+ * bad credential: answering 401 would sign the user out for our own failure.
+ */
+export class VerifierUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'VerifierUnavailableError';
+  }
+}
+
+/**
+ * Key-retrieval failures in aws-jwt-verify. FetchError covers
+ * NonRetryableFetchError. A kid missing from a JWKS that was fetched
+ * successfully is deliberately not here: that is a bad token.
+ */
+function isKeyRetrievalFailure(error: unknown): boolean {
+  return (
+    error instanceof FetchError ||
+    error instanceof JwksNotAvailableInCacheError ||
+    error instanceof WaitPeriodNotYetEndedJwkError
+  );
 }
 
 export interface AccessTokenVerifier {
@@ -57,13 +88,17 @@ export function verifierConfigFromEnv(env: Environment = process.env): VerifierC
 
 export function createAccessTokenVerifier(
   config: VerifierConfig,
-  options: { jwks?: { keys: object[] } } = {},
+  options: { jwks?: { keys: object[] }; jwksCache?: SimpleJwksCache } = {},
 ): AccessTokenVerifier {
-  const verifier = CognitoJwtVerifier.create({
-    userPoolId: config.userPoolId,
-    clientId: config.clientIds,
-    tokenUse: 'access',
-  });
+  const verifier = CognitoJwtVerifier.create(
+    {
+      userPoolId: config.userPoolId,
+      clientId: config.clientIds,
+      tokenUse: 'access',
+    },
+    // Tests inject a cache whose fetcher fails, to simulate a JWKS outage.
+    options.jwksCache ? { jwksCache: options.jwksCache } : undefined,
+  );
   // Tests inject a JWKS; production fetches and caches the pool's JWKS lazily.
   if (options.jwks) verifier.cacheJwks(options.jwks as never);
 
@@ -73,7 +108,10 @@ export function createAccessTokenVerifier(
       try {
         payload = (await verifier.verify(token)) as Record<string, unknown>;
       } catch (error) {
-        // The library's messages name the failed check, never the token.
+        if (isKeyRetrievalFailure(error)) {
+          throw new VerifierUnavailableError(`Token keys unavailable (${(error as Error).name}).`);
+        }
+        // Anything unrecognised fails closed to 401. The library's messages name the failed check, never the token.
         const reason = error instanceof Error ? error.name : 'unknown';
         throw new AuthError(`Access token rejected (${reason}).`);
       }
