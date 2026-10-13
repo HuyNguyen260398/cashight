@@ -88,6 +88,7 @@ jobs:
     name: Container image
     # Native arm64 runner: the platform nodes are Graviton.
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -143,18 +144,20 @@ jobs:
           curl -s -D - -o /dev/null http://127.0.0.1:8082/statements \
             | grep -qi '^access-control-allow-origin: https://cashight.nghuy.link'
           docker rm -f api-default
-          status=0
-          timeout 20 docker run --rm \
+          out=$(timeout 20 docker run --rm \
             -e COGNITO_USER_POOL_ID=ap-southeast-1_ci -e COGNITO_CLIENT_IDS=ci-client \
-            -e ALLOWED_ORIGIN='*' cashight-backend:ci || status=$?
+            -e ALLOWED_ORIGIN='*' cashight-backend:ci 2>&1) && status=0 || status=$?
+          echo "$out"
           # 1 = refused to start. 124 would mean it started and was still serving.
           test "$status" = 1
+          echo "$out" | grep -q 'Invalid configuration: ALLOWED_ORIGIN'
 
       - name: Workers refuse to start without configuration
         run: |
           for worker in parser-worker invoice-parser-worker; do
-            if docker run --rm cashight-backend:ci "/app/${worker}/index.js"; then
-              echo "${worker} started without QUEUE_URL" >&2
-              exit 1
-            fi
+            out=$(timeout 20 docker run --rm cashight-backend:ci "/app/${worker}/index.js" 2>&1) && status=0 || status=$?
+            echo "$out"
+            # 1 = refused to start. 124 would mean it started and kept polling.
+            test "$status" = 1
+            echo "$out" | grep -q 'Missing required configuration: QUEUE_URL'
           done
