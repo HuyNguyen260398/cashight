@@ -59,7 +59,10 @@ export function createSqsConsumer(options: SqsConsumerOptions): SqsConsumer {
   // Created here, not at module scope: see backend/server/telemetry.ts.
   const meter = otelMetrics.getMeter('cashight');
   const jobs = meter.createCounter('cashight.worker.jobs');
-  const duration = meter.createHistogram('cashight.worker.job.duration', { unit: 's' });
+  const duration = meter.createHistogram('cashight.worker.job.duration', {
+    unit: 's',
+    advice: { explicitBucketBoundaries: [1, 2.5, 5, 10, 20, 30, 60, 120, 180, 240, 300] },
+  });
   const tracer = trace.getTracer('cashight');
 
   let stopped = false;

@@ -6,8 +6,9 @@
  * attach URLs and SDK request parameters to spans. Spans and metrics here carry
  * only the attributes the HTTP server and SQS consumer set explicitly.
  *
- * The exporters read OTEL_EXPORTER_OTLP_ENDPOINT themselves. With it unset
- * (Lambda, tests, local runs) nothing is registered and the OTel API no-ops.
+ * OTEL_EXPORTER_OTLP_ENDPOINT is read here and turned into explicit signal
+ * URLs for the exporters (see otlpSignalUrl). With it unset (Lambda, tests,
+ * local runs) nothing is registered and the OTel API no-ops.
  */
 import { metrics } from '@opentelemetry/api';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
@@ -23,6 +24,11 @@ export interface Telemetry {
 
 type Environment = Record<string, string | undefined>;
 
+/** `<base>/v1/<signal>`, tolerating trailing slashes on the configured base. */
+export function otlpSignalUrl(endpoint: string, signal: 'traces' | 'metrics'): string {
+  return `${endpoint.replace(/\/+$/, '')}/v1/${signal}`;
+}
+
 export function startTelemetry(serviceName: string, env: Environment = process.env): Telemetry {
   const endpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim();
   if (!endpoint) return { enabled: false, shutdown: async () => undefined };
@@ -36,7 +42,7 @@ export function startTelemetry(serviceName: string, env: Environment = process.e
   const tracerProvider = new NodeTracerProvider({
     resource,
     spanProcessors: [
-      new BatchSpanProcessor(new OTLPTraceExporter({ url: `${endpoint}/v1/traces` })),
+      new BatchSpanProcessor(new OTLPTraceExporter({ url: otlpSignalUrl(endpoint, 'traces') })),
     ],
   });
   tracerProvider.register();
@@ -45,7 +51,7 @@ export function startTelemetry(serviceName: string, env: Environment = process.e
     resource,
     readers: [
       new PeriodicExportingMetricReader({
-        exporter: new OTLPMetricExporter({ url: `${endpoint}/v1/metrics` }),
+        exporter: new OTLPMetricExporter({ url: otlpSignalUrl(endpoint, 'metrics') }),
         exportIntervalMillis: 30_000,
       }),
     ],

@@ -53,14 +53,23 @@ Workers expose no port. A worker that cannot make progress exits and is restarte
 | `cashight-api` | `TABLE_NAME`, `STATEMENTS_BUCKET`, `UPLOAD_BUCKET`, `GEMINI_PARAM` |
 | `cashight-aws-api` | `TABLE_NAME`, `STATEMENTS_BUCKET`, `UPLOAD_BUCKET`, `EXPORT_BUCKET`, `GEMINI_PARAM`; optional `GRANULAR_DATA_ENABLED` |
 
+The variables in that table are checked at startup: a workload missing one
+exits 1 with `Missing required configuration: <NAME>` instead of failing every
+request later.
+
+API pods need HTTPS egress to
+`cognito-idp.ap-southeast-1.amazonaws.com` to fetch the user pool's JWKS (signing
+keys). Without it every authenticated request answers `503` with
+`Retry-After: 5`, not `401`, so a network fault does not sign users out.
+
 ### Worker workloads
 
 | Variable | Required | Notes |
 |---|---|---|
 | `QUEUE_URL` | yes | The queue this worker consumes |
 | `MAX_PROCESSING_SECONDS` | yes | Per-job limit; must be below the 360 s visibility timeout. `120` for the statement parser, `300` for the invoice parser. |
-| `TABLE_NAME`, `STATEMENTS_BUCKET`, `UPLOAD_BUCKET` | yes | |
-| `PDF_PASSWORD_PARAM` | statement parser only | SSM parameter name |
+| `TABLE_NAME`, `STATEMENTS_BUCKET`, `UPLOAD_BUCKET` | yes | Checked at startup, after the two queue variables |
+| `PDF_PASSWORD_PARAM` | statement parser only | SSM parameter name. Not checked at startup: when unset, no PDF password is looked up. |
 
 Set the pod's `terminationGracePeriodSeconds` above `MAX_PROCESSING_SECONDS` for
 workers, and above `SHUTDOWN_DELAY_MS` for APIs, so a rollout never cuts off
@@ -101,7 +110,14 @@ so `COGNITO_USER_POOL_ID` does not change; add the v2 app client id to
 | Histogram | `cashight.worker.job.duration` (s) | `outcome` |
 | Counter | `cashight.aws_invoice_parse_failure` | `error_code` |
 | Counter | `cashight.legacy_workspace_fallback`, `cashight.legacy_authz_fallback` | — |
-| Span | `<METHOD> <route>`, `worker.job` | same attributes as the matching metric |
+| Span | `<METHOD> <route>` | same attributes as the matching metric |
+| Span | `worker.job` | `cashight.worker.outcome` (the metric attribute is `outcome`) |
+
+Resource attributes on every signal: `service.name` (the workload),
+`service.namespace` = `cashight`, `service.version` (`APP_VERSION`).
+
+The invoice worker still prints its CloudWatch EMF JSON line to stdout when it
+records a parse failure, in addition to the OTel counter.
 
 `http.route` is the handler name (`dashboard`, `statements`, …), never the URL.
 Logs are JSON lines on stdout with `trace_id` and `span_id` when a span is
@@ -110,8 +126,13 @@ statement content; keep it that way when adding attributes.
 
 ## Local use
 
-    pnpm build:servers
     docker build -t cashight-backend:dev .
     docker run --rm -p 8080:8080 \
       -e COGNITO_USER_POOL_ID=<pool id> -e COGNITO_CLIENT_IDS=<client id> \
+      -e TABLE_NAME=<table> -e STATEMENTS_BUCKET=<bucket> -e UPLOAD_BUCKET=<bucket> \
+      -e GEMINI_PARAM=<ssm parameter> \
       cashight-backend:dev
+
+The image bundles the entrypoints itself; `pnpm build:servers` is only needed to
+inspect `dist/servers/` outside Docker. For `cashight-aws-api` also set
+`EXPORT_BUCKET` and pass `/app/aws-api/index.js` as the container argument.

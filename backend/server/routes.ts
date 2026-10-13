@@ -76,13 +76,14 @@ export function matchRoute(method: string, pathname: string): RouteMatch | undef
     return method === 'POST' && count === 1 ? match('summaries', {}, true) : undefined;
   }
 
-  if (first === 'aws' && second === 'cost-explorer' && count >= 3) {
+  // Deepest real route has four segments; deeper paths are no route.
+  if (first === 'aws' && second === 'cost-explorer' && count >= 3 && count <= 4) {
     const pathParameters: Record<string, string> =
       third === 'reports' && fourth ? { reportId: fourth } : {};
     return match('costExplorer', pathParameters, method === 'POST');
   }
 
-  if (first === 'aws' && second === 'invoices') {
+  if (first === 'aws' && second === 'invoices' && count <= 4) {
     if (method === 'POST' && third === 'summary' && count === 3) {
       return match('awsInvoiceSummaries', {}, true);
     }

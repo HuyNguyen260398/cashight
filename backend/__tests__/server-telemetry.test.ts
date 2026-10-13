@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { startTelemetry } from '../server/telemetry';
+import { otlpSignalUrl, startTelemetry } from '../server/telemetry';
 
 describe('startTelemetry', () => {
   it('is a no-op when no OTLP endpoint is configured', async () => {
@@ -19,5 +19,20 @@ describe('startTelemetry', () => {
     });
     expect(telemetry.enabled).toBe(true);
     await expect(telemetry.shutdown()).resolves.toBeUndefined();
+  });
+});
+
+describe('otlpSignalUrl', () => {
+  it.each([
+    'http://otel-gateway.observability:4318',
+    'http://otel-gateway.observability:4318/',
+    'http://otel-gateway.observability:4318///',
+  ])('appends the signal path to %s without doubling slashes', (endpoint) => {
+    expect(otlpSignalUrl(endpoint, 'traces')).toBe(
+      'http://otel-gateway.observability:4318/v1/traces',
+    );
+    expect(otlpSignalUrl(endpoint, 'metrics')).toBe(
+      'http://otel-gateway.observability:4318/v1/metrics',
+    );
   });
 });

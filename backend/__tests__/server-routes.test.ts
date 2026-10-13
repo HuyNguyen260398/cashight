@@ -42,6 +42,24 @@ describe('matchRoute', () => {
     expect(matchRoute(method, path)).toBeUndefined();
   });
 
+  it.each([
+    ['POST', '/aws/invoices/a/b/uploads'],
+    ['GET', '/aws/invoices/uploads/job-2/extra'],
+    ['GET', '/aws/invoices/2026-07/a/b'],
+    ['GET', '/aws/cost-explorer/reports/r-1/extra'],
+    ['POST', '/aws/cost-explorer/a/b/c'],
+  ])('%s %s is deeper than any real route and has no route', (method, path) => {
+    expect(matchRoute(method, path)).toBeUndefined();
+  });
+
+  it('keeps the AWS handlers deliberately broad below the depth cap', () => {
+    // The handlers own their own method and subpath validation.
+    expect(matchRoute('PUT', '/aws/invoices/anything')?.handler).toBe('awsInvoices');
+    expect(matchRoute('GET', '/aws/invoices/a/b')?.handler).toBe('awsInvoices');
+    expect(matchRoute('PATCH', '/aws/cost-explorer/whatever')?.handler).toBe('costExplorer');
+    expect(matchRoute('GET', '/aws/cost-explorer/x/y')?.handler).toBe('costExplorer');
+  });
+
   it('decodes path parameters', () => {
     expect(matchRoute('GET', '/uploads/a%20b')?.pathParameters).toEqual({ jobId: 'a b' });
   });
