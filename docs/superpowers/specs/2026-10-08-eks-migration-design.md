@@ -11,7 +11,7 @@
 | Goal | Full production cutover; the serverless compute is decommissioned afterwards |
 | Platform ownership | The cluster and platform add-ons live in the existing `aws-eks-infra` repo; Cashight is a workload on it |
 | Observability hosting | Self-hosted Grafana stack (Loki, Tempo, Mimir, Grafana) in the cluster |
-| Rollout (decided 2026-10-13) | **Parallel stack on a second hostname, not a weighted DNS shift.** The current architecture keeps `cashight.nghuy.link` untouched. The new one comes up at `cashsightv2.nghuy.link` (API at `api.cashsightv2.nghuy.link`). Once it has run smoothly, the old architecture is retired and the new stack is renamed to `cashight.nghuy.link` |
+| Rollout (decided 2026-10-13) | **Parallel stack on a second hostname, not a weighted DNS shift.** The current architecture keeps `cashight.nghuy.link` untouched. The new one comes up at `cashight-v2.nghuy.link` (API at `api.cashight-v2.nghuy.link`). Once it has run smoothly, the old architecture is retired and the new stack is renamed to `cashight.nghuy.link` |
 | Branching (decided 2026-10-13) | New-architecture work lives on the long-lived branch `cashight-v2`, cut from `main`. Every feature branch for it is created from `cashight-v2` and merges back into it. `main` keeps deploying the current architecture; `cashight-v2` merges into `main` once, at the retire-and-rename step (phase 7) |
 
 Consequences of the branching decision for later plans: the Argo CD `Application` tracks `cashight-v2` until the rename, so the image-digest commits of §4.5 land on a branch the `main` ruleset does not protect; `ci.yaml` and `tf-ci.yaml` must list `cashight-v2` as a pull-request target; and fixes made on `main` are merged forward into `cashight-v2`, never the reverse.
@@ -58,9 +58,9 @@ Run cost today is about $1.36/month.
 Hostnames below are the ones used during the parallel run. After the rename (phase 7) they become `cashight.nghuy.link` and `api.cashight.nghuy.link`. Until then the existing stack keeps serving those names exactly as described in §2.
 
 ```text
-Browser ──► cashsightv2.nghuy.link ─► CloudFront + S3 (v2 build of the SPA)
+Browser ──► cashight-v2.nghuy.link ─► CloudFront + S3 (v2 build of the SPA)
    │
-   └─► api.cashsightv2.nghuy.link ─► shared ALB (platform-public, ACM TLS)
+   └─► api.cashight-v2.nghuy.link ─► shared ALB (platform-public, ACM TLS)
                                       │  Ingress
               ┌───────────────────────┴───────────────────────┐
               ▼                                               ▼
@@ -108,7 +108,7 @@ The KEDA maximums match today's reserved concurrency. Memory requests follow the
 
 - **HTTP entrypoint.** A small Node server per API workload that maps routes to the existing handlers, sharing the route table with `scripts/dev-server.ts`. Handlers keep their `(event) → ApiResponse` signature.
 - **JWT verification.** API Gateway's Cognito authorizer is replaced by middleware using `aws-jwt-verify` against the user pool. It produces the same claims object that `extractAccessClaims` reads, so authorization code is untouched.
-- **What API Gateway did implicitly.** CORS, request size limits and rate limiting move into the server. The allowed CORS origin is per-deployment configuration (`ALLOWED_ORIGIN`, default `https://cashight.nghuy.link`), still exactly one origin per deployment (SEC-006), so the v2 stack can answer for `https://cashsightv2.nghuy.link` and be renamed without a new image. Request validation is already covered by Zod at each handler boundary; the implementation plan must diff the OpenAPI validators against the Zod schemas to confirm parity.
+- **What API Gateway did implicitly.** CORS, request size limits and rate limiting move into the server. The allowed CORS origin is per-deployment configuration (`ALLOWED_ORIGIN`, default `https://cashight.nghuy.link`), still exactly one origin per deployment (SEC-006), so the v2 stack can answer for `https://cashight-v2.nghuy.link` and be renamed without a new image. Request validation is already covered by Zod at each handler boundary; the implementation plan must diff the OpenAPI validators against the Zod schemas to confirm parity.
 - **Worker entrypoint.** An SQS long-polling loop that calls the existing worker handlers one message at a time, extends visibility while working, deletes on success, and leaves failures to the existing redrive policy (3 receives, then DLQ). It handles SIGTERM by finishing the in-flight message.
 - **Observability adapter.** `backend/shared/observability.ts` swaps Powertools for the OpenTelemetry SDK behind the same `logger`, `metrics` and `tracer` exports. `sanitizeForLog` stays in the path unchanged.
 - **Images.** One multi-stage arm64 Dockerfile producing the four entrypoints. The parser image must include `pdf.worker.mjs`, and the DOM polyfill import order rule still applies.
@@ -119,8 +119,8 @@ The KEDA maximums match today's reserved concurrency. Memory requests follow the
 - ECR repositories with scan-on-push and lifecycle rules.
 - Four IAM roles with EKS Pod Identity associations, each carrying the union of its former Lambda policies and nothing more.
 - A GitHub OIDC permission to push images, replacing the Lambda deploy permissions.
-- New Route 53 records and ACM certificates for the v2 names: `api.cashsightv2.nghuy.link` (regional, on the ALB) and `cashsightv2.nghuy.link` (us-east-1, on CloudFront). The existing records and certificates for `cashight.nghuy.link` and `api.cashight.nghuy.link` are not modified.
-- A second SPA origin for `cashsightv2.nghuy.link`: the same static export built with `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_APP_ORIGIN` set to the v2 names, in its own S3 prefix or bucket behind CloudFront.
+- New Route 53 records and ACM certificates for the v2 names: `api.cashight-v2.nghuy.link` (regional, on the ALB) and `cashight-v2.nghuy.link` (us-east-1, on CloudFront). The existing records and certificates for `cashight.nghuy.link` and `api.cashight.nghuy.link` are not modified.
+- A second SPA origin for `cashight-v2.nghuy.link`: the same static export built with `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_APP_ORIGIN` set to the v2 names, in its own S3 prefix or bucket behind CloudFront.
 - The v2 origin added wherever the production origin is allowlisted today: Cognito callback and sign-out URLs (`cognito.tf`) and the CORS rules on the statements and uploads buckets (`data.tf`), which presigned uploads depend on. These are additions; the production entries stay.
 - After the soak: removal of `api.tf`, the 11 migrated Lambdas, their roles, log groups, CodeDeploy apps and API Gateway permissions. Then the rename: the `cashight.nghuy.link` and `api.cashight.nghuy.link` records are pointed at the new stack (the existing regional certificate for `api.cashight.nghuy.link` is attached to the ALB), `ALLOWED_ORIGIN` and the SPA build switch back to the production names, and the v2 records, certificates and allowlist entries are removed.
 
@@ -166,8 +166,8 @@ Each phase leaves production working and is independently reversible until phase
 | 2 | Observability stack and collectors, dashboards, alerts | `aws-eks-infra` | Cluster metrics, logs and traces visible in Grafana |
 | 3 | Containerise: HTTP and worker entrypoints, JWT middleware, OTel adapter, Dockerfile | `cashight` | Unit tests pass; images run locally against the local stack |
 | 4 | Cashight AWS resources: ECR, Pod Identity roles, v2 DNS records and certificates, v2 origin in the Cognito and S3 CORS allowlists | `cashight` | `terraform plan` shows only additions; nothing serving `cashight.nghuy.link` changes |
-| 5 | GitOps manifests, Argo CD Application, CI image pipeline, v2 SPA build | both | Workloads healthy; smoke tests pass against `cashsightv2.nghuy.link` and `api.cashsightv2.nghuy.link` |
-| 6 | Parallel run: use the app on `cashsightv2.nghuy.link` while `cashight.nghuy.link` stays on the old stack. Within the soak, disable the Lambda SQS event source mappings and enable the KEDA workers, so the workers are proven too | `cashight` | Smoke and e2e tests green on the v2 hostname; two-week soak with no fallback to the old stack |
+| 5 | GitOps manifests, Argo CD Application, CI image pipeline, v2 SPA build | both | Workloads healthy; smoke tests pass against `cashight-v2.nghuy.link` and `api.cashight-v2.nghuy.link` |
+| 6 | Parallel run: use the app on `cashight-v2.nghuy.link` while `cashight.nghuy.link` stays on the old stack. Within the soak, disable the Lambda SQS event source mappings and enable the KEDA workers, so the workers are proven too | `cashight` | Smoke and e2e tests green on the v2 hostname; two-week soak with no fallback to the old stack |
 | 7 | Retire the old architecture (API Gateway, migrated Lambdas, CodeDeploy), then rename: point `cashight.nghuy.link` and `api.cashight.nghuy.link` at the new stack and remove the v2 names; update docs and `CLAUDE.md` | `cashight` | `terraform plan` clean; the app works on `cashight.nghuy.link`; cost report shows serverless compute at zero |
 
 **Fallback during phases 4–6:** keep using `cashight.nghuy.link`. The old stack is never modified, so there is nothing to roll back for the API. If the queue consumers have been switched, re-enable the event source mappings. Data stores are shared and untouched, so no data rollback exists.

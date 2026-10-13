@@ -15,7 +15,7 @@
 The first draft of the spec shifted `api.cashight.nghuy.link` between API Gateway and the ALB with weighted DNS. That is replaced by a parallel rollout on a second hostname:
 
 1. **The current architecture stays exactly as it is** at `cashight.nghuy.link` and `api.cashight.nghuy.link`. Plans 1–4 do not touch its DNS records, API Gateway, Lambdas or CodeDeploy setup.
-2. **The new architecture comes up beside it** at `cashsightv2.nghuy.link` (SPA) and `api.cashsightv2.nghuy.link` (ALB → EKS). Both stacks share the Cognito user pool, DynamoDB table and S3 buckets, so the same statements are visible on both hostnames and there is no data migration.
+2. **The new architecture comes up beside it** at `cashight-v2.nghuy.link` (SPA) and `api.cashight-v2.nghuy.link` (ALB → EKS). Both stacks share the Cognito user pool, DynamoDB table and S3 buckets, so the same statements are visible on both hostnames and there is no data migration.
 3. **Soak on the v2 hostname** until it has run smoothly.
 4. **Retire the old architecture** (API Gateway, the 11 migrated Lambdas, CodeDeploy), then **move the production names onto the new stack**: `cashight.nghuy.link` and `api.cashight.nghuy.link` point at it, and the v2 names are removed.
 
@@ -63,8 +63,8 @@ Plans 1 and 2 can run in parallel. Nothing in this plan creates AWS resources or
 - **arm64 image** (the platform nodes are Graviton).
 - **`pdf.worker.mjs` must sit next to `index.js`** for both worker entrypoints.
 - **DOM polyfill ordering** is owned by the domain parser modules; entrypoints must import handlers, never `pdfjs-dist` or `pdf-parse` directly.
-- **CORS allows exactly one origin per deployment** (SEC-006). The default is `https://cashight.nghuy.link`; the v2 stack sets `ALLOWED_ORIGIN=https://cashsightv2.nghuy.link`. No wildcard, no list, no echoing the request's `Origin` header. A value that is not a single https origin stops the process at startup.
-- **No hostname in code except that default.** `cashsightv2.nghuy.link` may appear only in tests, docs and CI checks, so the final rename is configuration only.
+- **CORS allows exactly one origin per deployment** (SEC-006). The default is `https://cashight.nghuy.link`; the v2 stack sets `ALLOWED_ORIGIN=https://cashight-v2.nghuy.link`. No wildcard, no list, no echoing the request's `Origin` header. A value that is not a single https origin stops the process at startup.
+- **No hostname in code except that default.** `cashight-v2.nghuy.link` may appear only in tests, docs and CI checks, so the final rename is configuration only.
 - **`pnpm` 11.2.2**, pinned by `packageManager`.
 - **Region `ap-southeast-1`.**
 - Work on branch `feat/container-runtime`, created from `cashight-v2`. The pull request targets `cashight-v2`. Nothing in this plan is merged or pushed to `main`.
@@ -1153,7 +1153,7 @@ Behaviour, in order, for each request:
 7. Body over `maxBodyBytes` (default 1 MiB) → 413.
 8. Handler result written as-is; a thrown error → 500 with the standard body.
 
-The allowed origin is configuration because the new stack runs at `cashsightv2.nghuy.link` beside the old one and is later renamed to `cashight.nghuy.link`. Handlers put the header on their own responses through `jsonResponse`, `textResponse` and `errorResponse`, so the value has to change in `api-response.ts`, not only in the server.
+The allowed origin is configuration because the new stack runs at `cashight-v2.nghuy.link` beside the old one and is later renamed to `cashight.nghuy.link`. Handlers put the header on their own responses through `jsonResponse`, `textResponse` and `errorResponse`, so the value has to change in `api-response.ts`, not only in the server.
 
 - [ ] **Step 1: Write the failing origin test**
 
@@ -1173,14 +1173,14 @@ describe('allowedOriginFromEnv', () => {
   );
 
   it('accepts the hostname the new stack runs on during the rollout', () => {
-    expect(allowedOriginFromEnv({ ALLOWED_ORIGIN: 'https://cashsightv2.nghuy.link' })).toBe(
-      'https://cashsightv2.nghuy.link',
+    expect(allowedOriginFromEnv({ ALLOWED_ORIGIN: 'https://cashight-v2.nghuy.link' })).toBe(
+      'https://cashight-v2.nghuy.link',
     );
   });
 
   it('ignores surrounding whitespace', () => {
-    expect(allowedOriginFromEnv({ ALLOWED_ORIGIN: ' https://cashsightv2.nghuy.link\n' })).toBe(
-      'https://cashsightv2.nghuy.link',
+    expect(allowedOriginFromEnv({ ALLOWED_ORIGIN: ' https://cashight-v2.nghuy.link\n' })).toBe(
+      'https://cashight-v2.nghuy.link',
     );
   });
 
@@ -1188,14 +1188,14 @@ describe('allowedOriginFromEnv', () => {
     '*',
     'null',
     'https://*.nghuy.link',
-    'http://cashsightv2.nghuy.link',
-    'cashsightv2.nghuy.link',
-    'https://cashsightv2.nghuy.link/',
-    'https://cashsightv2.nghuy.link/signin',
-    'https://cashsightv2.nghuy.link:443',
-    'https://CASHSIGHTV2.nghuy.link',
-    'https://cashight.nghuy.link,https://cashsightv2.nghuy.link',
-    'https://cashight.nghuy.link https://cashsightv2.nghuy.link',
+    'http://cashight-v2.nghuy.link',
+    'cashight-v2.nghuy.link',
+    'https://cashight-v2.nghuy.link/',
+    'https://cashight-v2.nghuy.link/signin',
+    'https://cashight-v2.nghuy.link:443',
+    'https://CASHIGHT-V2.nghuy.link',
+    'https://cashight.nghuy.link,https://cashight-v2.nghuy.link',
+    'https://cashight.nghuy.link https://cashight-v2.nghuy.link',
   ])('refuses %j', (value) => {
     expect(() => allowedOriginFromEnv({ ALLOWED_ORIGIN: value })).toThrow(
       'Invalid configuration: ALLOWED_ORIGIN',
@@ -2645,7 +2645,7 @@ Expected output, in order: `200`, `{"status":"ok"}`, `401`, `404`, then a JSON l
 Then check the origin the way the v2 deployment will set it. `/health` is answered by the server and the `401` by a shared response builder, so both code paths are covered:
 
 ```bash
-ALLOWED_ORIGIN=https://cashsightv2.nghuy.link COGNITO_USER_POOL_ID=ap-southeast-1_local COGNITO_CLIENT_IDS=local PORT=18081 SHUTDOWN_DELAY_MS=0 node dist/servers/api/index.js &
+ALLOWED_ORIGIN=https://cashight-v2.nghuy.link COGNITO_USER_POOL_ID=ap-southeast-1_local COGNITO_CLIENT_IDS=local PORT=18081 SHUTDOWN_DELAY_MS=0 node dist/servers/api/index.js &
 sleep 2
 curl -s -D - -o /dev/null http://127.0.0.1:18081/health | grep -i '^access-control-allow-origin'
 curl -s -D - -o /dev/null http://127.0.0.1:18081/statements | grep -i '^access-control-allow-origin'
@@ -2654,7 +2654,7 @@ kill $!
 ALLOWED_ORIGIN='*' COGNITO_USER_POOL_ID=ap-southeast-1_local COGNITO_CLIENT_IDS=local node dist/servers/api/index.js; echo "exit=$?"
 ```
 
-Expected: three lines reading `Access-Control-Allow-Origin: https://cashsightv2.nghuy.link`, then an error containing `Invalid configuration: ALLOWED_ORIGIN` and `exit=1`.
+Expected: three lines reading `Access-Control-Allow-Origin: https://cashight-v2.nghuy.link`, then an error containing `Invalid configuration: ALLOWED_ORIGIN` and `exit=1`.
 
 - [ ] **Step 11: Full verification**
 
@@ -2886,7 +2886,7 @@ Then, in the same file, add this job after the `app` job, at the same indentatio
         run: |
           docker run -d --name aws-api -p 8081:8080 \
             -e COGNITO_USER_POOL_ID=ap-southeast-1_ci -e COGNITO_CLIENT_IDS=ci-client \
-            -e ALLOWED_ORIGIN=https://cashsightv2.nghuy.link \
+            -e ALLOWED_ORIGIN=https://cashight-v2.nghuy.link \
             cashight-backend:ci /app/aws-api/index.js
           for attempt in $(seq 1 20); do
             curl -fsS http://127.0.0.1:8081/healthz && break
@@ -2896,7 +2896,7 @@ Then, in the same file, add this job after the `app` job, at the same indentatio
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8081/statements)" = 404
           # /health is answered by the server, the 401 by a shared response
           # builder, and OPTIONS by the preflight branch: three code paths.
-          expected='^access-control-allow-origin: https://cashsightv2.nghuy.link'
+          expected='^access-control-allow-origin: https://cashight-v2.nghuy.link'
           curl -s -D - -o /dev/null http://127.0.0.1:8081/health | grep -qi "$expected"
           curl -s -D - -o /dev/null http://127.0.0.1:8081/aws/invoices | grep -qi "$expected"
           curl -s -D - -o /dev/null -X OPTIONS http://127.0.0.1:8081/aws/invoices | grep -qi "$expected"
@@ -3026,7 +3026,7 @@ is a configuration change.
 
 | Stage | Frontend origin | API hostname | `ALLOWED_ORIGIN` on both API workloads |
 |---|---|---|---|
-| Parallel run and soak | `https://cashsightv2.nghuy.link` | `api.cashsightv2.nghuy.link` | `https://cashsightv2.nghuy.link` |
+| Parallel run and soak | `https://cashight-v2.nghuy.link` | `api.cashight-v2.nghuy.link` | `https://cashight-v2.nghuy.link` |
 | After the rename | `https://cashight.nghuy.link` | `api.cashight.nghuy.link` | unset, or `https://cashight.nghuy.link` |
 
 Each deployment allows exactly one origin (SEC-006). The Lambdas never set
@@ -3088,7 +3088,7 @@ Expected: all pass.
 git add Dockerfile .dockerignore docs/container-runtime.md .github/workflows/ci.yaml CLAUDE.md
 git commit -m "feat(server): package the backend as a container image"
 git push -u origin feat/container-runtime
-gh pr create --base cashight-v2 --title "feat: backend container runtime (EKS migration, plan 1 of 5)" --body "Adds an HTTP server, an SQS consumer and a container image around the existing Lambda handlers. The CORS origin becomes per-deployment configuration (ALLOWED_ORIGIN, default unchanged) so the new stack can run at cashsightv2.nghuy.link beside the current one. No infrastructure, DNS or Lambda configuration changes. Targets cashight-v2, so merging deploys nothing. Spec: docs/superpowers/specs/2026-10-08-eks-migration-design.md"
+gh pr create --base cashight-v2 --title "feat: backend container runtime (EKS migration, plan 1 of 5)" --body "Adds an HTTP server, an SQS consumer and a container image around the existing Lambda handlers. The CORS origin becomes per-deployment configuration (ALLOWED_ORIGIN, default unchanged) so the new stack can run at cashight-v2.nghuy.link beside the current one. No infrastructure, DNS or Lambda configuration changes. Targets cashight-v2, so merging deploys nothing. Spec: docs/superpowers/specs/2026-10-08-eks-migration-design.md"
 ```
 
 Verify the target: `gh pr view --json baseRefName --jq .baseRefName`
@@ -3105,6 +3105,6 @@ Because the Lambdas are not redeployed, their compatibility with the two shared-
 - `pnpm test`, `pnpm tsc --noEmit`, `pnpm lint`, `pnpm build:lambdas` and `pnpm build:servers` all pass.
 - The CI `container` job is green.
 - The pull request is merged into `cashight-v2`, `main` is unchanged (`git log origin/main -1` shows the same commit as before the plan started), and no `Application Deploy` run was triggered.
-- A container started with `ALLOWED_ORIGIN=https://cashsightv2.nghuy.link` returns that origin on `/health`, on a 401 and on a preflight; one started with `ALLOWED_ORIGIN='*'` exits 1.
-- `git grep -n cashsightv2 -- backend scripts packages ':!*__tests__*'` prints nothing: the v2 hostname lives only in tests, docs and CI.
+- A container started with `ALLOWED_ORIGIN=https://cashight-v2.nghuy.link` returns that origin on `/health`, on a 401 and on a preflight; one started with `ALLOWED_ORIGIN='*'` exits 1.
+- `git grep -n 'cashight-v2\.nghuy\.link' -- backend scripts packages ':!*__tests__*'` prints nothing: the v2 hostname lives only in tests, docs and CI.
 - `docs/container-runtime.md` matches the variables the code reads.
