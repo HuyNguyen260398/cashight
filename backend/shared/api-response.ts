@@ -1,10 +1,39 @@
 import { z } from 'zod';
 
-// SEC-006: CORS is locked to exactly one allowed origin — keep in sync with
+// SEC-006: CORS is locked to exactly one allowed origin per deployment. The
+// default is the production hostname and must stay in sync with
 // x-amazon-apigateway-cors in terraform/api-openapi.yaml.tftpl. API Gateway
 // only injects this header for MOCK integrations (OPTIONS preflight); Lambda
-// proxy integrations must set it on every response themselves.
-const ALLOWED_ORIGIN = 'https://cashight.nghuy.link';
+// proxy integrations must set it on every response themselves. The Lambdas
+// never set ALLOWED_ORIGIN, so they always use the default. A container
+// deployment sets it to the hostname its own frontend is served from.
+const DEFAULT_ALLOWED_ORIGIN = 'https://cashight.nghuy.link';
+
+function isSingleHttpsOrigin(value: string): boolean {
+  if (!/^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?$/.test(value)) return false;
+  try {
+    // Also rejects a default port and anything else a browser would not send.
+    return new URL(value).origin === value;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The one origin allowed to call this deployment. A value that is not a single
+ * https origin throws, so a typo stops the process instead of silently
+ * breaking or widening CORS.
+ */
+export function allowedOriginFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): string {
+  const value = env.ALLOWED_ORIGIN?.trim();
+  if (!value) return DEFAULT_ALLOWED_ORIGIN;
+  if (!isSingleHttpsOrigin(value)) throw new Error('Invalid configuration: ALLOWED_ORIGIN');
+  return value;
+}
+
+export const ALLOWED_ORIGIN = allowedOriginFromEnv();
 
 export interface ApiErrorBody {
   error: {
