@@ -31,6 +31,7 @@ A personal Next.js 16 (App Router, React 19) web app that:
 | Local API stack (no AWS, no Cognito) | `pnpm dev:local` — see [`docs/local-development.md`](./docs/local-development.md) |
 | Wipe local stack data | `pnpm dev:local:reset` |
 | Production build | `pnpm build` |
+| Bundle the container entrypoints | `pnpm build:servers` — see [`docs/container-runtime.md`](./docs/container-runtime.md) |
 | Type check | `pnpm tsc --noEmit` |
 | Lint | `pnpm lint` |
 | Test the parser against the sample PDF | `pnpm tsx scripts/test-parser.ts` |
