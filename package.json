@@ -10,6 +10,7 @@
     "build": "NODE_OPTIONS=--disable-warning=DEP0205 next build",
     "verify:static": "node scripts/verify-static-export.mjs",
     "build:lambdas": "node scripts/build-lambdas.mjs",
+    "build:servers": "node scripts/build-servers.mjs",
     "start": "next start",
     "lint": "eslint",
     "cleanup:legacy-buckets": "tsx scripts/delete-legacy-s3-buckets.ts --confirm-delete-legacy-buckets",
