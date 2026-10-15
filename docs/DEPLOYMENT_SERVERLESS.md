@@ -41,14 +41,21 @@ known-good CI run.
 | Variable | Value (from `terraform output`) |
 |---|---|
 | `AWS_DEPLOY_ROLE_ARN` | `terraform output github_deploy_role_arn` |
-| `AWS_INFRA_ROLE_ARN` | ARN of a Terraform admin IAM role |
+| `AWS_INFRA_ROLE_ARN` | `terraform output github_infra_role_arn` |
 | `ARTIFACTS_BUCKET` | `terraform output artifacts_bucket_name` |
 | `FRONTEND_BUCKET` | `terraform output frontend_bucket_name` |
 | `CLOUDFRONT_DISTRIBUTION_ID` | `terraform output cloudfront_distribution_id` |
 
-### GitHub environment
+### GitHub environments
 
-A `production` environment must exist with required reviewers configured. Both the `infrastructure-deploy` and `application-deploy` workflows gate their apply/deploy jobs on this environment.
+Two environments gate deployments:
+
+| Environment | Used by | Protection |
+|---|---|---|
+| `production` | `application-deploy.yaml` (Lambda and frontend deploy jobs) | None: deploys run unattended after a PR merges into `main` |
+| `infrastructure` | `infrastructure-deploy.yaml` (plan and apply jobs) | Required reviewer; deployments only from `main` |
+
+`cashight-github-infra` is admin-equivalent and trusts only `repo:HuyNguyen260398/cashight:environment:infrastructure`, so the reviewer approval is what stands between a dispatch and an admin session.
 
 ---
 

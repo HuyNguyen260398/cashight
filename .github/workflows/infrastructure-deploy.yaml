@@ -24,8 +24,9 @@ jobs:
     name: Terraform Plan
     runs-on: ubuntu-latest
     # Required: cashight-github-infra trusts only subjects of the form
-    # repo:<repo>:environment:production, so a job without this cannot assume it.
-    environment: production
+    # repo:<repo>:environment:infrastructure, so a job without this cannot
+    # assume it. The environment's required reviewer is the human gate.
+    environment: infrastructure
 
     steps:
       - name: Checkout
@@ -98,7 +99,7 @@ jobs:
     if: ${{ inputs.action == 'apply' }}
     needs: plan
     runs-on: ubuntu-latest
-    environment: production
+    environment: infrastructure
 
     steps:
       - name: Checkout
