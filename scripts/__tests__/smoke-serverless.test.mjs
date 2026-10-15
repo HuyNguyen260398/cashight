@@ -89,6 +89,36 @@ describe('serverless Cost Explorer smoke validation', () => {
     });
   });
 
+  // A SHA-256 hex digest is 64 random hex characters, so a run of twelve
+  // decimal digits inside it happens in roughly one digest in six. That run is
+  // flanked by letters, not by the separators an account ID sits between.
+  it('accepts a hex digest that happens to contain twelve consecutive digits', () => {
+    const digest =
+      'd40877f3a74a8d08fcf05a4cb6475270077f775d9a8a592732104475a821';
+    expect(
+      inspectCostExplorerSmokeResponses(
+        response(200, { ...JSON.parse(queryResponse('AWS', '12.34').body), digest }),
+        response(200, { ...JSON.parse(queryResponse('CACHE', '12.34').body), digest }),
+        'short-lived-native-token',
+      ),
+    ).toEqual({ status: 'PASSED', total: '12.34' });
+  });
+
+  it('still rejects an account ID inside an ARN or a bare value', () => {
+    for (const leaked of [
+      { note: 'arn:aws:iam::123456789012:role/cashight' },
+      { note: '123456789012' },
+    ]) {
+      expect(() =>
+        inspectCostExplorerSmokeResponses(
+          queryResponse('AWS', '12.34', leaked),
+          queryResponse('CACHE', '12.34'),
+          'short-lived-native-token',
+        ),
+      ).toThrow('sensitive fields');
+    }
+  });
+
   it('rejects provenance, total, token, account, and request-data leaks', () => {
     expect(() =>
       inspectCostExplorerSmokeResponses(
@@ -151,6 +181,36 @@ describe('serverless AWS invoice smoke validation', () => {
     expect(
       inspectAwsInvoiceSmokeResponses(succeededJob, dashboard, deleted),
     ).toEqual({ status: 'PASSED', yearMonth: '2026-07' });
+  });
+
+  it('accepts hex identifiers that happen to contain twelve consecutive digits', () => {
+    expect(
+      inspectAwsInvoiceSmokeResponses(
+        succeededJob,
+        invoiceResponse(200, {
+          dashboard: {
+            ...JSON.parse(dashboard.body).dashboard,
+            digest: 'd40877f3a74a8d08fcf05a4cb6475270077f775d9a8a592732104475a821',
+          },
+        }),
+        deleted,
+      ),
+    ).toEqual({ status: 'PASSED', yearMonth: '2026-07' });
+  });
+
+  it('still rejects an account ID inside an ARN', () => {
+    expect(() =>
+      inspectAwsInvoiceSmokeResponses(
+        succeededJob,
+        invoiceResponse(200, {
+          dashboard: {
+            ...JSON.parse(dashboard.body).dashboard,
+            note: 'arn:aws:iam::123456789012:role/cashight',
+          },
+        }),
+        deleted,
+      ),
+    ).toThrow('sensitive');
   });
 
   it('rejects terminal failures, unmasked IDs, and prohibited fields', () => {
