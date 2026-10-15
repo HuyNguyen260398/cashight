@@ -141,6 +141,13 @@ function costExplorerDisabledReason(response) {
     : null;
 }
 
+// An AWS account ID is twelve digits standing on their own or between
+// separators (arn:aws:iam::123456789012:role/x). Letters on either side mean
+// the digits are part of something else, such as the hex digest every Cost
+// Explorer response carries, where a twelve-digit run appears by chance in
+// about one digest in six.
+const ACCOUNT_ID_PATTERN = /(?:^|[^0-9A-Za-z])\d{12}(?:[^0-9A-Za-z]|$)/;
+
 function containsSensitiveCostData(value, nativeToken) {
   const sensitiveKeys = new Set([
     'accesstoken',
@@ -160,7 +167,7 @@ function containsSensitiveCostData(value, nativeToken) {
     if (typeof current === 'string') {
       return (
         (nativeToken.length > 0 && current.includes(nativeToken)) ||
-        /(?:^|\D)\d{12}(?:\D|$)/.test(current)
+        ACCOUNT_ID_PATTERN.test(current)
       );
     }
     if (Array.isArray(current)) return current.some(visit);
@@ -215,7 +222,7 @@ const PROHIBITED_INVOICE_KEYS = new Set([
 function containsSensitiveInvoiceData(value) {
   if (typeof value === 'string') {
     return (
-      /(?:^|\D)\d{12}(?:\D|$)/.test(value) ||
+      ACCOUNT_ID_PATTERN.test(value) ||
       /https?:\/\/[^\s"']*(?:aws-invoices|X-Amz-(?:Credential|Signature|Security-Token))/i.test(value)
     );
   }
