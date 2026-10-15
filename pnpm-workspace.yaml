@@ -9,21 +9,28 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
 
-minimumReleaseAgeExclude:
-  - js-yaml@4.3.1
-
 overrides:
-  js-yaml: 4.3.1
+  js-yaml: 4.3.2
   nanoid: 3.3.18
   postcss: 8.5.25
   protobufjs: 7.6.5
-  undici: 7.29.0
+  undici: 7.30.0
+  source-map-js: 1.2.2
+  baseline-browser-mapping: 2.11.28
   vite: 8.0.16
-  # next pins sharp ^0.34.5 and cannot reach the patched 0.35.x on its own.
-  # Inert here regardless: next.config.ts sets output:'export' with
+  # Pinned to the patched release for the audit. Inert here regardless: next.config.ts sets output:'export' with
   # images.unoptimized, so sharp is never invoked.
-  sharp: 0.35.3
+  sharp: 0.35.5
   # Two majors are in the tree: minimatch@3 (eslint) wants 1.x, minimatch@10
   # (typescript-eslint) wants 5.x. Both lines have their own advisory.
-  'brace-expansion@1': 1.1.18
-  'brace-expansion@5': 5.0.9
+  'brace-expansion@1': 1.1.21
+  'brace-expansion@5': 5.0.12
+
+auditConfig:
+  ignoreGhsas:
+    # braces <=3.0.3 stack-exhaustion DoS on deeply nested patterns. No patched
+    # release exists (3.0.3 is the latest), and the only path is lint tooling:
+    # eslint-config-next > @next/eslint-plugin-next > fast-glob@3.3.1 (pinned)
+    # > micromatch > braces. It never processes untrusted input. Drop this
+    # entry once braces publishes a fix.
+    - GHSA-vfj7-8cjw-p6xm

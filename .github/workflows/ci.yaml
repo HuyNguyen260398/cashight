@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, cashight-v2]
 
 permissions:
   contents: read
@@ -83,3 +83,105 @@ jobs:
           path: out/
           retention-days: 30
           if-no-files-found: error
+
+  container:
+    name: Container image
+    # Native arm64 runner: the platform nodes are Graviton.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build image
+        run: docker build -t cashight-backend:ci .
+
+      - name: Worker files are in the image
+        run: |
+          # pdfjs loads pdf.worker.mjs lazily, so a missing file only fails the
+          # first PDF parse. The image has no shell; its entrypoint is node.
+          docker run --rm cashight-backend:ci -e "
+            const fs = require('node:fs');
+            const need = ['/app/parser-worker/pdf.worker.mjs', '/app/invoice-parser-worker/pdf.worker.mjs'];
+            const forbid = ['/app/api/pdf.worker.mjs', '/app/aws-api/pdf.worker.mjs'];
+            const missing = need.filter((p) => !fs.existsSync(p));
+            const unexpected = forbid.filter((p) => fs.existsSync(p));
+            if (missing.length) console.error('missing from image: ' + missing.join(', '));
+            if (unexpected.length) console.error('unexpected in image: ' + unexpected.join(', '));
+            process.exit(missing.length || unexpected.length ? 1 : 0);
+          "
+
+      - name: API answers probes and enforces auth
+        run: |
+          docker run -d --name api -p 8080:8080 \
+            -e COGNITO_USER_POOL_ID=ap-southeast-1_ci -e COGNITO_CLIENT_IDS=ci-client \
+            -e TABLE_NAME=ci-table -e STATEMENTS_BUCKET=ci-statements \
+            -e UPLOAD_BUCKET=ci-uploads -e GEMINI_PARAM=/ci/gemini \
+            cashight-backend:ci
+          for attempt in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:8080/healthz && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8080/health | grep -q '"status":"ok"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/statements)" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/aws/invoices)" = 404
+          docker logs api
+          docker rm -f api
+
+      - name: AWS API serves only its own routes, on a configured origin
+        run: |
+          docker run -d --name aws-api -p 8081:8080 \
+            -e COGNITO_USER_POOL_ID=ap-southeast-1_ci -e COGNITO_CLIENT_IDS=ci-client \
+            -e TABLE_NAME=ci-table -e STATEMENTS_BUCKET=ci-statements \
+            -e UPLOAD_BUCKET=ci-uploads -e GEMINI_PARAM=/ci/gemini \
+            -e EXPORT_BUCKET=ci-exports \
+            -e ALLOWED_ORIGIN=https://cashight-v2.nghuy.link \
+            cashight-backend:ci /app/aws-api/index.js
+          for attempt in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:8081/healthz && break
+            sleep 1
+          done
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8081/aws/invoices)" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8081/statements)" = 404
+          # /health is answered by the server, the 401 by a shared response
+          # builder, and OPTIONS by the preflight branch: three code paths.
+          expected='^access-control-allow-origin: https://cashight-v2.nghuy.link'
+          curl -s -D - -o /dev/null http://127.0.0.1:8081/health | grep -qi "$expected"
+          curl -s -D - -o /dev/null http://127.0.0.1:8081/aws/invoices | grep -qi "$expected"
+          curl -s -D - -o /dev/null -X OPTIONS http://127.0.0.1:8081/aws/invoices | grep -qi "$expected"
+          docker rm -f aws-api
+
+      - name: API keeps the production origin by default and refuses a widened one
+        run: |
+          docker run -d --name api-default -p 8082:8080 \
+            -e COGNITO_USER_POOL_ID=ap-southeast-1_ci -e COGNITO_CLIENT_IDS=ci-client \
+            -e TABLE_NAME=ci-table -e STATEMENTS_BUCKET=ci-statements \
+            -e UPLOAD_BUCKET=ci-uploads -e GEMINI_PARAM=/ci/gemini \
+            cashight-backend:ci
+          for attempt in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:8082/healthz && break
+            sleep 1
+          done
+          curl -s -D - -o /dev/null http://127.0.0.1:8082/statements \
+            | grep -qi '^access-control-allow-origin: https://cashight.nghuy.link'
+          docker rm -f api-default
+          out=$(timeout 20 docker run --rm \
+            -e COGNITO_USER_POOL_ID=ap-southeast-1_ci -e COGNITO_CLIENT_IDS=ci-client \
+            -e TABLE_NAME=ci-table -e STATEMENTS_BUCKET=ci-statements \
+            -e UPLOAD_BUCKET=ci-uploads -e GEMINI_PARAM=/ci/gemini \
+            -e ALLOWED_ORIGIN='*' cashight-backend:ci 2>&1) && status=0 || status=$?
+          echo "$out"
+          # 1 = refused to start. 124 would mean it started and was still serving.
+          test "$status" = 1
+          echo "$out" | grep -q 'Invalid configuration: ALLOWED_ORIGIN'
+
+      - name: Workers refuse to start without configuration
+        run: |
+          for worker in parser-worker invoice-parser-worker; do
+            out=$(timeout 20 docker run --rm cashight-backend:ci "/app/${worker}/index.js" 2>&1) && status=0 || status=$?
+            echo "$out"
+            # 1 = refused to start. 124 would mean it started and kept polling.
+            test "$status" = 1
+            echo "$out" | grep -q 'Missing required configuration: QUEUE_URL'
+          done

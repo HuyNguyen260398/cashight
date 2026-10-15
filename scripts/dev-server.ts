@@ -50,6 +50,7 @@ import {
 } from './local/cognito-auth';
 import { UPLOAD_BUCKET, getObject, putObject } from './local/object-store';
 import { localDataDir } from './local/paths';
+import { matchRoute } from '../backend/server/routes';
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 
@@ -322,108 +323,11 @@ async function route(
     return;
   }
 
-  // POST /uploads
-  if (method === 'POST' && segments[0] === 'uploads' && segments.length === 1) {
-    const body = (await readBody(request)).toString('utf8');
-    sendApiResponse(response, await handlers.uploads(buildEvent(request, url, {}, body, claims)));
-    return;
-  }
-
-  // GET /uploads/{jobId}
-  if (method === 'GET' && segments[0] === 'uploads' && segments.length === 2) {
-    const event = buildEvent(request, url, { jobId: decodeURIComponent(segments[1]) }, null, claims);
-    sendApiResponse(response, await handlers.uploadStatus(event));
-    return;
-  }
-
-  // GET /statements and GET|DELETE /statements/{statementId}
-  if (segments[0] === 'statements' && segments.length <= 2) {
-    const pathParameters: Record<string, string> =
-      segments.length === 2 ? { statementId: decodeURIComponent(segments[1]) } : {};
-    if (method === 'GET' || (method === 'DELETE' && segments.length === 2)) {
-      const event = buildEvent(request, url, pathParameters, null, claims);
-      sendApiResponse(response, await handlers.statements(event));
-      return;
-    }
-  }
-
-  // GET /dashboard
-  if (method === 'GET' && segments[0] === 'dashboard' && segments.length === 1) {
-    sendApiResponse(response, await handlers.dashboard(buildEvent(request, url, {}, null, claims)));
-    return;
-  }
-
-  // GET /session/capabilities
-  if (
-    method === 'GET' &&
-    segments[0] === 'session' &&
-    segments[1] === 'capabilities' &&
-    segments.length === 2
-  ) {
-    sendApiResponse(
-      response,
-      await handlers.sessionCapabilities(buildEvent(request, url, {}, null, claims)),
-    );
-    return;
-  }
-
-  // Cost Explorer handler owns exact method/subpath dispatch and validation.
-  if (
-    segments[0] === 'aws' &&
-    segments[1] === 'cost-explorer' &&
-    segments.length >= 3
-  ) {
-    const body = method === 'POST' ? (await readBody(request)).toString('utf8') : null;
-    const pathParameters: Record<string, string> =
-      segments[2] === 'reports' && segments[3]
-        ? { reportId: decodeURIComponent(segments[3]) }
-        : {};
-    sendApiResponse(
-      response,
-      await handlers.costExplorer(buildEvent(request, url, pathParameters, body, claims)),
-    );
-    return;
-  }
-
-  if (
-    method === 'POST' &&
-    segments[0] === 'aws' &&
-    segments[1] === 'invoices' &&
-    segments[2] === 'summary' &&
-    segments.length === 3
-  ) {
-    const body = (await readBody(request)).toString('utf8');
-    sendApiResponse(
-      response,
-      await handlers.awsInvoiceSummaries(buildEvent(request, url, {}, body, claims)),
-    );
-    return;
-  }
-
-  // AWS invoice handler owns upload/status/list/detail/delete/dashboard routes.
-  if (
-    segments[0] === 'aws' &&
-    segments[1] === 'invoices' &&
-    segments.length >= 2
-  ) {
-    const body = method === 'POST' ? (await readBody(request)).toString('utf8') : null;
-    const pathParameters: Record<string, string> = {};
-    if (segments[2] === 'uploads' && segments[3]) {
-      pathParameters.jobId = decodeURIComponent(segments[3]);
-    } else if (segments[2] && !['uploads', 'dashboard'].includes(segments[2])) {
-      pathParameters.yearMonth = decodeURIComponent(segments[2]);
-    }
-    sendApiResponse(
-      response,
-      await handlers.awsInvoices(buildEvent(request, url, pathParameters, body, claims)),
-    );
-    return;
-  }
-
-  // POST /summaries
-  if (method === 'POST' && segments[0] === 'summaries' && segments.length === 1) {
-    const body = (await readBody(request)).toString('utf8');
-    sendApiResponse(response, await handlers.summaries(buildEvent(request, url, {}, body, claims)));
+  const match = matchRoute(method, url.pathname);
+  if (match) {
+    const body = match.readsBody ? (await readBody(request)).toString('utf8') : null;
+    const event = buildEvent(request, url, match.pathParameters, body, claims);
+    sendApiResponse(response, await handlers[match.handler](event));
     return;
   }
 

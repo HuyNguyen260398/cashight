@@ -3100,6 +3100,20 @@ Because the Lambdas are not redeployed, their compatibility with the two shared-
 
 ---
 
+## Implementation notes (2026-10-13)
+
+The plan was executed on `feat/container-runtime`. Where the code now differs from the task text above, the code is authoritative:
+
+- **Task 4, "loses nothing in Lambda" is not exact.** Constructing the Powertools `Tracer` under active tracing also captured outbound HTTPS and `fetch` calls as X-Ray subsegments, and Powertools `Metrics` auto-flushed an EMF line once 100 values were buffered. Both are gone for any Lambda deployed from this code. Accepted: no alarm or dashboard depends on either, nothing on `cashight-v2` is deployed to the Lambdas, and they are retired in Plan 5. Returns and log lines are unchanged.
+- **Task 2 and Task 5.** A failure to fetch Cognito's JWKS answers `503 SERVICE_UNAVAILABLE` with `Retry-After`, not 401 (`VerifierUnavailableError` in `backend/server/jwt.ts`). Token rejections stay 401.
+- **Task 5.** An oversized body is rejected as soon as the limit is passed (or up front from `Content-Length`) and the connection is closed. A client abort or an unparseable request target answers 400 and is not counted as a server error. The request-duration histogram has explicit bucket boundaries.
+- **Task 1.** The two broad `/aws/...` branches are capped at four path segments.
+- **Task 7.** `startApiService` and `startWorkerService` take a third argument, the list of data variables the hosted handlers require, and refuse to start when one is missing (`backend/server/required-env.ts`). Starting an API bundle or container therefore needs `TABLE_NAME`, the bucket names and `GEMINI_PARAM` as well as the Cognito variables; the commands in Task 7 Step 10 and Task 9 Step 4 need those added.
+- **Task 8.** The local dev server answers 404 for a malformed percent-encoded path (previously 500 or 400, depending on the route), matching the container server.
+- **Task 9, Step 5 is superseded by `.github/workflows/ci.yaml`.** The refusal checks assert the exit code and the expected log line under `timeout 20`, the job has `timeout-minutes: 15`, the API runs pass placeholder data variables, and a step checks that `pdf.worker.mjs` is in the image for both workers only.
+
+Not done here, and wanted before the first deploy (Plan 4): process-level `unhandledRejection` / `uncaughtException` handlers that log names only; a per-request deadline and a hard deadline on `server.close`; a test of the shutdown and exit-code paths; a PDF parse smoke test inside the image; base images pinned by digest; a CI step that dumps container logs on failure.
+
 ## Done when
 
 - `pnpm test`, `pnpm tsc --noEmit`, `pnpm lint`, `pnpm build:lambdas` and `pnpm build:servers` all pass.

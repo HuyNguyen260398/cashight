@@ -1,5 +1,4 @@
 import { DeleteObjectCommand, GetObjectCommand, S3ServiceException } from '@aws-sdk/client-s3';
-import { MetricUnit } from '@aws-lambda-powertools/metrics';
 import type { Statement } from '@cashight/domain/schemas';
 import { z } from 'zod';
 
@@ -18,7 +17,7 @@ import {
   queryWorkspaceStatements,
   type StatementMetadataRecord,
 } from '../../shared/metadata';
-import { metrics } from '../../shared/observability';
+import { MetricUnit, metrics } from '../../shared/observability';
 import { parseStatementObject } from '../../shared/storage';
 
 const STATEMENT_ID_SCHEMA = z.string().regex(/^\d{4}-\d{2}-\d{4}$/);

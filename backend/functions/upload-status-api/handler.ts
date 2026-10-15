@@ -7,7 +7,7 @@ import {
   type UploadJobRecord,
 } from '../../shared/metadata';
 import { errorResponse, jsonResponse, ApiError, type ApiResponse } from '../../shared/api-response';
-import { metrics } from '../../shared/observability';
+import { MetricUnit, metrics } from '../../shared/observability';
 
 export interface UploadStatusApiDependencies {
   getAuthorizedUser: (sub: string) => Promise<unknown>;
@@ -85,4 +85,3 @@ export async function handler(event: unknown): Promise<ApiResponse> {
   });
   return statusHandler(event);
 }
-import { MetricUnit } from '@aws-lambda-powertools/metrics';

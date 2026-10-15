@@ -1,5 +1,4 @@
 import { GetObjectCommand, HeadObjectCommand, DeleteObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
-import { MetricUnit } from '@aws-lambda-powertools/metrics';
 import { parseStatementPdf } from '@cashight/domain/parsers';
 
 import { dynamoDocumentClient, s3Client } from '../../shared/clients';
@@ -12,7 +11,7 @@ import {
 } from '../../shared/metadata';
 import { getSecretString } from '../../shared/secrets';
 import { statementId } from '../../shared/storage';
-import { metrics } from '../../shared/observability';
+import { MetricUnit, metrics } from '../../shared/observability';
 import { createProcessJob, computeSha256 } from './process-job';
 
 interface SQSRecord {

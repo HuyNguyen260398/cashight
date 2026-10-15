@@ -1,0 +1,13 @@
+# Everything is excluded, then only what the build needs is allowed back in.
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.json
+!backend/
+!packages/
+!scripts/build-servers.mjs
+**/node_modules
+**/__tests__
+**/*.pdf
+**/.env*
