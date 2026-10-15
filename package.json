@@ -45,7 +45,7 @@
     "date-fns": "^4.4.0",
     "geist": "^1.7.2",
     "lucide-react": "^1.16.0",
-    "next": "16.2.12",
+    "next": "16.3.8",
     "next-themes": "^0.4.6",
     "oidc-client-ts": "^3.5.0",
     "pdf-parse": "^2.4.5",
@@ -78,12 +78,12 @@
     "aws-jwt-verify": "^5.2.1",
     "esbuild": "^0.28.1",
     "eslint": "^9",
-    "eslint-config-next": "16.2.12",
+    "eslint-config-next": "16.3.8",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4",
     "tsx": "^4.23.1",
     "typescript": "^5",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.11"
   },
   "packageManager": "pnpm@11.2.2"
 }
