@@ -17,7 +17,7 @@ Decided with the user before the Stage 4 apply, after pricing showed the design 
 | Decision | Replaces |
 |---|---|
 | Strip `aws-eks-infra` to what Cashight needs: remove Jenkins + EFS, ACK + kro, `ack_iam_role_selector`, ADOT/CloudWatch observability, OpenTelemetry Operator, EBS CSI + `gp3` class, VPC flow logs | §4.1 "Fargate stays", Tasks 3–4 EBS CSI, Task 8 Jenkins handling |
-| **One Spot Graviton node** (`t4g.medium` / `m7g.medium` / `m6g.medium`, 4 GiB), prefix delegation + `maxPods: 110`, 20 GB root | §9.3 "3 nodes", Task 3 `t4g.large` × 3 |
+| **One Spot Graviton node** (`t4g.medium`, 2 vCPU / 4 GiB; same-size types only), prefix delegation + `maxPods: 110`, 20 GB root | §9.3 "3 nodes", Task 3 `t4g.large` × 3 |
 | No Fargate at all; the node is in a **public subnet**, **no NAT gateway** | Task 3 label-scoped Fargate profile + SG bridge |
 | **Managed Argo CD deferred** behind `enable_argocd` (default `false`); capability, role, access entry and bootstrap module are gated, `gitops/` is kept for later | §4.5 GitOps from day one; Task 9 Stages 5–7 |
 | Telemetry decided in Plan 3 (self-hosted vs hosted); EBS CSI returns only if Plan 3 needs volumes | §4.6 self-hosted Grafana stack (open again) |
