@@ -199,11 +199,12 @@ resource "aws_iam_role_policy" "terraform_state_read" {
 # keep that honest:
 #
 #   1. The trust condition below admits ONLY jobs that declare
-#      `environment: production` — not any job running on main. Both the plan and
-#      apply jobs declare it.
-#   2. That makes GitHub's environment protection the gate. The production
-#      environment currently has NO protection rules, so add required reviewers
-#      to it — otherwise this is admin-on-merge with no human in the loop.
+#      `environment: infrastructure` — not any job running on main. Both the
+#      plan and apply jobs declare it.
+#   2. That makes GitHub's environment protection the gate. `infrastructure` has
+#      a required reviewer and only deploys from main. It is deliberately not
+#      `production`: application-deploy.yaml runs four jobs in `production`, and
+#      a reviewer there would hold every app deploy for approval.
 #
 # If tighter scoping is wanted later, split this into a read-only plan role and
 # an admin apply role, and give the plan job the read-only one.
@@ -226,14 +227,14 @@ data "aws_iam_policy_document" "github_infra_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:environment:production"]
+      values   = ["repo:${var.github_repository}:environment:infrastructure"]
     }
   }
 }
 
 resource "aws_iam_role" "github_infra" {
   name                 = "${var.project_name}-github-infra"
-  description          = "Terraform plan/apply from GitHub Actions. Admin-equivalent; gated by the production environment."
+  description          = "Terraform plan/apply from GitHub Actions. Admin-equivalent; gated by the infrastructure environment."
   assume_role_policy   = data.aws_iam_policy_document.github_infra_trust.json
   max_session_duration = 3600
 }
