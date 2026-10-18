@@ -1,0 +1,10 @@
+# Copy to terraform.tfvars (gitignored, see ../.gitignore) and fill in from the
+# Grafana Cloud setup in docs/observability.md. Never commit the real file.
+grafana_url     = "https://<stack>.grafana.net"
+grafana_auth    = "<terraform-cashight service-account token>"
+sm_url          = "https://synthetic-monitoring-api-<region>.grafana.net"
+sm_access_token = "<synthetic monitoring access token>"
+stack_slug      = "<stack>"
+
+# Plan 4 sets this once api.cashight-v2.nghuy.link serves.
+api_live = false
