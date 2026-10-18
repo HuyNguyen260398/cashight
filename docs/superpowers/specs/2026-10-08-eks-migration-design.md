@@ -10,7 +10,7 @@
 | Target service | Amazon **EKS** (the request said "AKS", which is Azure's service) |
 | Goal | Full production cutover; the serverless compute is decommissioned afterwards |
 | Platform ownership | The cluster and platform add-ons live in the existing `aws-eks-infra` repo; Cashight is a workload on it |
-| Observability hosting | Self-hosted Grafana stack (Loki, Tempo, Mimir, Grafana) in the cluster |
+| Observability hosting | ~~Self-hosted Grafana stack in the cluster~~ Revised 2026-10-18: Grafana Cloud free tier, see the [observability design](./2026-10-18-eks-observability-design.md) |
 | Rollout (decided 2026-10-13) | **Parallel stack on a second hostname, not a weighted DNS shift.** The current architecture keeps `cashight.nghuy.link` untouched. The new one comes up at `cashight-v2.nghuy.link` (API at `api.cashight-v2.nghuy.link`). Once it has run smoothly, the old architecture is retired and the new stack is renamed to `cashight.nghuy.link` |
 | Branching (decided 2026-10-13) | New-architecture work lives on the long-lived branch `cashight-v2`, cut from `main`. Every feature branch for it is created from `cashight-v2` and merges back into it. `main` keeps deploying the current architecture; `cashight-v2` merges into `main` once, at the retire-and-rename step (phase 7) |
 
@@ -73,8 +73,8 @@ Browser ──► cashight-v2.nghuy.link ─► CloudFront + S3 (v2 build of the
    S3 uploads ─► SQS parse ─────────► parser-worker (KEDA 0–2)        DynamoDB, S3,
    S3 uploads ─► SQS invoice-parse ─► invoice-parser-worker (KEDA 0–1)  SSM, Cost Explorer
 
-   All pods ── OTLP ──► OTel Collector gateway ──► Mimir / Loki / Tempo (S3) ──► Grafana
-   Nodes ── OTel Collector DaemonSet (logs, kubelet and host metrics) ──┘
+   All pods ── OTLP ──► OTel Collector DaemonSet (+ pod logs, kubelet metrics) ──► Grafana Cloud
+   Grafana Synthetic Monitoring ──► /health (from outside AWS)
 
    Cognito ─► auth-guard Lambda (unchanged)
    Git ─► Argo CD (EKS managed capability) ─► cluster
@@ -131,7 +131,7 @@ Terraform owns AWS resources; Argo CD owns everything inside the cluster. Nothin
 - Manifests live in the `cashight` repo under `deploy/` as Kustomize `base/` and `overlays/prod/`: Rollouts, Services, Ingress (joining the shared ALB group), ScaledObjects, ServiceAccounts, PodDisruptionBudgets, NetworkPolicies.
 - An Argo CD `Application` for Cashight is registered in `aws-eks-infra/gitops/workloads/config/`, following the existing Jenkins pattern. Automated sync with prune and self-heal.
 - **Release flow.** CI builds and pushes an image tagged by commit SHA, then commits the image digest into `deploy/overlays/prod`. Argo CD detects the change and syncs. CI never holds cluster credentials and never runs `kubectl`.
-- **Progressive delivery.** Argo Rollouts canaries replace CodeDeploy: 10% → 50% → 100%, with an AnalysisTemplate querying Mimir for error rate and latency, and automatic abort.
+- **Progressive delivery.** Argo Rollouts canaries replace CodeDeploy: 10% → 50% → 100%. Each step is gated by a smoke-test Job, and a failing Job aborts the rollout. There is no metrics-based AnalysisTemplate (see the [observability design](./2026-10-18-eks-observability-design.md)).
 - **Rollback** is `git revert` of the digest commit.
 - Images are pinned by digest, never by mutable tag.
 
@@ -139,20 +139,8 @@ Open point for the plan: `main` is protected by a ruleset, so the digest commit 
 
 ### 4.6 Observability
 
-| Signal | Collection | Backend |
-|---|---|---|
-| App traces | OTel SDK → OTLP → Collector gateway | Tempo |
-| App metrics | OTel SDK → OTLP → Collector gateway | Mimir |
-| App and pod logs | Collector DaemonSet (`filelog`) | Loki |
-| Node and kubelet metrics | Collector DaemonSet (`hostmetrics`, `kubeletstats`) | Mimir |
-| Cluster state | kube-state-metrics scraped by the Collector's Prometheus receiver | Mimir |
-| Argo CD, Rollouts, KEDA, ALB controller metrics | Prometheus receiver | Mimir |
+Superseded by the [observability design](./2026-10-18-eks-observability-design.md) (Plan 3). In short: one OpenTelemetry Collector DaemonSet exports to the Grafana Cloud free tier, Synthetic Monitoring checks `/health` from outside AWS, and Terraform-managed Grafana alerts go to Slack. Nothing is self-hosted. The privacy rules below still apply.
 
-- Collectors are deployed as `OpenTelemetryCollector` resources through the OpenTelemetry Operator already on the platform.
-- Loki, Tempo and Mimir run in single-binary / monolithic mode with S3 object storage and small gp3 volumes. Buckets and Pod Identity roles are Terraform-managed in `aws-eks-infra`. Telemetry survives a cluster rebuild because it lives in S3.
-- Grafana is exposed on the shared ALB behind Cognito sign-in. Data sources, dashboards and alert rules are provisioned as code through Argo CD.
-- Starting dashboards: cluster and node health, workload RED metrics per API, queue depth and worker duration, parse success and failure counts, Argo CD sync status.
-- Grafana Alerting replaces the existing CloudWatch alarms. The notification channel is an open point.
 - **Privacy rules carry over.** No PAN, transaction description, cardholder name, email or token may appear in a log line, span attribute or metric label. Span attributes are allowlisted; HTTP body capture stays off.
 
 ## 5. Migration phases
@@ -200,8 +188,8 @@ That compares with about $1.36/month today. Two nodes instead of three would sav
 | Ongoing operations: EKS version upgrades, add-on upgrades, node patching, stack upgrades | Managed node group and managed Argo CD reduce it; document an upgrade runbook |
 | A regression in authorization when replacing the API Gateway authorizer | Middleware unit tests with real token shapes; smoke tests for 401 and 403 paths before any traffic shift |
 | Loss of API Gateway throttling and validation | In-server rate limit; validator-versus-Zod parity check |
-| PII reaching Loki or Tempo | Existing `sanitizeForLog`, span attribute allowlist, and `scripts/security-scan-logs.ts` extended to query Loki |
-| Monitoring stack shares fate with the cluster it monitors | Telemetry in S3; one external uptime check on `/healthz` |
+| PII reaching Grafana Cloud | Existing `sanitizeForLog`, span attribute allowlist in the app and again in the collector, and `scripts/security-scan-logs.ts` extended to query Loki |
+| Monitoring stack shares fate with the cluster it monitors | Telemetry is stored off-cluster in Grafana Cloud; Synthetic Monitoring checks `/health` from outside AWS; a telemetry-stopped alert catches a dead collector |
 | Duplicate processing while both consumers are attached to a queue | Handlers are already idempotent; keep the overlap window short |
 | EKS API allowlisted to a single `/32` | Argo CD is in-cluster and CI needs no cluster access, so only operators are affected |
 
@@ -215,7 +203,7 @@ That compares with about $1.36/month today. Two nodes instead of three would sav
 ## 9. Open points for the implementation plan
 
 1. Bot commit with ruleset bypass, or auto-merged PR, for image digest updates.
-2. Grafana Alerting notification channel.
+2. ~~Grafana Alerting notification channel.~~ Closed: Slack (observability design).
 3. Two or three nodes.
 4. Whether `auth-guard` keeps its CodeDeploy canary or becomes a plain Terraform-deployed zip.
 5. Whether the v2 frontend reuses the existing Cognito SPA app client (add the v2 callback URLs to it) or gets its own client. Reuse is simpler and is what the rename wants; a separate client isolates the v2 sign-in config.
