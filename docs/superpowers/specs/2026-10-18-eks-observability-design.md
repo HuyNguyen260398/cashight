@@ -115,8 +115,8 @@ privacy rules or the series budget, the fix goes in the app as part of Plan 3.
 
 | Secret or value | Where it lives | Who reads it |
 |---|---|---|
-| OTLP write token (`metrics:write`, `logs:write`, `traces:write`) | SSM SecureString `/aws-eks-infra/platform/grafana-cloud/otlp-token` | Collector init container |
-| OTLP endpoint URL and instance ID (not secret) | SSM String `/aws-eks-infra/platform/grafana-cloud/{otlp-endpoint,instance-id}` | Collector init container. Recorded in the runbook. |
+| OTLP write token (`metrics:write`, `logs:write`, `traces:write`) | SSM SecureString `/platform/aws-eks-infra/grafana-cloud/otlp-token` | Collector init container |
+| OTLP endpoint URL and instance ID (not secret) | SSM String `/platform/aws-eks-infra/grafana-cloud/{otlp-endpoint,instance-id}` | Collector init container. Recorded in the runbook. |
 | Grafana service-account token (Terraform provider) and Synthetic Monitoring token | Workstation environment or ignored `terraform.tfvars` only | `terraform/grafana/` |
 | Slack webhook URL | SSM SecureString `/cashight/grafana/slack-webhook-url` | `terraform/grafana/` (data source) |
 
@@ -127,7 +127,7 @@ privacy rules or the series budget, the fix goes in the app as part of Plan 3.
 - **aws-eks-infra Terraform** (`modules/platform_cluster` and
   `environments/platform`): an IAM role for the collector, trusted by
   `pods.eks.amazonaws.com`, with `ssm:GetParameter` on
-  `parameter/aws-eks-infra/platform/grafana-cloud/*` and `kms:Decrypt` through
+  `parameter/platform/aws-eks-infra/grafana-cloud/*` and `kms:Decrypt` through
   the SSM service. Also a Pod Identity association for
   `observability/otel-collector`. The SecureString itself is created by hand
   (runbook), so its value never enters Terraform state.

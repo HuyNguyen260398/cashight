@@ -1343,7 +1343,7 @@ git commit -m "feat(platform): add the cashight tenant namespace with default-de
 
 **Interfaces:**
 - Consumes: `module.platform_cluster.cluster_name`, `module.platform_cluster.keda_operator_role_arn` (Task 5).
-- Produces SSM `String` parameters under `/<resource_prefix>/platform/` (`/aws-eks-infra/platform/` by default):
+- Produces SSM `String` parameters under `/<resource_prefix>/platform/` (`/platform/aws-eks-infra/` by default):
 
   | Parameter | Value |
   |---|---|

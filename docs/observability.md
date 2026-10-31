@@ -16,8 +16,8 @@ check are Grafana-side, defined in `terraform/grafana/`.
 
 | Secret or value | Where it lives | Who reads it |
 |---|---|---|
-| OTLP write token (`metrics:write`, `logs:write`, `traces:write`) | SSM SecureString `/aws-eks-infra/platform/grafana-cloud/otlp-token` | Collector init container (EKS Pod Identity) |
-| OTLP endpoint URL, instance ID (not secret) | SSM String `/aws-eks-infra/platform/grafana-cloud/otlp-endpoint`, `/aws-eks-infra/platform/grafana-cloud/instance-id` | Collector init container |
+| OTLP write token (`metrics:write`, `logs:write`, `traces:write`) | SSM SecureString `/platform/aws-eks-infra/grafana-cloud/otlp-token` | Collector init container (EKS Pod Identity) |
+| OTLP endpoint URL, instance ID (not secret) | SSM String `/platform/aws-eks-infra/grafana-cloud/otlp-endpoint`, `/platform/aws-eks-infra/grafana-cloud/instance-id` | Collector init container |
 | Grafana service-account token, Synthetic Monitoring token | `terraform/grafana/terraform.tfvars` (gitignored) on the workstation only | `terraform/grafana/` |
 | Slack webhook URL | SSM SecureString `/cashight/grafana/slack-webhook-url` | `terraform/grafana/` (data source) |
 
@@ -51,11 +51,11 @@ into a memory-backed volume, and the collector config reads them with
 
    ```bash
    read -rs VALUE && aws ssm put-parameter --region ap-southeast-1 --type SecureString \
-     --name /aws-eks-infra/platform/grafana-cloud/otlp-token --value "$VALUE" && unset VALUE
+     --name /platform/aws-eks-infra/grafana-cloud/otlp-token --value "$VALUE" && unset VALUE
    aws ssm put-parameter --region ap-southeast-1 --type String \
-     --name /aws-eks-infra/platform/grafana-cloud/otlp-endpoint --value "<endpoint>"
+     --name /platform/aws-eks-infra/grafana-cloud/otlp-endpoint --value "<endpoint>"
    aws ssm put-parameter --region ap-southeast-1 --type String \
-     --name /aws-eks-infra/platform/grafana-cloud/instance-id --value "<instance id>"
+     --name /platform/aws-eks-infra/grafana-cloud/instance-id --value "<instance id>"
    read -rs VALUE && aws ssm put-parameter --region ap-southeast-1 --type SecureString \
      --name /cashight/grafana/slack-webhook-url --value "$VALUE" && unset VALUE
    ```
@@ -64,8 +64,8 @@ into a memory-backed volume, and the collector config reads them with
 
    ```bash
    aws ssm get-parameters --region ap-southeast-1 --query 'length(Parameters)' --names \
-     /aws-eks-infra/platform/grafana-cloud/otlp-token /aws-eks-infra/platform/grafana-cloud/otlp-endpoint \
-     /aws-eks-infra/platform/grafana-cloud/instance-id /cashight/grafana/slack-webhook-url
+     /platform/aws-eks-infra/grafana-cloud/otlp-token /platform/aws-eks-infra/grafana-cloud/otlp-endpoint \
+     /platform/aws-eks-infra/grafana-cloud/instance-id /cashight/grafana/slack-webhook-url
    ```
 
 8. **tfvars.** `cp terraform/grafana/terraform.tfvars.example terraform/grafana/terraform.tfvars`

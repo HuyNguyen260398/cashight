@@ -41,7 +41,7 @@ Run the `aws-eks-infra` tasks first: Task 8 runs the collector config rendered b
 - Collector runs as **UID 0**, all capabilities dropped, read-only root filesystem, read-only hostPath mounts. The namespace is Pod Security `privileged` and has **no default-deny NetworkPolicy**.
 - **Privacy:** no PAN, transaction description, cardholder name, email or token in any log line, span attribute or metric label.
 - **No Kubernetes Secret and nothing secret in Git.** Tokens reach the collector through an init container (AWS CLI image, EKS Pod Identity) writing to a memory-backed `emptyDir`, read with `${file:/secrets/...}`.
-- SSM names: `/aws-eks-infra/platform/grafana-cloud/otlp-token` (SecureString), `/aws-eks-infra/platform/grafana-cloud/otlp-endpoint` and `/aws-eks-infra/platform/grafana-cloud/instance-id` (String), `/cashight/grafana/slack-webhook-url` (SecureString). All are created by hand, so no value enters Terraform state, except the Slack URL, which `terraform/grafana/` reads as a data source.
+- SSM names: `/platform/aws-eks-infra/grafana-cloud/otlp-token` (SecureString), `/platform/aws-eks-infra/grafana-cloud/otlp-endpoint` and `/platform/aws-eks-infra/grafana-cloud/instance-id` (String), `/cashight/grafana/slack-webhook-url` (SecureString). All are created by hand, so no value enters Terraform state, except the Slack URL, which `terraform/grafana/` reads as a data source.
 - `terraform/grafana/` is a new root with its own state key in the `cashight-tfstate` bucket. It is applied **from the workstation only**. CI runs only `fmt -check`, `validate -backend=false`, `test` and `tflint` on it. The existing roots stay untouched.
 - Alert folder `Cashight v2`. Dashboard `Cashight v2` lives at `terraform/grafana/dashboards/cashight-v2.json`.
 - Synthetic check: `https://api.cashight-v2.nghuy.link/health`, every 2 min (120000 ms), probes Singapore and Tokyo, expects HTTP 200 within 5 s (5000 ms).
@@ -58,7 +58,7 @@ Run the `aws-eks-infra` tasks first: Task 8 runs the collector config rendered b
 3. **Self-monitoring keeps only `otelcol_process_.*`.** Those metrics carry no labels, so the allowlist cannot collide them, and rule 2 needs only uptime.
 4. **k8s resource attributes are copied onto data points** for `k8s.*` and `container.*` metrics. Rule 5 and the dashboard then filter on `k8s_namespace_name` whether or not Grafana Cloud promotes resource attributes to labels.
 5. **The `observability` Namespace (with its Pod Security label) and the leader-election lease Role** come from a second Application source, `gitops/platform/config/observability/`. The chart only creates cluster-scoped RBAC, and `CreateNamespace` cannot set labels on its own.
-6. **New cluster-Secret annotation `platform_parameter_prefix`** (e.g. `/aws-eks-infra/platform`), so the init container's SSM paths are not hardcoded in YAML.
+6. **New cluster-Secret annotation `platform_parameter_prefix`** (e.g. `/platform/aws-eks-infra`), so the init container's SSM paths are not hardcoded in YAML.
 7. **Log-to-trace link through a dashboard data link**, not a Loki datasource derived field. The stack's provisioned datasources are not edited. The logs panel is a table with a `trace_id` field whose data link opens Tempo.
 8. **Rule 1 treats no data as firing.** The spec is silent here. A check that stops reporting is itself a broken uptime signal.
 9. **`tf-ci.yaml` also runs on PRs into `cashight-v2`**, otherwise `terraform/grafana/` is never checked before Plan 5's merge to `main`.
@@ -199,7 +199,7 @@ Also run `kubeconform -strict -summary -ignore-missing-schemas` on `manifests.ya
 
 `set -euo pipefail`; one argument, the output dir. Steps:
 1. From `gitops/platform/config/addons/opentelemetry-collector.yaml`, read `.spec.template.spec.sources[0]` `repoURL`, `chart`, `targetRevision` and `helm.values` with `yq`.
-2. Replace the Go-template placeholders in the values with test values: `{{ .metadata.annotations.aws_region }}` → `ap-southeast-1`, `{{ .metadata.annotations.platform_parameter_prefix }}` → `/aws-eks-infra/platform`. Fail if any `{{` remains.
+2. Replace the Go-template placeholders in the values with test values: `{{ .metadata.annotations.aws_region }}` → `ap-southeast-1`, `{{ .metadata.annotations.platform_parameter_prefix }}` → `/platform/aws-eks-infra`. Fail if any `{{` remains.
 3. `helm template otel-collector <chart> --repo <repoURL> --version <targetRevision> --namespace observability -f <values>` > `manifests.yaml`, then append `kubectl kustomize gitops/platform/config/observability`.
 4. Extract `.data.relay` of the ConfigMap that has one into `config.yaml`.
 
@@ -564,11 +564,11 @@ Sections:
 
 ```bash
 read -rs VALUE && aws ssm put-parameter --region ap-southeast-1 --type SecureString \
-  --name /aws-eks-infra/platform/grafana-cloud/otlp-token --value "$VALUE" && unset VALUE
+  --name /platform/aws-eks-infra/grafana-cloud/otlp-token --value "$VALUE" && unset VALUE
 aws ssm put-parameter --region ap-southeast-1 --type String \
-  --name /aws-eks-infra/platform/grafana-cloud/otlp-endpoint --value "<endpoint>"
+  --name /platform/aws-eks-infra/grafana-cloud/otlp-endpoint --value "<endpoint>"
 aws ssm put-parameter --region ap-southeast-1 --type String \
-  --name /aws-eks-infra/platform/grafana-cloud/instance-id --value "<instance id>"
+  --name /platform/aws-eks-infra/grafana-cloud/instance-id --value "<instance id>"
 read -rs VALUE && aws ssm put-parameter --region ap-southeast-1 --type SecureString \
   --name /cashight/grafana/slack-webhook-url --value "$VALUE" && unset VALUE
 ```
@@ -583,7 +583,7 @@ read -rs VALUE && aws ssm put-parameter --region ap-southeast-1 --type SecureStr
 - [ ] **Step 2: Do the setup**
 
 Follow the runbook's section 2. Then verify:
-Run: `aws ssm get-parameters --region ap-southeast-1 --names /aws-eks-infra/platform/grafana-cloud/otlp-token /aws-eks-infra/platform/grafana-cloud/otlp-endpoint /aws-eks-infra/platform/grafana-cloud/instance-id /cashight/grafana/slack-webhook-url --query 'length(Parameters)'`
+Run: `aws ssm get-parameters --region ap-southeast-1 --names /platform/aws-eks-infra/grafana-cloud/otlp-token /platform/aws-eks-infra/grafana-cloud/otlp-endpoint /platform/aws-eks-infra/grafana-cloud/instance-id /cashight/grafana/slack-webhook-url --query 'length(Parameters)'`
 Expected: `4`.
 
 - [ ] **Step 3: First apply**
