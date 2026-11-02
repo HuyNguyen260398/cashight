@@ -179,7 +179,71 @@ Series count after the run: 126 of the free tier's 10,000.
 
 ## 7. Alerts
 
-Filled in by Plan 3 Task 9.
+Five rules in the `cashight-v2` group (`terraform/grafana/alerts.tf`), folder
+*Cashight v2*, evaluated every minute, all to `slack-cashight`. Until
+`api_live`, **API down** and **Telemetry stopped** are paused, because both
+would fire permanently.
+
+### API down (critical, fires at once, no data fires)
+
+The synthetic check has not reached `/health` from Singapore or Tokyo for
+6 minutes.
+
+1. The node exists: `kubectl get nodes`. A Spot interruption replaces it; see
+   the EC2 console's Spot interruption events for the account.
+2. The API pods are running: `kubectl -n cashight get pods`.
+3. The ALB's target health for the API target group, then DNS for
+   `api.cashight-v2.nghuy.link`.
+
+### Telemetry stopped (critical, fires at once, no data fires)
+
+No collector has reported uptime for 10 minutes. Either the cluster is gone or
+the collector is broken; both mean the other rules are blind.
+
+1. The node exists: `kubectl get nodes`.
+2. The collector: `kubectl -n observability get ds otel-collector-agent` and
+   its pod's logs. An init-container failure names the SSM parameter it could
+   not read.
+3. A `401` or `403` from `otlp_http` in the collector log means the OTLP token
+   was revoked or rotated: see section 4.
+
+### API errors (warning, after 5 minutes)
+
+More than 5% of API requests answered 5xx over 10 minutes, counted only when at
+least 20 requests were made, so one failure at night does not page.
+
+1. Which route: in Explore, `sum by (http_route) (increase(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[10m]))`.
+2. The trace: Tempo, `{status=error}` for the API service, then the logs
+   linked from the span.
+3. Dependencies: DynamoDB and S3 throttling or errors in CloudWatch, and the
+   Cognito JWKS (the API answers 503 when it cannot fetch keys).
+
+### Parse jobs failing (warning, after 5 minutes)
+
+A statement or invoice parse job ended `failed` or `timed_out` in the last 15
+minutes.
+
+1. Which worker and outcome: `sum by (service_name, outcome) (increase(cashight_worker_jobs_total{outcome!="succeeded"}[15m]))`.
+2. The job's log: Loki, `{k8s_namespace_name="cashight"} |= "job"` around that
+   time, then the linked trace. `UNSUPPORTED_BANK` or a reconciliation error is
+   a statement problem, not a platform one.
+3. The message is redelivered by SQS; check the dead-letter queue if it keeps
+   failing.
+
+The job counter starts at 0 for every outcome when a worker starts, so the
+first failure is seen. A failure in a worker's first 30 seconds, before its
+first metric export, is still missed.
+
+### Pod crash-looping (warning, after 5 minutes)
+
+A pod in `cashight`, `observability` or `keda` restarted 3 or more times in 15
+minutes. Metric names are unverified until Plan 4.
+
+1. `kubectl -n <namespace> describe pod <pod>`: last state, exit code,
+   `OOMKilled`.
+2. `kubectl -n <namespace> logs <pod> --previous`.
+3. Memory against limits: the dashboard's memory panel, then the node's
+   headroom.
 
 ## 8. Going live (Plan 4)
 
