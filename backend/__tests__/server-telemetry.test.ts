@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { otlpSignalUrl, startTelemetry } from '../server/telemetry';
+import { otlpSignalUrl, startTelemetry, telemetryResourceAttributes } from '../server/telemetry';
 
 describe('startTelemetry', () => {
   it('is a no-op when no OTLP endpoint is configured', async () => {
@@ -19,6 +19,26 @@ describe('startTelemetry', () => {
     });
     expect(telemetry.enabled).toBe(true);
     await expect(telemetry.shutdown()).resolves.toBeUndefined();
+  });
+});
+
+// Two replicas of one service must not write the same metric series: each
+// process carries its own service.instance.id, which becomes `instance`.
+describe('telemetryResourceAttributes', () => {
+  it('uses the pod name (HOSTNAME) as the instance id', () => {
+    expect(telemetryResourceAttributes('cashight-api', { HOSTNAME: 'cashight-api-7d9f-abcde' })).toEqual({
+      'service.name': 'cashight-api',
+      'service.namespace': 'cashight',
+      'service.version': 'unknown',
+      'service.instance.id': 'cashight-api-7d9f-abcde',
+    });
+  });
+
+  it('falls back to a distinct id per process without HOSTNAME', () => {
+    const a = telemetryResourceAttributes('cashight-api', {})['service.instance.id'];
+    const b = telemetryResourceAttributes('cashight-api', { HOSTNAME: ' ' })['service.instance.id'];
+    expect(a).toMatch(/\S/);
+    expect(a).not.toBe(b);
   });
 });
 

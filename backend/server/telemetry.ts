@@ -10,6 +10,8 @@
  * URLs for the exporters (see otlpSignalUrl). With it unset (Lambda, tests,
  * local runs) nothing is registered and the OTel API no-ops.
  */
+import { randomUUID } from 'node:crypto';
+
 import { metrics } from '@opentelemetry/api';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
@@ -29,15 +31,29 @@ export function otlpSignalUrl(endpoint: string, signal: 'traces' | 'metrics'): s
   return `${endpoint.replace(/\/+$/, '')}/v1/${signal}`;
 }
 
+/**
+ * Resource attributes for every signal. service.instance.id becomes the
+ * `instance` metric label, so two replicas of one service write separate
+ * series instead of interleaving one counter. Kubernetes sets HOSTNAME to the
+ * pod name.
+ */
+export function telemetryResourceAttributes(
+  serviceName: string,
+  env: Environment = process.env,
+): Record<string, string> {
+  return {
+    'service.name': serviceName,
+    'service.namespace': 'cashight',
+    'service.version': env.APP_VERSION?.trim() || 'unknown',
+    'service.instance.id': env.HOSTNAME?.trim() || randomUUID(),
+  };
+}
+
 export function startTelemetry(serviceName: string, env: Environment = process.env): Telemetry {
   const endpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim();
   if (!endpoint) return { enabled: false, shutdown: async () => undefined };
 
-  const resource = resourceFromAttributes({
-    'service.name': serviceName,
-    'service.namespace': 'cashight',
-    'service.version': env.APP_VERSION?.trim() || 'unknown',
-  });
+  const resource = resourceFromAttributes(telemetryResourceAttributes(serviceName, env));
 
   const tracerProvider = new NodeTracerProvider({
     resource,
