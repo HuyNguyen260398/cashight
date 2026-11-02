@@ -12,8 +12,8 @@
  *                                       token; GET /statements always answers
  *                                       500, everything else 200
  *   cashight-parser-worker,             createSqsConsumer over a fake SQS
- *   cashight-invoice-parser-worker      client: one message every 10 s; the
- *                                       first --failed-jobs fail
+ *   cashight-invoice-parser-worker      client: one message every 10 s;
+ *                                       --failed-jobs fail from job 5 on
  *
  * The parent sends --rps requests per second for --minutes; --error-ratio of
  * them go to /statements. Handlers log email and description fields on
@@ -101,6 +101,11 @@ async function runApi(role: Role): Promise<() => Promise<void>> {
   return () => new Promise<void>((resolve) => server.close(() => resolve()));
 }
 
+// Job 5 arrives about 40 s in, after the first 30 s metric export has sent the
+// failure counter at 0. A failure before that export reaches Prometheus as a
+// series born at 1, which increase() cannot see.
+const FIRST_FAILING_JOB = 5;
+
 async function runWorker(failedJobs: number): Promise<() => Promise<void>> {
   let sent = 0;
   let nextAt = Date.now();
@@ -121,7 +126,8 @@ async function runWorker(failedJobs: number): Promise<() => Promise<void>> {
     queueUrl: 'https://sqs.local/drill',
     handler: async (event) => {
       logger.info('drill job', { messageId: event.Records[0]?.messageId });
-      const fail = Number(event.Records[0]?.messageId.split('-')[1]) <= failedJobs;
+      const n = Number(event.Records[0]?.messageId.split('-')[1]);
+      const fail = n >= FIRST_FAILING_JOB && n < FIRST_FAILING_JOB + failedJobs;
       return {
         batchItemFailures: fail ? event.Records.map((r) => ({ itemIdentifier: r.messageId })) : [],
       };
