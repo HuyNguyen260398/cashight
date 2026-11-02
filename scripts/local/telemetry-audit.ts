@@ -34,6 +34,11 @@ const SENSITIVE_PATTERNS: Array<[name: string, pattern: RegExp]> = [
   ['bearer', /\bbearer\s/i],
 ];
 
+// Trace and span ids are random hex; a 16-character span id is all decimal
+// digits about once in 1,800 spans and would read as a PAN. Removed before
+// matching, so a PAN elsewhere in the same body is still found.
+const TRACE_IDS = /"(?:trace_id|span_id)":"[0-9a-f]+"/g;
+
 interface AnyValue {
   stringValue?: string;
   intValue?: string | number;
@@ -154,7 +159,7 @@ export function findSensitiveValues(lines: string[]): string[] {
   for (const line of parse(lines)) {
     for (const v of visit(line)) {
       const values = v.attributes.map((a) => String(a.value?.stringValue ?? a.value?.intValue ?? ''));
-      if (v.body !== undefined) values.push(v.body);
+      if (v.body !== undefined) values.push(v.body.replace(TRACE_IDS, ''));
       for (const value of values) {
         for (const [name, pattern] of SENSITIVE_PATTERNS) {
           if (pattern.test(value)) found.add(`${v.level}:${name}`);

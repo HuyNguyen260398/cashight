@@ -106,4 +106,15 @@ describe('findSensitiveValues', () => {
     ];
     expect(findSensitiveValues(lines)).toEqual([]);
   });
+
+  // A span id is 16 hex characters; about 1 in 1,800 is all decimal digits.
+  it('finds nothing sensitive in an all-digit span id', () => {
+    const lines = [logRecord('{"message":"x","span_id":"3736364742388658"}')];
+    expect(findSensitiveValues(lines)).toEqual([]);
+  });
+
+  it('still finds a PAN beside a span id', () => {
+    const lines = [logRecord('{"span_id":"3736364742388658","description":"4111111111111111"}')];
+    expect(findSensitiveValues(lines)).toEqual(['log:digits']);
+  });
 });
