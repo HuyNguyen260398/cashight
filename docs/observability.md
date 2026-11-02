@@ -110,11 +110,72 @@ disabled. Slack test notification received 2026-11-02.
 
 ## 5. Local verification run
 
-Filled in by Plan 3 Task 8.
+Proves the app's telemetry reaches the stack and stays private, without a
+cluster. Needs Docker, AWS credentials and both checkouts side by side.
+
+1. **Collector**, in `aws-eks-infra`. It reads the same three SSM parameters
+   as the in-cluster init container and listens on `localhost:4318`:
+
+   ```bash
+   LOG_DIR=$(mktemp -d) && echo "$LOG_DIR"
+   PARAMETER_PREFIX=/platform/aws-eks-infra ./scripts/run-local-collector.sh "$LOG_DIR"
+   ```
+
+   Wait for `Everything is ready. Begin running and processing data.` and no
+   `401` or `403` from `otlp_http`. `PARAMETER_PREFIX` is needed until the
+   platform root has been applied; after that the script reads its output.
+
+2. **Drill**, in `cashight`, in a second terminal with the same `LOG_DIR`:
+
+   ```bash
+   pnpm tsx scripts/local/telemetry-drill.ts --minutes 3 --rps 1 --error-ratio 0.1 \
+     --failed-jobs 1 --log-file "$LOG_DIR/drill.log"
+   ```
+
+   Exits 0, and `$LOG_DIR/collected.jsonl` grows during the run.
+
+3. **Audit** what the collector exported:
+
+   ```bash
+   pnpm tsx scripts/local/telemetry-audit.ts "$LOG_DIR/collected.jsonl"; echo "exit=$?"
+   ```
+
+   Expect `0 findings` and `exit=0`. A finding means an attribute or value
+   left the collector that should not have: fix the app if it emitted it, or
+   the allowlist if the collector added it, with a regression test.
+
+4. **Grafana Explore** (or the data source proxy API with the
+   `terraform-cashight` token):
+   - Prometheus: `count by (service_name) (http_server_request_duration_seconds_count)`
+     and the same for `cashight_worker_jobs_total` cover the four service names.
+   - Tempo: `{name="GET dashboard"}` and `{name="worker.job"}` return traces.
+   - Loki: `{k8s_namespace_name="cashight"} |= "drill request"`; the line's
+     `trace_id` opens the same trace in Tempo.
+   - Series labels are only those in section 6 plus `job`, `le`,
+     `http_request_method` and `service_*`.
+   - `count({__name__=~".+"})` is in the low hundreds, far below 10k.
+
+Last run 2026-11-02: drill 164 ok and 16 deliberate errors, audit 0
+findings, all four Explore checks passed.
 
 ## 6. Recorded metric names
 
-Filled in by Plan 3 Task 8.
+OTLP names as Grafana Cloud's Prometheus stores them, from the run of
+2026-11-02. `terraform/grafana/metrics.tf` holds them; alert rules and the
+dashboard reference only its keys.
+
+| Key | Prometheus name | Source |
+|---|---|---|
+| `metric.http_count`, `metric.http_bucket` | `http_server_request_duration_seconds_count`, `…_bucket` | observed |
+| `metric.worker_jobs` | `cashight_worker_jobs_total` | observed |
+| `metric.worker_duration_bucket` | `cashight_worker_job_duration_seconds_bucket` | observed |
+| `metric.invoice_parse_failures` | `cashight_aws_invoice_parse_failure_total` | derived; the drill emits none |
+| `metric.collector_uptime` | `otelcol_process_uptime_total` | observed |
+| `metric.container_restarts`, `pod_cpu`, `pod_memory`, `node_memory`, `container_memory_limit` | `k8s_container_restarts`, `k8s_pod_cpu_usage`, `k8s_pod_memory_working_set_bytes`, `k8s_node_memory_working_set_bytes`, `k8s_container_memory_limit_bytes` | unverified until Plan 4 |
+| `label.status`, `route`, `outcome`, `error_code`, `service` | `http_response_status_code`, `http_route`, `outcome`, `error_code`, `service_name` | observed, except `error_code` |
+| `label.namespace`, `label.pod` | `k8s_namespace_name`, `k8s_pod_name` | `k8s_namespace_name` observed on Loki streams; both unverified on metrics until Plan 4 |
+
+Series count after the run: 126 of the free tier's 10,000.
 
 ## 7. Alerts
 
