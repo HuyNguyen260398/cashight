@@ -1,4 +1,5 @@
 import { DeleteMessageCommand, ReceiveMessageCommand } from '@aws-sdk/client-sqs';
+import { metrics as otelMetrics } from '@opentelemetry/api';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createSqsConsumer, type BatchHandler, type SqsConsumer } from '../server/sqs-consumer';
@@ -182,5 +183,28 @@ describe('createSqsConsumer', () => {
     const logged = write.mock.calls.map((call) => String(call[0])).join('');
     expect(logged).toContain('m1');
     expect(logged).not.toContain('{\\"id\\"');
+  });
+
+  // increase() cannot see a counter series that appears already at 1, so the
+  // first failure after a pod starts would never alert (Parse jobs failing).
+  it('starts the job counter at zero for every outcome', async () => {
+    const counts: Array<[number, unknown]> = [];
+    const realGetMeter = otelMetrics.getMeter.bind(otelMetrics);
+    vi.spyOn(otelMetrics, 'getMeter').mockImplementation((...args) => {
+      const meter = realGetMeter(...args);
+      return {
+        ...meter,
+        createHistogram: meter.createHistogram.bind(meter),
+        createCounter: () => ({ add: (value: number, attributes?: unknown) => counts.push([value, attributes]) }),
+      } as unknown as ReturnType<typeof otelMetrics.getMeter>;
+    });
+
+    harness([], ok);
+
+    expect(counts).toEqual([
+      [0, { outcome: 'succeeded' }],
+      [0, { outcome: 'failed' }],
+      [0, { outcome: 'timed_out' }],
+    ]);
   });
 });
