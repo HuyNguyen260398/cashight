@@ -1,0 +1,289 @@
+{
+  "uid": "cashight-v2",
+  "title": "Cashight v2",
+  "tags": ["cashight"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "1m",
+  "time": { "from": "now-6h", "to": "now" },
+  "editable": true,
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      { "type": "datasource", "name": "prom", "label": "Metrics", "query": "prometheus", "hide": 0 },
+      { "type": "datasource", "name": "logs", "label": "Logs", "query": "loki", "hide": 0 },
+      { "type": "datasource", "name": "traces", "label": "Traces", "query": "tempo", "hide": 0 },
+      {
+        "type": "custom",
+        "name": "service",
+        "label": "API service",
+        "query": "cashight-api,cashight-aws-api",
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": ["All"], "value": ["$__all"] },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "API: $service",
+      "repeat": "service",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Requests by route",
+      "datasource": { "type": "prometheus", "uid": "${prom}" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${prom}" },
+          "expr": "sum by (http_route) (rate(http_server_request_duration_seconds_count{service_name=\"$service\"}[$__rate_interval]))",
+          "legendFormat": "{{http_route}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "5xx ratio by route",
+      "datasource": { "type": "prometheus", "uid": "${prom}" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${prom}" },
+          "expr": "sum by (http_route) (rate(http_server_request_duration_seconds_count{service_name=\"$service\", http_response_status_code=~\"5..\"}[$__rate_interval])) / sum by (http_route) (rate(http_server_request_duration_seconds_count{service_name=\"$service\"}[$__rate_interval]))",
+          "legendFormat": "{{http_route}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "p95 latency by route",
+      "datasource": { "type": "prometheus", "uid": "${prom}" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${prom}" },
+          "expr": "histogram_quantile(0.95, sum by (le, http_route) (rate(http_server_request_duration_seconds_bucket{service_name=\"$service\"}[$__rate_interval])))",
+          "legendFormat": "{{http_route}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Workers",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Jobs by outcome",
+      "datasource": { "type": "prometheus", "uid": "${prom}" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 10 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${prom}" },
+          "expr": "sum by (service_name, outcome) (rate(cashight_worker_jobs_total[$__rate_interval]))",
+          "legendFormat": "{{service_name}} {{outcome}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Job duration p50 and p95",
+      "datasource": { "type": "prometheus", "uid": "${prom}" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 10 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${prom}" },
+          "expr": "histogram_quantile(0.5, sum by (le, service_name) (rate(cashight_worker_job_duration_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "{{service_name}} p50"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${prom}" },
+          "expr": "histogram_quantile(0.95, sum by (le, service_name) (rate(cashight_worker_job_duration_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "{{service_name}} p95"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Invoice parse failures by error code",
+      "datasource": { "type": "prometheus", "uid": "${prom}" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 10 },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "bars" } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${prom}" },
+          "expr": "sum by (error_code) (increase(cashight_aws_invoice_parse_failure_total[$__rate_interval]))",
+          "legendFormat": "{{error_code}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Capacity",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Node memory",
+      "datasource": { "type": "prometheus", "uid": "${prom}" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 19 },
+      "fieldConfig": {
+        "defaults": { "unit": "bytes", "min": 0 },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "4 GiB node" },
+            "properties": [{ "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } }]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${prom}" },
+          "expr": "sum by (k8s_node_name) (k8s_node_memory_working_set_bytes)",
+          "legendFormat": "{{k8s_node_name}}"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${prom}" },
+          "expr": "vector(4294967296)",
+          "legendFormat": "4 GiB node"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Pod CPU (cashight)",
+      "datasource": { "type": "prometheus", "uid": "${prom}" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 19 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${prom}" },
+          "expr": "sum by (k8s_pod_name) (k8s_pod_cpu_usage{k8s_namespace_name=\"cashight\"})",
+          "legendFormat": "{{k8s_pod_name}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Pod memory against limit (cashight)",
+      "datasource": { "type": "prometheus", "uid": "${prom}" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 19 },
+      "fieldConfig": { "defaults": { "unit": "bytes", "min": 0 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${prom}" },
+          "expr": "sum by (k8s_pod_name) (k8s_pod_memory_working_set_bytes{k8s_namespace_name=\"cashight\"})",
+          "legendFormat": "{{k8s_pod_name}}"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${prom}" },
+          "expr": "sum by (k8s_pod_name) (k8s_container_memory_limit_bytes{k8s_namespace_name=\"cashight\"})",
+          "legendFormat": "{{k8s_pod_name}} limit"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Restarts",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 },
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Container restarts in range",
+      "datasource": { "type": "prometheus", "uid": "${prom}" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 28 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "transformations": [{ "id": "labelsToFields", "options": {} }],
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${prom}" },
+          "expr": "max by (k8s_namespace_name, k8s_pod_name) (increase(k8s_container_restarts[$__range]))",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Logs",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 36 },
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Cashight logs",
+      "datasource": { "type": "loki", "uid": "${logs}" },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 37 },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "${logs}" },
+          "expr": "{k8s_namespace_name=\"cashight\"} | json",
+          "queryType": "range",
+          "maxLines": 500
+        }
+      ],
+      "transformations": [
+        { "id": "extractFields", "options": { "source": "labels" } },
+        {
+          "id": "organize",
+          "options": {
+            "includeByName": { "Time": true, "service_name": true, "level": true, "message": true, "trace_id": true },
+            "indexByName": { "Time": 0, "service_name": 1, "level": 2, "message": 3, "trace_id": 4 }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "trace_id" },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open trace",
+                    "url": "/explore?schemaVersion=1&panes={\"t\":{\"datasource\":\"${traces}\",\"queries\":[{\"refId\":\"A\",\"datasource\":{\"type\":\"tempo\",\"uid\":\"${traces}\"},\"queryType\":\"traceql\",\"query\":\"${__value.raw}\"}],\"range\":{\"from\":\"now-6h\",\"to\":\"now\"}}}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
