@@ -42,12 +42,17 @@ into a memory-backed volume, and the collector config reads them with
    **Admin** (it manages the notification policy) → add a token.
 5. **Synthetic Monitoring.** In the stack's Grafana → *Testing & synthetics →
    Synthetics* → initialise it. On its *Config* page, generate an access token
-   and copy the API URL.
+   and copy the API URL: `https://synthetic-monitoring-api-<region>.grafana.net`,
+   not the `-grpc-` backend address the same page shows for private probes.
 6. **Slack.** Create an incoming webhook for the alerts channel
    (api.slack.com → *Your apps* → an app with *Incoming Webhooks* → *Add New
    Webhook*).
 7. **SSM parameters.** Secrets are read with `read -rs`, so they never land in
    shell history:
+
+   Replace `<endpoint>` and `<instance id>`, brackets included. Add
+   `--overwrite` to correct a value; to purge a secret pasted into the wrong
+   parameter, `delete-parameter` and put it again, since SSM keeps old versions.
 
    ```bash
    read -rs VALUE && aws ssm put-parameter --region ap-southeast-1 --type SecureString \
@@ -89,6 +94,9 @@ and would point this root at the main root's state key.
 
 After the first apply, send a test notification: Grafana → *Alerting → Contact
 points* → `slack-cashight` → *Test*.
+
+First applied 2026-11-02 (stack `cashight`, Singapore): 4 resources, the check
+disabled. Slack test notification received 2026-11-02.
 
 ## 4. Rotating a token
 
