@@ -245,6 +245,24 @@ minutes. Metric names are unverified until Plan 4.
 3. Memory against limits: the dashboard's memory panel, then the node's
    headroom.
 
+### Alert drill
+
+Rules 3 and 4 fired and resolved against the local collector (section 5,
+step 1), and the low-volume guard of rule 3 held. Times are UTC and are
+Grafana's rule state; Slack received a message for each firing and resolved
+transition, grouped by alertname.
+
+| Step | Drill | Traffic | Result |
+|---|---|---|---|
+| Fire, 2026-11-03 00:07–00:19 | `--minutes 12 --rps 1 --error-ratio 0.2 --failed-jobs 3` | 601 ok, 117 5xx | both pending 00:09:55, firing 00:15:03 |
+| Resolve, 2026-11-03 00:19–00:39 | `--minutes 20 --error-ratio 0 --failed-jobs 0` | 1196 ok | **Parse jobs failing** resolved 00:24:47, **API errors** 00:27:52 |
+| Low-volume guard, 2026-11-04 15:04–15:14 | `--minutes 10 --rps 0.03 --error-ratio 0.5 --failed-jobs 0` | 9 ok, 9 5xx | stayed inactive; 10-minute `increase` peaked at 15.7 requests, under the 20 minimum; no Slack message |
+
+Run the low-volume step only after at least 10 minutes without traffic. Run
+straight after the resolve step, the window still holds its tail: on
+2026-11-03 at 00:48 it counted 69 requests, 6 of them 5xx, and the rule went
+pending for a minute until that traffic aged out.
+
 ## 8. Going live (Plan 4)
 
 Once `https://api.cashight-v2.nghuy.link/health` serves, set `api_live = true` in
