@@ -44,6 +44,10 @@ interface AnyValue {
   intValue?: string | number;
   doubleValue?: number;
   boolValue?: boolean;
+  /** Base64 in OTLP JSON. */
+  bytesValue?: string;
+  arrayValue?: { values?: AnyValue[] };
+  kvlistValue?: { values?: KeyValue[] };
 }
 interface KeyValue {
   key: string;
@@ -81,7 +85,30 @@ interface Visit {
   attributes: KeyValue[];
   /** Data points of a non-Cashight resource are not allowlisted. */
   checkKeys: boolean;
-  body?: string;
+  body?: AnyValue;
+}
+
+// Keys whose values are random ids, skipped inside structured log bodies for
+// the same reason TRACE_IDS strips them from string bodies.
+const ID_KEYS = new Set(['trace_id', 'span_id', 'traceId', 'spanId']);
+
+/**
+ * Every scalar in an AnyValue as text, descending into arrays and key-value
+ * lists. The collector's json_parser turns a log line into a kvlistValue
+ * body, so reading only stringValue would skip the whole line.
+ */
+export function scalarStrings(value: AnyValue | undefined): string[] {
+  if (!value) return [];
+  if (value.stringValue !== undefined) return [value.stringValue.replace(TRACE_IDS, '')];
+  if (value.intValue !== undefined) return [String(value.intValue)];
+  if (value.doubleValue !== undefined) return [String(value.doubleValue)];
+  if (value.boolValue !== undefined) return [String(value.boolValue)];
+  if (value.bytesValue !== undefined) return [Buffer.from(value.bytesValue, 'base64').toString('utf8')];
+  if (value.arrayValue) return (value.arrayValue.values ?? []).flatMap(scalarStrings);
+  if (value.kvlistValue) {
+    return (value.kvlistValue.values ?? []).flatMap((kv) => (ID_KEYS.has(kv.key) ? [] : scalarStrings(kv.value)));
+  }
+  return [];
 }
 
 function isCashight(resource: Resource | undefined): boolean {
@@ -123,7 +150,7 @@ function* visit(line: ExportLine): Generator<Visit> {
           level: 'log',
           attributes: record.attributes ?? [],
           checkKeys: true,
-          body: record.body?.stringValue,
+          body: record.body,
         };
       }
     }
@@ -158,8 +185,8 @@ export function findSensitiveValues(lines: string[]): string[] {
   const found = new Set<string>();
   for (const line of parse(lines)) {
     for (const v of visit(line)) {
-      const values = v.attributes.map((a) => String(a.value?.stringValue ?? a.value?.intValue ?? ''));
-      if (v.body !== undefined) values.push(v.body.replace(TRACE_IDS, ''));
+      const values = v.attributes.flatMap((a) => scalarStrings(a.value));
+      values.push(...scalarStrings(v.body));
       for (const value of values) {
         for (const [name, pattern] of SENSITIVE_PATTERNS) {
           if (pattern.test(value)) found.add(`${v.level}:${name}`);

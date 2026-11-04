@@ -49,6 +49,9 @@ export async function startWorkerService(
   process.on('SIGTERM', () => stop('SIGTERM'));
   process.on('SIGINT', () => stop('SIGINT'));
 
+  // The consumer zero-initialised its job counter; export that before the
+  // first job so a failure on a freshly scaled-up pod is an increase().
+  await telemetry.flush();
   logger.info('consuming', { serviceName, telemetry: telemetry.enabled });
   await consumer.start();
   await telemetry.shutdown();

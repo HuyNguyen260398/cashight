@@ -117,4 +117,48 @@ describe('findSensitiveValues', () => {
     const lines = [logRecord('{"span_id":"3736364742388658","description":"4111111111111111"}')];
     expect(findSensitiveValues(lines)).toEqual(['log:digits']);
   });
+
+  // The collector's json_parser turns a log line into a kvlistValue body.
+  function structuredLog(body: unknown, recordAttributes: unknown[] = []): string {
+    return JSON.stringify({
+      resourceLogs: [{ resource: cashightResource, scopeLogs: [{ logRecords: [{ body, attributes: recordAttributes }] }] }],
+    });
+  }
+
+  it('finds sensitive values inside a structured (kvlist) log body', () => {
+    const body = {
+      kvlistValue: {
+        values: [
+          { key: 'message', value: { stringValue: 'request' } },
+          { key: 'user', value: { kvlistValue: { values: [{ key: 'email', value: { stringValue: 'a@b.co' } }] } } },
+        ],
+      },
+    };
+    expect(findSensitiveValues([structuredLog(body)])).toEqual(['log:email']);
+  });
+
+  it('finds sensitive values in array, bytes and double attribute values', () => {
+    const attributes = [
+      { key: 'a', value: { arrayValue: { values: [{ stringValue: 'ok' }, { stringValue: 'bearer xyz' }] } } },
+      { key: 'b', value: { bytesValue: Buffer.from('x@y.io').toString('base64') } },
+      { key: 'c', value: { doubleValue: 4111111111111111 } },
+    ];
+    expect(findSensitiveValues([structuredLog({ stringValue: 'ok' }, attributes)])).toEqual([
+      'log:bearer',
+      'log:digits',
+      'log:email',
+    ]);
+  });
+
+  it('skips trace and span ids inside a structured body', () => {
+    const body = {
+      kvlistValue: {
+        values: [
+          { key: 'trace_id', value: { stringValue: '12345678901234567890123456789012' } },
+          { key: 'span_id', value: { stringValue: '3736364742388658' } },
+        ],
+      },
+    };
+    expect(findSensitiveValues([structuredLog(body)])).toEqual([]);
+  });
 });

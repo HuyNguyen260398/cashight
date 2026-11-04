@@ -174,9 +174,11 @@ failed jobs.
 
 `terraform/grafana/` has a variable `api_live` (default `false`). With it false,
 the synthetic check is created **disabled** and rule 1 is paused. Plan 4 flips it
-once `api.cashight-v2.nghuy.link` serves. Rule 2 is paused under the same flag,
-because before the cluster exists there is no collector and it would fire
-permanently. Rules 3–5 stay active: with no data they don't fire.
+once `api.cashight-v2.nghuy.link` serves. Rule 2 has its own flag,
+`collector_live` (default `false`): before the collector exports it would fire
+permanently, but the collector runs before the API serves, so tying it to
+`api_live` would leave collector outages in that window unalerted. Rules 3–5
+stay active: with no data they don't fire.
 
 ### 5.4 Dashboard
 

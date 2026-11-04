@@ -21,8 +21,19 @@ import { BatchSpanProcessor, NodeTracerProvider } from '@opentelemetry/sdk-trace
 
 export interface Telemetry {
   enabled: boolean;
+  /**
+   * Export the current metrics now instead of at the next 30 s tick. Call it
+   * once the instruments are zero-initialised and before serving: a counter
+   * series whose first exported sample is already 1 shows no increase(), so
+   * the alerts would miss the first error or failed job after a pod starts.
+   * Never rejects, and gives up after timeoutMs so an unreachable collector
+   * cannot hold up startup.
+   */
+  flush(timeoutMs?: number): Promise<void>;
   shutdown(): Promise<void>;
 }
+
+const FLUSH_TIMEOUT_MS = 5_000;
 
 type Environment = Record<string, string | undefined>;
 
@@ -51,7 +62,9 @@ export function telemetryResourceAttributes(
 
 export function startTelemetry(serviceName: string, env: Environment = process.env): Telemetry {
   const endpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim();
-  if (!endpoint) return { enabled: false, shutdown: async () => undefined };
+  if (!endpoint) {
+    return { enabled: false, flush: async () => undefined, shutdown: async () => undefined };
+  }
 
   const resource = resourceFromAttributes(telemetryResourceAttributes(serviceName, env));
 
@@ -76,6 +89,13 @@ export function startTelemetry(serviceName: string, env: Environment = process.e
 
   return {
     enabled: true,
+    async flush(timeoutMs = FLUSH_TIMEOUT_MS): Promise<void> {
+      try {
+        await meterProvider.forceFlush({ timeoutMillis: timeoutMs });
+      } catch {
+        // The periodic export retries; a slow start beats a crash loop.
+      }
+    },
     async shutdown(): Promise<void> {
       await Promise.allSettled([tracerProvider.shutdown(), meterProvider.shutdown()]);
     },

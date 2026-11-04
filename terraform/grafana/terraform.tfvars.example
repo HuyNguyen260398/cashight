@@ -6,5 +6,10 @@ sm_url          = "https://synthetic-monitoring-api-<region>.grafana.net"
 sm_access_token = "<synthetic monitoring access token>"
 stack_slug      = "<stack>"
 
-# Plan 4 sets this once api.cashight-v2.nghuy.link serves.
+# Set once the cluster's collector exports to Grafana Cloud (unpauses
+# Telemetry stopped).
+collector_live = false
+
+# Plan 4 sets this once api.cashight-v2.nghuy.link serves (enables the uptime
+# check and unpauses API down).
 api_live = false

@@ -122,6 +122,16 @@ function writeError(
   return write(response, errorResponse(error, requestId), extraHeaders);
 }
 
+const STATUS_CLASSES = ['2xx', '3xx', '4xx', '5xx'] as const;
+
+/** 1xx is never answered here; anything below 200 or above 599 counts as 5xx. */
+export function statusClass(status: number): (typeof STATUS_CLASSES)[number] {
+  if (status >= 200 && status < 300) return '2xx';
+  if (status >= 300 && status < 400) return '3xx';
+  if (status >= 400 && status < 500) return '4xx';
+  return '5xx';
+}
+
 export function createApiServer(options: ApiServerOptions): http.Server {
   const {
     handlers,
@@ -141,6 +151,15 @@ export function createApiServer(options: ApiServerOptions): http.Server {
         explicitBucketBoundaries: [0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10],
       },
     });
+  // The API errors alert reads this counter, not the histogram above. A
+  // series first exported at 1 shows no increase(), and per-pod histogram
+  // series for a route/status pair only appear with their first request, so
+  // the first 5xx on every new pod would be lost. These four series exist at 0
+  // from startup instead (startApiService flushes them before listening).
+  // The class goes in `outcome` because the collector's data-point allowlist
+  // (aws-eks-infra transform/allowlist) already keeps that key.
+  const responses = otelMetrics.getMeter('cashight').createCounter('cashight.http.server.responses');
+  for (const cls of STATUS_CLASSES) responses.add(0, { outcome: cls });
   const tracer = trace.getTracer('cashight');
 
   async function dispatch(
@@ -325,6 +344,7 @@ export function createApiServer(options: ApiServerOptions): http.Server {
         if (outcome.status >= 500) span.setStatus({ code: SpanStatusCode.ERROR });
         span.end();
         duration.record(seconds, attributes);
+        responses.add(1, { outcome: statusClass(outcome.status) });
         logger.info('request', {
           requestId,
           method,

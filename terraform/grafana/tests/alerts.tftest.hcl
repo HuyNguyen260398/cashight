@@ -74,7 +74,7 @@ run "no_data_states" {
   }
 }
 
-run "paused_until_api_live" {
+run "critical_rules_paused_by_default" {
   command = plan
 
   assert {
@@ -82,11 +82,29 @@ run "paused_until_api_live" {
       for r in grafana_rule_group.cashight_v2.rule :
       r.is_paused == contains(["API down", "Telemetry stopped"], r.name)
     ])
-    error_message = "Until api_live, API down and Telemetry stopped are paused and the rest are not."
+    error_message = "With neither switch set, API down and Telemetry stopped are paused and the rest are not."
   }
 }
 
-run "nothing_paused_when_api_live" {
+# The collector exports before the API serves (Plan 3 before Plan 4); a
+# collector outage in between must page.
+run "telemetry_stopped_follows_collector_live_only" {
+  command = plan
+
+  variables {
+    collector_live = true
+  }
+
+  assert {
+    condition = alltrue([
+      for r in grafana_rule_group.cashight_v2.rule :
+      r.is_paused == (r.name == "API down")
+    ])
+    error_message = "With collector_live but not api_live, only API down stays paused."
+  }
+}
+
+run "api_down_follows_api_live_only" {
   command = plan
 
   variables {
@@ -94,8 +112,25 @@ run "nothing_paused_when_api_live" {
   }
 
   assert {
+    condition = alltrue([
+      for r in grafana_rule_group.cashight_v2.rule :
+      r.is_paused == (r.name == "Telemetry stopped")
+    ])
+    error_message = "With api_live but not collector_live, only Telemetry stopped stays paused."
+  }
+}
+
+run "nothing_paused_when_both_live" {
+  command = plan
+
+  variables {
+    api_live       = true
+    collector_live = true
+  }
+
+  assert {
     condition     = alltrue([for r in grafana_rule_group.cashight_v2.rule : r.is_paused == false])
-    error_message = "With api_live no rule is paused."
+    error_message = "With api_live and collector_live no rule is paused."
   }
 }
 
@@ -110,6 +145,17 @@ run "api_errors_needs_volume" {
     ])
     error_message = "API errors needs a 5% error ratio over at least 20 requests."
   }
+
+  # The histogram's series are born at their first request; increase() would
+  # miss the first 5xx per route per pod.
+  assert {
+    condition = alltrue([
+      for r in grafana_rule_group.cashight_v2.rule :
+      !strcontains(jsondecode(r.data[0].model).expr, local.metric.http_count)
+      if r.name == "API errors"
+    ])
+    error_message = "API errors reads the zero-initialised response counter, not the duration histogram."
+  }
 }
 
 run "queries_use_recorded_names" {
@@ -121,7 +167,7 @@ run "queries_use_recorded_names" {
       strcontains(jsondecode(r.data[0].model).expr, lookup({
         "API down"           = local.check_job
         "Telemetry stopped"  = local.metric.collector_uptime
-        "API errors"         = local.metric.http_count
+        "API errors"         = local.metric.http_responses
         "Parse jobs failing" = local.metric.worker_jobs
         "Pod crash-looping"  = local.metric.container_restarts
       }, r.name))

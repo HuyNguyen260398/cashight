@@ -13,7 +13,7 @@
  *                                       500, everything else 200
  *   cashight-parser-worker,             createSqsConsumer over a fake SQS
  *   cashight-invoice-parser-worker      client: one message every 10 s;
- *                                       --failed-jobs fail from job 5 on
+ *                                       the first --failed-jobs jobs fail
  *
  * The parent sends --rps requests per second for --minutes; --error-ratio of
  * them go to /statements. Handlers log email and description fields on
@@ -86,7 +86,7 @@ const failing: ApiHandler = async () => {
   return jsonResponse(500, { error: { code: 'DRILL', message: 'drill failure' } });
 };
 
-async function runApi(role: Role): Promise<() => Promise<void>> {
+async function runApi(role: Role, flush: () => Promise<void>): Promise<() => Promise<void>> {
   const handlers =
     role === 'cashight-api'
       ? { dashboard: ok('dashboard'), statements: failing }
@@ -96,17 +96,19 @@ async function runApi(role: Role): Promise<() => Promise<void>> {
     verifier: { verify: async () => ({ sub: 'drill', token_use: 'access', scope: 'drill' }) },
     rateLimiter: createRateLimiter({ capacity: 1000, refillPerSecond: 1000 }),
   });
+  // As startApiService does: export the zero response counter first.
+  await flush();
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   process.send?.({ port: (server.address() as AddressInfo).port });
   return () => new Promise<void>((resolve) => server.close(() => resolve()));
 }
 
-// Job 5 arrives about 40 s in, after the first 30 s metric export has sent the
-// failure counter at 0. A failure before that export reaches Prometheus as a
-// series born at 1, which increase() cannot see.
-const FIRST_FAILING_JOB = 5;
+// The very first job may fail: startWorkerService (and this drill) flush the
+// zero-initialised job counter before polling, so even a failure seconds
+// after a scale-from-zero start is an increase() the alert sees.
+const FIRST_FAILING_JOB = 1;
 
-async function runWorker(failedJobs: number): Promise<() => Promise<void>> {
+async function runWorker(failedJobs: number, flush: () => Promise<void>): Promise<() => Promise<void>> {
   let sent = 0;
   let nextAt = Date.now();
   const consumer = createSqsConsumer({
@@ -136,6 +138,7 @@ async function runWorker(failedJobs: number): Promise<() => Promise<void>> {
     onFatal: () => process.exit(1),
     waitTimeSeconds: 0,
   });
+  await flush();
   const running = consumer.start();
   process.send?.({ ready: true });
   return async () => {
@@ -151,8 +154,8 @@ async function child(role: Role): Promise<void> {
     OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? 'http://localhost:4318',
   });
   const stop = (API_ROLES as readonly string[]).includes(role)
-    ? await runApi(role)
-    : await runWorker(Number(args['failed-jobs']));
+    ? await runApi(role, () => telemetry.flush())
+    : await runWorker(Number(args['failed-jobs']), () => telemetry.flush());
   process.on('message', (message) => {
     if (message !== 'stop') return;
     void (async () => {

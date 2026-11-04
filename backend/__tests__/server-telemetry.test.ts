@@ -1,3 +1,6 @@
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { metrics } from '@opentelemetry/api';
 import { describe, expect, it } from 'vitest';
 
 import { otlpSignalUrl, startTelemetry, telemetryResourceAttributes } from '../server/telemetry';
@@ -6,6 +9,7 @@ describe('startTelemetry', () => {
   it('is a no-op when no OTLP endpoint is configured', async () => {
     const telemetry = startTelemetry('cashight-api', {});
     expect(telemetry.enabled).toBe(false);
+    await expect(telemetry.flush()).resolves.toBeUndefined();
     await expect(telemetry.shutdown()).resolves.toBeUndefined();
   });
 
@@ -18,7 +22,36 @@ describe('startTelemetry', () => {
       OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:1',
     });
     expect(telemetry.enabled).toBe(true);
+    await expect(telemetry.flush(1_000)).resolves.toBeUndefined();
     await expect(telemetry.shutdown()).resolves.toBeUndefined();
+  });
+
+  // A counter zero-initialised at startup only helps if that zero reaches
+  // Prometheus before the first increment; the periodic export is 30 s away.
+  it('flush exports the current metrics immediately', async () => {
+    const posts: string[] = [];
+    const collector = http.createServer((request, response) => {
+      posts.push(request.url ?? '');
+      request.resume();
+      request.on('end', () => {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end('{}');
+      });
+    });
+    await new Promise<void>((resolve) => collector.listen(0, '127.0.0.1', resolve));
+    const { port } = collector.address() as AddressInfo;
+
+    metrics.disable();
+    const telemetry = startTelemetry('cashight-api', { OTEL_EXPORTER_OTLP_ENDPOINT: `http://127.0.0.1:${port}` });
+    try {
+      metrics.getMeter('test').createCounter('test.zero').add(0, { outcome: 'failed' });
+      await telemetry.flush();
+      expect(posts).toContain('/v1/metrics');
+    } finally {
+      await telemetry.shutdown();
+      metrics.disable();
+      await new Promise((resolve) => collector.close(resolve));
+    }
   });
 });
 

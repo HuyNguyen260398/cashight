@@ -62,7 +62,8 @@ export function createSqsConsumer(options: SqsConsumerOptions): SqsConsumer {
   const jobs = meter.createCounter('cashight.worker.jobs');
   // Each outcome's series exists from startup at 0. A series that first
   // appears at 1 shows no increase(), so the first failure after a pod starts
-  // would never fire the Parse jobs failing alert.
+  // would never fire the Parse jobs failing alert. The zeros only help once
+  // exported: startWorkerService calls telemetry.flush() before start().
   for (const outcome of OUTCOMES) jobs.add(0, { outcome });
   const duration = meter.createHistogram('cashight.worker.job.duration', {
     unit: 's',

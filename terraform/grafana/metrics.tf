@@ -3,8 +3,12 @@
 # section 6); the rules and dashboard reference only these keys.
 locals {
   metric = {
-    http_count             = "http_server_request_duration_seconds_count"
-    http_bucket            = "http_server_request_duration_seconds_bucket"
+    http_count  = "http_server_request_duration_seconds_count"
+    http_bucket = "http_server_request_duration_seconds_bucket"
+    # Zero-initialised per pod and labelled by status class in `outcome`
+    # (backend/server/http-server.ts). Derived from the OTLP name like
+    # worker_jobs; confirm in Explore on the next drill.
+    http_responses         = "cashight_http_server_responses_total"
     worker_jobs            = "cashight_worker_jobs_total"
     worker_duration_bucket = "cashight_worker_job_duration_seconds_bucket"
     # Derived from metricInstrumentName('AwsInvoiceParseFailure'); the drill

@@ -167,6 +167,7 @@ dashboard reference only its keys.
 | Key | Prometheus name | Source |
 |---|---|---|
 | `metric.http_count`, `metric.http_bucket` | `http_server_request_duration_seconds_count`, `…_bucket` | observed |
+| `metric.http_responses` | `cashight_http_server_responses_total`, status class in `outcome` | derived like `worker_jobs`; confirm in Explore on the next drill |
 | `metric.worker_jobs` | `cashight_worker_jobs_total` | observed |
 | `metric.worker_duration_bucket` | `cashight_worker_job_duration_seconds_bucket` | observed |
 | `metric.invoice_parse_failures` | `cashight_aws_invoice_parse_failure_total` | derived; the drill emits none |
@@ -180,9 +181,10 @@ Series count after the run: 126 of the free tier's 10,000.
 ## 7. Alerts
 
 Five rules in the `cashight-v2` group (`terraform/grafana/alerts.tf`), folder
-*Cashight v2*, evaluated every minute, all to `slack-cashight`. Until
-`api_live`, **API down** and **Telemetry stopped** are paused, because both
-would fire permanently.
+*Cashight v2*, evaluated every minute, all to `slack-cashight`. Each critical rule is paused
+until what it watches exists, because it would fire permanently before then:
+**Telemetry stopped** until `collector_live`, **API down** until `api_live`.
+They are separate switches so a collector outage between the two still pages.
 
 ### API down (critical, fires at once, no data fires)
 
@@ -212,6 +214,12 @@ the collector is broken; both mean the other rules are blind.
 More than 5% of API requests answered 5xx over 10 minutes, counted only when at
 least 20 requests were made, so one failure at night does not page.
 
+The rule reads `cashight_http_server_responses_total`, not the duration
+histogram. Every API pod creates that counter's four series (`outcome` =
+`2xx`, `3xx`, `4xx`, `5xx`) at 0 and exports them before it listens, so the
+first 5xx on a new pod is an `increase()`. Histogram series appear only with
+their first request per route and status, and would drop it.
+
 1. Which route: in Explore, `sum by (http_route) (increase(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[10m]))`.
 2. The trace: Tempo, `{status=error}` for the API service, then the logs
    linked from the span.
@@ -230,9 +238,9 @@ minutes.
 3. The message is redelivered by SQS; check the dead-letter queue if it keeps
    failing.
 
-The job counter starts at 0 for every outcome when a worker starts, so the
-first failure is seen. A failure in a worker's first 30 seconds, before its
-first metric export, is still missed.
+The job counter starts at 0 for every outcome when a worker starts, and the
+worker exports it (`telemetry.flush()`) before it polls, so even a failure in
+the first seconds after a scale-from-zero start is seen.
 
 ### Pod crash-looping (warning, after 5 minutes)
 
@@ -265,6 +273,8 @@ pending for a minute until that traffic aged out.
 
 ## 8. Going live (Plan 4)
 
-Once `https://api.cashight-v2.nghuy.link/health` serves, set `api_live = true` in
-`terraform.tfvars` and apply. That enables the synthetic check and unpauses
-**API down** and **Telemetry stopped**.
+As soon as the cluster's collector exports to Grafana Cloud, set
+`collector_live = true` in `terraform.tfvars` and apply; that unpauses
+**Telemetry stopped**. Once `https://api.cashight-v2.nghuy.link/health`
+serves, set `api_live = true` and apply. That enables the synthetic check and
+unpauses **API down**.

@@ -21,7 +21,13 @@ variable "sm_access_token" {
 }
 
 variable "api_live" {
-  description = "Set once api.cashight-v2.nghuy.link serves (Plan 4). Until then the uptime check is disabled and the API down and Telemetry stopped rules are paused, because both would fire permanently."
+  description = "Set once api.cashight-v2.nghuy.link serves (Plan 4). Until then the uptime check is disabled and the API down rule is paused, because it would fire permanently."
+  type        = bool
+  default     = false
+}
+
+variable "collector_live" {
+  description = "Set once the cluster's OpenTelemetry Collector exports to Grafana Cloud. Until then the Telemetry stopped rule is paused, because it would fire permanently. Independent of api_live: the collector runs before the API serves, and an outage in between must page."
   type        = bool
   default     = false
 }

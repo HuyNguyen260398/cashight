@@ -29,9 +29,12 @@ locals {
       summary   = "No collector has reported for 10 minutes: the cluster or the collector is down."
     }
     # The ratio only counts with at least 20 requests in the window, so one
-    # failed request at night does not page.
+    # failed request at night does not page. It reads the zero-initialised
+    # response counter rather than the duration histogram: histogram series
+    # are born at their first request, so increase() would drop the first
+    # 5xx of every route on every new pod.
     "API errors" = {
-      expr      = "(sum(increase(${local.M.http_count}{${local.L.status}=~\"5..\"}[10m])) / sum(increase(${local.M.http_count}[10m])) > 0.05) and on() (sum(increase(${local.M.http_count}[10m])) >= 20)"
+      expr      = "(sum(increase(${local.M.http_responses}{${local.L.outcome}=\"5xx\"}[10m])) / sum(increase(${local.M.http_responses}[10m])) > 0.05) and on() (sum(increase(${local.M.http_responses}[10m])) >= 20)"
       evaluator = "gt"
       threshold = 0
       critical  = false
@@ -55,6 +58,13 @@ locals {
   }
 }
 
+locals {
+  paused_until = {
+    "API down"          = !var.api_live
+    "Telemetry stopped" = !var.collector_live
+  }
+}
+
 resource "grafana_rule_group" "cashight_v2" {
   name             = "cashight-v2"
   folder_uid       = grafana_folder.cashight_v2.uid
@@ -66,8 +76,10 @@ resource "grafana_rule_group" "cashight_v2" {
       name      = rule.key
       condition = "C"
       for       = rule.value.critical ? "0s" : "5m"
-      # Both critical rules would fire permanently until the API serves.
-      is_paused      = rule.value.critical ? !var.api_live : false
+      # Each critical rule waits for what it watches: API down for the API to
+      # serve, Telemetry stopped for a collector to export. Either would fire
+      # permanently before then.
+      is_paused      = lookup(local.paused_until, rule.key, false)
       no_data_state  = rule.value.critical ? "Alerting" : "OK"
       exec_err_state = "Error"
       labels         = { severity = rule.value.critical ? "critical" : "warning" }
