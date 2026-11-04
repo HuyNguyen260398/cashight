@@ -33,7 +33,7 @@ Workers expose no port. A worker that cannot make progress exits and is restarte
 | Variable | Required | Notes |
 |---|---|---|
 | `STORAGE_REGION` or `AWS_REGION` | no | Defaults to `ap-southeast-1` |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | no | OTLP/HTTP base URL, e.g. `http://otel-gateway.observability:4318`. Unset disables export. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | no | OTLP/HTTP base URL, e.g. `http://otel-collector.observability:4318`. Unset disables export. |
 | `APP_VERSION` | no | Reported as `service.version`; set it to the image digest or commit SHA |
 | `ENABLE_LEGACY_WORKSPACE_FALLBACK`, `ENABLE_LEGACY_AUTHZ_FALLBACK` | no | Same meaning as on the Lambdas |
 

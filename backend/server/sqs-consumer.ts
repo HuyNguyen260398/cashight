@@ -40,7 +40,8 @@ export interface SqsConsumer {
   stop(): void;
 }
 
-type Outcome = 'succeeded' | 'failed' | 'timed_out';
+const OUTCOMES = ['succeeded', 'failed', 'timed_out'] as const;
+type Outcome = (typeof OUTCOMES)[number];
 
 const TIMED_OUT = Symbol('timed-out');
 
@@ -59,6 +60,11 @@ export function createSqsConsumer(options: SqsConsumerOptions): SqsConsumer {
   // Created here, not at module scope: see backend/server/telemetry.ts.
   const meter = otelMetrics.getMeter('cashight');
   const jobs = meter.createCounter('cashight.worker.jobs');
+  // Each outcome's series exists from startup at 0. A series that first
+  // appears at 1 shows no increase(), so the first failure after a pod starts
+  // would never fire the Parse jobs failing alert. The zeros only help once
+  // exported: startWorkerService calls telemetry.flush() before start().
+  for (const outcome of OUTCOMES) jobs.add(0, { outcome });
   const duration = meter.createHistogram('cashight.worker.job.duration', {
     unit: 's',
     advice: { explicitBucketBoundaries: [1, 2.5, 5, 10, 20, 30, 60, 120, 180, 240, 300] },

@@ -64,6 +64,9 @@ export async function startApiService(
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
 
+  // Export the zero-initialised response counter before taking traffic, so
+  // the first 5xx on a new pod counts toward the API errors alert.
+  await telemetry.flush();
   await new Promise<void>((resolve) => server.listen(config.port, resolve));
   logger.info('listening', {
     serviceName,

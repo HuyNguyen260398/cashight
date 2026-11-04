@@ -10,6 +10,8 @@
  * URLs for the exporters (see otlpSignalUrl). With it unset (Lambda, tests,
  * local runs) nothing is registered and the OTel API no-ops.
  */
+import { randomUUID } from 'node:crypto';
+
 import { metrics } from '@opentelemetry/api';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
@@ -19,8 +21,19 @@ import { BatchSpanProcessor, NodeTracerProvider } from '@opentelemetry/sdk-trace
 
 export interface Telemetry {
   enabled: boolean;
+  /**
+   * Export the current metrics now instead of at the next 30 s tick. Call it
+   * once the instruments are zero-initialised and before serving: a counter
+   * series whose first exported sample is already 1 shows no increase(), so
+   * the alerts would miss the first error or failed job after a pod starts.
+   * Never rejects, and gives up after timeoutMs so an unreachable collector
+   * cannot hold up startup.
+   */
+  flush(timeoutMs?: number): Promise<void>;
   shutdown(): Promise<void>;
 }
+
+const FLUSH_TIMEOUT_MS = 5_000;
 
 type Environment = Record<string, string | undefined>;
 
@@ -29,15 +42,31 @@ export function otlpSignalUrl(endpoint: string, signal: 'traces' | 'metrics'): s
   return `${endpoint.replace(/\/+$/, '')}/v1/${signal}`;
 }
 
-export function startTelemetry(serviceName: string, env: Environment = process.env): Telemetry {
-  const endpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim();
-  if (!endpoint) return { enabled: false, shutdown: async () => undefined };
-
-  const resource = resourceFromAttributes({
+/**
+ * Resource attributes for every signal. service.instance.id becomes the
+ * `instance` metric label, so two replicas of one service write separate
+ * series instead of interleaving one counter. Kubernetes sets HOSTNAME to the
+ * pod name.
+ */
+export function telemetryResourceAttributes(
+  serviceName: string,
+  env: Environment = process.env,
+): Record<string, string> {
+  return {
     'service.name': serviceName,
     'service.namespace': 'cashight',
     'service.version': env.APP_VERSION?.trim() || 'unknown',
-  });
+    'service.instance.id': env.HOSTNAME?.trim() || randomUUID(),
+  };
+}
+
+export function startTelemetry(serviceName: string, env: Environment = process.env): Telemetry {
+  const endpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim();
+  if (!endpoint) {
+    return { enabled: false, flush: async () => undefined, shutdown: async () => undefined };
+  }
+
+  const resource = resourceFromAttributes(telemetryResourceAttributes(serviceName, env));
 
   const tracerProvider = new NodeTracerProvider({
     resource,
@@ -60,6 +89,13 @@ export function startTelemetry(serviceName: string, env: Environment = process.e
 
   return {
     enabled: true,
+    async flush(timeoutMs = FLUSH_TIMEOUT_MS): Promise<void> {
+      try {
+        await meterProvider.forceFlush({ timeoutMillis: timeoutMs });
+      } catch {
+        // The periodic export retries; a slow start beats a crash loop.
+      }
+    },
     async shutdown(): Promise<void> {
       await Promise.allSettled([tracerProvider.shutdown(), meterProvider.shutdown()]);
     },
