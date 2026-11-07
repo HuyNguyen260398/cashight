@@ -103,7 +103,7 @@ The "tear down within a day" answer (point 2) makes lifecycle the deciding facto
 
 | Root | Lifecycle | Holds |
 |---|---|---|
-| `terraform/` (existing) | Persistent. v1 lives here, so changes are **additions only** | Shared data, Cognito, v1 stack (unchanged), plus persistent v2 pieces: ECR, v2 ACM certificates, v2 SPA bucket + CloudFront distribution + `cashight-v2.nghuy.link` record, v2 Cognito callback URLs, S3 CORS entries |
+| `terraform/` (existing) | Persistent. v1 lives here, so changes are **additions only** | Shared data, Cognito, v1 stack (unchanged), plus the v2 Cognito callback URLs. ~~Persistent v2 pieces~~ moved to `terraform/v2/` (revised 2026-11-07, see below) |
 | `terraform/platform-base/` (new) | Persistent, rarely changed | Account budget, Identity Center group, CodeConnections connection (it needs a manual console handshake, so recreating it every day is not practical) |
 | `terraform/platform/` (new) | **Ephemeral**: `apply` → test → `destroy` the same day | VPC, EKS, node group, add-ons, managed Argo CD + bootstrap, controller/KEDA/collector IAM, the 4 workload Pod Identity roles + associations, KEDA scaler roles, `api.cashight-v2.nghuy.link` record |
 | `terraform/grafana/` (existing) | Persistent | Unchanged, apart from the SSM rename in 1c |
@@ -181,6 +181,8 @@ v2 shares the production DynamoDB table and statements bucket (no data migration
 Answer: v2 uses its own data stores.
 
 ## Consequences of F1–F7 (recorded 2026-11-05)
+
+- **Revised 2026-11-07:** v2-only persistent resources (data stores, ECR, certificates, the v2 SPA hosting, the v2 CI role) live in a separate root `terraform/v2/` (state `cashight/v2/terraform.tfstate`), not in `terraform/`, because `main` and `cashight-v2` share `terraform/`'s state and an apply from `main` would destroy them. The Cognito SPA client URLs are the only v1 change and land on `main`. See `docs/v2-resources.md`.
 
 - **v2 data stores (F4 + F7).** In the persistent `terraform/` root, as additions, v2 gets its own copies of the DynamoDB table, the statements bucket, the uploads bucket with its S3 notifications, the parse and invoice-parse queues with their DLQs, and the cost-exports bucket. v2 data survives teardowns. v1's buckets, table and queues get no new entries, so the S3 CORS additions in F3 apply only to the v2 buckets. The only v1 resource that changes is the shared Cognito SPA client, which gets the v2 callback and sign-out URLs. Cost Explorer and Billing reads are account-level and read-only, so they stay shared by nature.
 - **The authorization record is found only in the v1 table (F2 + F7).** At sign-in, `auth-guard` writes `AUTHZ#<sub>` / `PROFILE` to the **v1** table (`TABLE_NAME`). Every API reads it through `getAuthorizedUser`, the 4 AWS-billing handlers explicitly and the others through `extractAccessClaims`. Because `auth-guard` stays unchanged, the v2 table never gets that record, and every v2 API would deny access. Resolution: a seed script in 4b copies the record from the v1 table into the v2 table. It reads v1 only, and the copy is idempotent, so it is safe to re-run on each bring-up. Limitation: if the record ever changes in v1 (for example a workspace change), v2 holds a stale copy until the script runs again. That is acceptable for a test environment.

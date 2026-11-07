@@ -95,3 +95,50 @@ jobs:
         run: |
           tflint --init
           tflint --no-color -f compact
+
+  # terraform/v2/ holds the v2-only persistent resources (docs/v2-resources.md).
+  # Applied from the workstation only, like terraform/grafana/; mock providers
+  # keep the tests offline.
+  v2:
+    name: v2 root - Format, Validate, Test & Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform/v2
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
+        with:
+          terraform_version: "1.15.2"
+          terraform_wrapper: false
+
+      - name: Terraform fmt (check)
+        run: terraform fmt -check -recursive -diff
+
+      - name: Terraform init (no backend)
+        run: terraform init -backend=false
+
+      - name: Terraform validate
+        run: terraform validate -no-color
+
+      - name: Terraform test
+        run: terraform test -no-color
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6
+        with:
+          tflint_version: latest
+
+      - name: TFLint
+        run: |
+          tflint --init
+          tflint --config "$PWD/.tflint.hcl"
+
+      - name: Checkov
+        run: |
+          pip install --disable-pip-version-check checkov==3.2.471
+          checkov -d . --config-file .checkov.yml
