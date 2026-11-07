@@ -155,13 +155,17 @@ The literal argument is required, and the script never uses `-auto-approve`, so 
 
 **Guards.** While the cluster is still in state the script refuses if `kubectl` cannot reach it (a stale kubeconfig must not read as "nothing deployed"), or if any of these exist:
 
-1. An Argo CD Application with a source path under `deploy/workloads` or `deploy/cashight` (both `.spec.source.path` and every `.spec.sources[].path`).
+1. A workload Argo CD Application: a source path under `deploy/cashight` or `deploy/workloads/…` (both `.spec.source.path` and every `.spec.sources[].path`), or the `cashight-v2-platform-workloads` app-of-apps (path `deploy/workloads`) while it still manages workload Applications. Empty, the app-of-apps is part of the platform and does not block.
 2. An Ingress.
 3. A LoadBalancer Service.
 
 Guards 2 and 3 matter: the AWS Load Balancer Controller creates those load balancers and Terraform has no record of them. Destroy the cluster first and the ALB is orphaned; its ENIs and security groups then block the VPC destroy. The finalizer that releases them only works while the controller is running.
 
-**Order.** Delete the workload's Argo CD Application (or ApplicationSet); Argo CD prunes the Ingress, whose finalizer blocks until the ALB is gone. Then confirm and run the script:
+**Order.** On a test day with workloads, delete the `platform-workloads` ApplicationSet. Deleting a child Application alone does not work, because the app-of-apps recreates it from `deploy/workloads`. The deletion cascades to the app-of-apps, then the workload Applications, then their Ingress, whose finalizer blocks until the ALB is gone. Then confirm and run the script:
+
+```bash
+kubectl -n argocd delete applicationset platform-workloads
+```
 
 ```bash
 aws elbv2 describe-load-balancers --query 'length(LoadBalancers)' --output text   # 0

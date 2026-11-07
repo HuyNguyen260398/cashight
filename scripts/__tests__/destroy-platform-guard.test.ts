@@ -76,6 +76,36 @@ describe('destroy-platform.sh guards', () => {
     expect(result.stderr).toContain('cashight');
   });
 
+  // The platform-workloads ApplicationSet always generates this app-of-apps,
+  // sourcing deploy/workloads itself. With nothing in deploy/workloads it
+  // manages no resources and must not block the teardown of an empty test day.
+  const appOfApps = (resources: unknown[]) => ({
+    metadata: { name: 'cashight-v2-platform-workloads' },
+    spec: { source: { path: 'deploy/workloads' } },
+    status: { resources },
+  });
+
+  it('lets an empty test day through to terraform', () => {
+    liveCluster({ applications: [appOfApps([])], ingresses: [] });
+    const result = run(['destroy platform']);
+    // 99 = the stub terraform's "unexpected call", i.e. the guards passed and
+    // the script reached the bootstrap destroy.
+    expect(result.status).toBe(99);
+    expect(result.stderr).toContain('destroy -target=module.platform_bootstrap');
+    expect(result.stderr).not.toContain('Refusing');
+  });
+
+  it('refuses while the platform-workloads app-of-apps still manages Applications', () => {
+    liveCluster({
+      applications: [appOfApps([{ kind: 'Application', name: 'cashight' }])],
+      ingresses: [],
+    });
+    const result = run(['destroy platform']);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('workload Applications exist');
+    expect(result.stderr).toContain('cashight-v2-platform-workloads');
+  });
+
   it('refuses while an Ingress exists', () => {
     liveCluster({
       applications: [],

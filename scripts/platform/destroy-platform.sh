@@ -43,13 +43,23 @@ if [ "$cluster_in_state" != 0 ]; then
   # workload, so the guard passes while the workload is live - and its
   # controller-created ALB then survives into the VPC destroy and blocks it.
   applications_json="$(kubectl -n argocd get applications -o json 2>/dev/null || echo '{"items":[]}')"
+  #
+  # The platform-workloads ApplicationSet always generates one app-of-apps
+  # whose path is exactly deploy/workloads. It only blocks the teardown while it
+  # still manages something (the workload Applications under deploy/workloads);
+  # empty, it is part of the platform and is destroyed with it.
   workload_apps=$(
     printf '%s' "$applications_json" | jq -r '
       .items[]
+      | ((.status.resources // []) | length > 0) as $manages
       | select(
           ([ .spec.source?.path? ] + [ (.spec.sources // [])[]?.path? ])
-          | map(select(type == "string"))
-          | any(startswith("deploy/workloads") or startswith("deploy/cashight"))
+          | map(select(type == "string") | rtrimstr("/"))
+          | any(
+              startswith("deploy/cashight")
+              or startswith("deploy/workloads/")
+              or (. == "deploy/workloads" and $manages)
+            )
         )
       | .metadata.name
     '
