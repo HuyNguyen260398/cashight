@@ -157,7 +157,8 @@ export function createApiServer(options: ApiServerOptions): http.Server {
   // the first 5xx on every new pod would be lost. These four series exist at 0
   // from startup instead (startApiService flushes them before listening).
   // The class goes in `outcome` because the collector's data-point allowlist
-  // (aws-eks-infra transform/allowlist) already keeps that key.
+  // (transform/allowlist in deploy/platform/config/addons/opentelemetry-collector.yaml)
+  // already keeps that key.
   const responses = otelMetrics.getMeter('cashight').createCounter('cashight.http.server.responses');
   for (const cls of STATUS_CLASSES) responses.add(0, { outcome: cls });
   const tracer = trace.getTracer('cashight');

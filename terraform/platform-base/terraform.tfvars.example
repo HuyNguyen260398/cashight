@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars (gitignored). Applied from the workstation only.
+
+# Required. Find your user ID with:
+#   aws identitystore list-users --identity-store-id <id> --region ap-southeast-1
+argocd_admin_user_ids = [
+  "IDENTITY_STORE_USER_ID",
+]
+
+# Required. Account-wide monthly cost budget alerts.
+budget_notification_emails = ["you@example.com"]
+
+# Optional. A test day on the v2 cluster costs a few dollars, so USD 50
+# leaves headroom over the serverless v1 stack.
+# monthly_budget_usd = 50

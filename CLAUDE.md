@@ -38,6 +38,8 @@ A personal Next.js 16 (App Router, React 19) web app that:
 | Unit tests | `pnpm test` (vitest) |
 | Run a single vitest file | `pnpm test lib/__tests__/aggregations.test.ts` |
 | Terraform (from `terraform/`) | `terraform init` / `terraform plan` / `terraform apply` |
+| Platform bring-up / teardown | see [`docs/platform.md`](./docs/platform.md) |
+| Platform checks | `bash scripts/platform/check-deploy-paths.sh && bash scripts/platform/check-collector.sh` |
 
 `pnpm` is pinned to `11.2.2` via `packageManager` in `package.json` so Amplify uses the same version — keep it in sync.
 

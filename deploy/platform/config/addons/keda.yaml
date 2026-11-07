@@ -1,0 +1,63 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: keda
+  namespace: argocd
+spec:
+  # Required: the template below uses Go-template syntax ({{ .name }},
+  # {{ .metadata.annotations.* }}). Without this, Argo CD falls back to legacy
+  # fasttemplate, which only understands {{name}}/{{server}} and cannot
+  # traverse annotations - every Application fails destination validation.
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            platform_cluster: "true"
+  template:
+    metadata:
+      name: '{{ .name }}-keda'
+    spec:
+      project: default
+      source:
+        repoURL: https://kedacore.github.io/charts
+        chart: keda
+        targetRevision: 2.21.0
+        helm:
+          releaseName: keda
+          values: |
+            # KEDA's AWS credentials come from EKS Pod Identity (association
+            # in Terraform: modules/platform_cluster/iam_pod_identity.tf), so
+            # IRSA stays off. ScaledObjects name the role to assume in a
+            # TriggerAuthentication (podIdentity.provider: aws).
+            podIdentity:
+              aws:
+                irsa:
+                  enabled: false
+      # KEDA rotates its own serving certificates and patches the caBundle on
+      # its APIService and admission webhook at runtime. Without these
+      # entries Argo CD reports them OutOfSync forever, and selfHeal writes
+      # the stale bundle back, breaking the external metrics API.
+      ignoreDifferences:
+        - group: apiregistration.k8s.io
+          kind: APIService
+          jsonPointers:
+            - /spec/caBundle
+        - group: admissionregistration.k8s.io
+          kind: ValidatingWebhookConfiguration
+          jqPathExpressions:
+            - .webhooks[]?.clientConfig.caBundle
+      destination:
+        server: '{{ .server }}'
+        namespace: keda
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          # KEDA's CRDs exceed the client-side apply annotation size limit.
+          - ServerSideApply=true
+          - CreateNamespace=true
+          - RespectIgnoreDifferences=true

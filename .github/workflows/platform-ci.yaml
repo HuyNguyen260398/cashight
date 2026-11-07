@@ -1,0 +1,198 @@
+name: Platform CI
+
+# The EKS test platform: the platform-base and platform Terraform roots, the
+# Argo CD add-ons under deploy/, and the platform scripts. Both roots are
+# applied from the workstation only (docs/platform.md); CI never plans or
+# applies them, so no AWS credentials are needed.
+on:
+  pull_request:
+    branches: [main, cashight-v2]
+    paths:
+      - 'terraform/platform/**'
+      - 'terraform/platform-base/**'
+      - 'terraform/modules/platform_*/**'
+      - 'deploy/**'
+      - 'scripts/platform/**'
+      - '.yamllint.yml'
+      - '.github/workflows/platform-ci.yaml'
+
+concurrency:
+  group: platform-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    name: Terraform (${{ matrix.root }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        root: [platform-base, platform]
+    defaults:
+      run:
+        working-directory: terraform/${{ matrix.root }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
+        with:
+          terraform_version: "1.15.2"
+          terraform_wrapper: false
+
+      - name: Terraform fmt (check)
+        run: terraform fmt -check -recursive -diff
+
+      - name: Terraform init (no backend)
+        run: terraform init -backend=false -input=false
+
+      - name: Terraform validate
+        run: terraform validate -no-color
+
+      # Mock providers: no AWS credentials, state or cluster needed.
+      - name: Terraform test
+        run: terraform test -no-color
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6
+        with:
+          tflint_version: v0.59.1
+
+      - name: TFLint
+        run: |
+          tflint --init
+          tflint --recursive --config "$PWD/.tflint.hcl"
+
+      - name: Checkov
+        if: matrix.root == 'platform'
+        run: |
+          pip install --disable-pip-version-check checkov==3.2.471
+          checkov -d . --config-file .checkov.yml
+          checkov -d ../modules/platform_cluster --config-file .checkov.yml
+
+      # The platform publishes no SSM identifiers for other repositories
+      # (docs/superpowers/specs/2026-11-05-eks-plan-4-open-points.md, 1c).
+      - name: No published SSM parameters
+        if: matrix.root == 'platform'
+        working-directory: .
+        run: |
+          if grep -rn 'resource "aws_ssm_parameter"' terraform/platform terraform/modules/platform_*; then
+            echo "terraform/platform must not create SSM parameters" >&2
+            exit 1
+          fi
+
+  yaml:
+    name: YAML and Kubernetes manifests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Helm
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
+        with:
+          version: v3.18.4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4.0.1
+        with:
+          version: v1.35.0
+
+      - name: Install yamllint and kubeconform
+        run: |
+          set -euo pipefail
+          pip install --disable-pip-version-check yamllint==1.37.1
+          curl --fail --location --silent --show-error \
+            https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz \
+            --output /tmp/kubeconform.tar.gz
+          tar -xzf /tmp/kubeconform.tar.gz -C /tmp kubeconform
+          sudo install /tmp/kubeconform /usr/local/bin/kubeconform
+
+      - name: Argo CD paths
+        run: bash scripts/platform/check-deploy-paths.sh
+
+      - name: yamllint
+        run: yamllint -c .yamllint.yml deploy
+
+      - name: Helm lint (namespace-config)
+        run: |
+          helm lint deploy/platform/charts/namespace-config \
+            -f deploy/platform/charts/namespace-config/values-test.yaml
+
+      - name: kubeconform (namespace-config)
+        run: |
+          set -euo pipefail
+          helm template namespaces deploy/platform/charts/namespace-config \
+            -f deploy/platform/config/namespaces/values.yaml |
+            kubeconform -strict -summary -ignore-missing-schemas
+
+      - name: kubeconform (kustomizations)
+        run: |
+          set -euo pipefail
+          find deploy -name kustomization.yaml -print0 |
+            while IFS= read -r -d '' file; do
+              kubectl kustomize "$(dirname "$file")" |
+                kubeconform -strict -summary -ignore-missing-schemas
+            done
+
+  collector:
+    name: OpenTelemetry Collector add-on
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Helm
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
+        with:
+          version: v3.18.4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4.0.1
+        with:
+          version: v1.35.0
+
+      - name: Install yq and kubeconform
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error \
+            https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz \
+            --output /tmp/kubeconform.tar.gz
+          tar -xzf /tmp/kubeconform.tar.gz -C /tmp kubeconform
+          sudo install /tmp/kubeconform /usr/local/bin/kubeconform
+          curl --fail --location --silent --show-error \
+            https://github.com/mikefarah/yq/releases/download/v4.54.1/yq_linux_amd64 \
+            --output /tmp/yq
+          sudo install /tmp/yq /usr/local/bin/yq
+
+      # Renders the add-on, asserts on it and runs otelcol-contrib validate in
+      # Docker (available on ubuntu-latest).
+      - name: Check the collector
+        run: bash scripts/platform/check-collector.sh
+
+  shell:
+    name: Shell scripts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install shellcheck
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error \
+            https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz \
+            --output /tmp/shellcheck.tar.xz
+          tar -xJf /tmp/shellcheck.tar.xz -C /tmp
+          sudo install /tmp/shellcheck-v0.11.0/shellcheck /usr/local/bin/shellcheck
+
+      - name: shellcheck
+        run: shellcheck scripts/platform/*.sh

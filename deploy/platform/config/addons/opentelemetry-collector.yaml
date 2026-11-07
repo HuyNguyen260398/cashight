@@ -1,0 +1,349 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: opentelemetry-collector
+  namespace: argocd
+spec:
+  # Required: the template below uses Go-template syntax ({{ .name }},
+  # {{ .metadata.annotations.* }}). Without this, Argo CD falls back to legacy
+  # fasttemplate, which only understands {{name}}/{{server}} and cannot
+  # traverse annotations - every Application fails destination validation.
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            platform_cluster: "true"
+  template:
+    metadata:
+      name: '{{ .name }}-opentelemetry-collector'
+    spec:
+      project: default
+      # Two sources: the upstream chart, and this repository's
+      # config/observability (the Pod Security-labelled Namespace and the
+      # leader-election Lease Role, which the chart does not render).
+      # scripts/render-collector.sh renders both; make collector-check asserts
+      # on the result.
+      sources:
+        - repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+          chart: opentelemetry-collector
+          targetRevision: 0.175.0
+          helm:
+            # Pinned so object names stay deterministic: workloads send OTLP
+            # to otel-collector.observability:4318, and the Pod Identity
+            # association (Terraform: modules/platform_cluster/iam_pod_identity.tf)
+            # names the otel-collector ServiceAccount.
+            releaseName: otel-collector
+            values: |
+              fullnameOverride: otel-collector
+              mode: daemonset
+              image:
+                repository: otel/opentelemetry-collector-contrib
+                tag: 0.161.0
+              command:
+                name: otelcol-contrib
+
+              # Pod Identity binds the IAM role by namespace and name; no
+              # role annotation.
+              serviceAccount:
+                create: true
+                name: otel-collector
+
+              clusterRole:
+                create: true
+                rules:
+                  - apiGroups: [""]
+                    resources: ["pods", "namespaces", "nodes", "nodes/stats"]
+                    verbs: ["get", "list", "watch"]
+                  - apiGroups: ["apps"]
+                    resources: ["replicasets", "deployments", "statefulsets", "daemonsets"]
+                    verbs: ["get", "list", "watch"]
+                  - apiGroups: ["batch"]
+                    resources: ["jobs"]
+                    verbs: ["get", "list", "watch"]
+
+              # A DaemonSet gets no Service unless asked. internalTrafficPolicy
+              # stays Local (chart default), so a Pod reaches the collector on
+              # its own node.
+              service:
+                enabled: true
+
+              # OTLP/HTTP only. hostPort 0 keeps the port off the node's public
+              # IP; workloads use the Service.
+              ports:
+                otlp:
+                  enabled: false
+                otlp-http:
+                  enabled: true
+                  hostPort: 0
+                jaeger-compact:
+                  enabled: false
+                jaeger-thrift:
+                  enabled: false
+                jaeger-grpc:
+                  enabled: false
+                zipkin:
+                  enabled: false
+                metrics:
+                  enabled: false
+
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  memory: 256Mi
+
+              # Pod log files on the node are root-owned 0640, so the collector
+              # reads them as UID 0. Everything else is locked down.
+              securityContext: &hardened
+                runAsUser: 0
+                runAsGroup: 0
+                readOnlyRootFilesystem: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+
+              # The init container fetches the Grafana Cloud endpoint, instance
+              # ID and write token from SSM (EKS Pod Identity) into a
+              # memory-backed volume. No Kubernetes Secret exists and nothing
+              # secret is in Git. A missing or empty parameter fails the Pod
+              # here instead of starting a collector that is refused upstream.
+              # The value goes through $(...) and printf '%s' to drop the CLI's
+              # trailing newline, which ${file:...} would otherwise keep.
+              initContainers:
+                - name: fetch-grafana-cloud
+                  image: public.ecr.aws/aws-cli/aws-cli:2.37.9
+                  command: ["/bin/sh", "-ec"]
+                  args:
+                    - |
+                      for p in otlp-token otlp-endpoint instance-id; do
+                        value="$(aws ssm get-parameter --name "$PREFIX/$p" --with-decryption \
+                          --query Parameter.Value --output text)" ||
+                          { echo "cannot read SSM parameter $PREFIX/$p" >&2; exit 1; }
+                        printf '%s' "$value" > "/secrets/$p"
+                        test -s "/secrets/$p" || { echo "empty SSM parameter $PREFIX/$p" >&2; exit 1; }
+                      done
+                  env:
+                    - name: AWS_REGION
+                      value: '{{ .metadata.annotations.aws_region }}'
+                    - name: HOME
+                      value: /aws-home
+                    - name: PREFIX
+                      value: '{{ .metadata.annotations.grafana_cloud_parameter_path }}'
+                  securityContext: *hardened
+                  volumeMounts:
+                    - name: secrets
+                      mountPath: /secrets
+                    - name: aws-home
+                      mountPath: /aws-home
+
+              extraVolumes:
+                - name: varlogpods
+                  hostPath:
+                    path: /var/log/pods
+                    type: Directory
+                - name: secrets
+                  emptyDir:
+                    medium: Memory
+                    sizeLimit: 1Mi
+                - name: aws-home
+                  emptyDir: {}
+              extraVolumeMounts:
+                - name: varlogpods
+                  mountPath: /var/log/pods
+                  readOnly: true
+                - name: secrets
+                  mountPath: /secrets
+                  readOnly: true
+
+              # Merged over the chart's default config: the defaults this
+              # platform does not use are nulled, and every pipeline is
+              # redefined in full (lists replace, maps merge).
+              config:
+                extensions:
+                  basicauth/grafana:
+                    client_auth:
+                      username: ${file:/secrets/instance-id}
+                      password: ${file:/secrets/otlp-token}
+                  # Only one collector reports k8s_cluster once there is more
+                  # than one node (Lease Role: config/observability).
+                  k8s_leader_elector:
+                    auth_type: serviceAccount
+                    lease_name: otel-collector-k8s-cluster
+                    lease_namespace: observability
+
+                receivers:
+                  jaeger: null
+                  zipkin: null
+                  otlp:
+                    protocols:
+                      grpc: null
+                      http:
+                        endpoint: ${env:MY_POD_IP}:4318
+                  # stdout of every Pod on the node, add-ons included; the
+                  # collector's own logs are excluded. Bodies pass unchanged:
+                  # Cashight's logger strips sensitive fields before printing.
+                  file_log:
+                    include:
+                      - /var/log/pods/*/*/*.log
+                    exclude:
+                      - /var/log/pods/observability_otel-collector*_*/*/*.log
+                    start_at: end
+                    include_file_path: true
+                    operators:
+                      - type: container
+                        id: container-parser
+                  kubeletstats:
+                    auth_type: serviceAccount
+                    endpoint: https://${env:OTEL_K8S_NODE_IP}:10250
+                    insecure_skip_verify: true
+                    collection_interval: 60s
+                    metric_groups: [node, pod, container]
+                    # Network metrics carry interface and direction
+                    # attributes and nothing here alerts on them.
+                    metrics:
+                      k8s.node.network.io:
+                        enabled: false
+                      k8s.node.network.errors:
+                        enabled: false
+                      k8s.pod.network.io:
+                        enabled: false
+                      k8s.pod.network.errors:
+                        enabled: false
+                  k8s_cluster:
+                    auth_type: serviceAccount
+                    collection_interval: 60s
+                    k8s_leader_elector: k8s_leader_elector
+                    node_conditions_to_report: [Ready]
+                  # Self-monitoring. Only the label-free process metrics are
+                  # kept; alert rule "Telemetry stopped" needs uptime.
+                  prometheus:
+                    config:
+                      scrape_configs:
+                        - job_name: opentelemetry-collector
+                          scrape_interval: 60s
+                          static_configs:
+                            - targets:
+                                - ${env:MY_POD_IP}:8888
+                          metric_relabel_configs:
+                            - source_labels: [__name__]
+                              regex: otelcol_process_.*
+                              action: keep
+
+                processors:
+                  # Below the 256Mi container limit, so the collector refuses
+                  # data instead of being OOM-killed on a full node.
+                  memory_limiter:
+                    check_interval: 1s
+                    limit_percentage: null
+                    spike_limit_percentage: null
+                    limit_mib: 200
+                    spike_limit_mib: 40
+                  k8s_attributes:
+                    auth_type: serviceAccount
+                    passthrough: false
+                    filter:
+                      node_from_env_var: OTEL_K8S_NODE_NAME
+                    extract:
+                      metadata:
+                        - k8s.namespace.name
+                        - k8s.pod.name
+                        - k8s.container.name
+                        - k8s.node.name
+                    pod_association:
+                      - sources:
+                          - from: connection
+                  # Attribute allowlist. Keep in step with Cashight's
+                  # scripts/local/telemetry-audit.ts (ALLOWED_ATTRIBUTES).
+                  # Data-point attributes are allowlisted for Cashight's own
+                  # metrics only: infra receivers emit fixed attribute sets,
+                  # and stripping those would merge distinct series. k8s
+                  # resource attributes are copied onto k8s and container
+                  # data points so PromQL can filter on them whether or not
+                  # the backend promotes resource attributes to labels.
+                  transform/allowlist:
+                    error_mode: ignore
+                    trace_statements:
+                      - context: resource
+                        statements:
+                          - 'keep_matching_keys(attributes, "^(service|k8s)\\.")'
+                      - context: span
+                        statements:
+                          - >-
+                            keep_keys(attributes, ["http.request.method", "http.route", "http.response.status_code",
+                            "cashight.worker.outcome"])
+                      - context: spanevent
+                        statements:
+                          - 'keep_keys(attributes, [])'
+                    metric_statements:
+                      - context: resource
+                        statements:
+                          - 'keep_matching_keys(attributes, "^(service|k8s)\\.")'
+                      - context: datapoint
+                        statements:
+                          - >-
+                            keep_keys(attributes, ["http.request.method", "http.route", "http.response.status_code",
+                            "outcome", "error_code"]) where resource.attributes["service.namespace"] == "cashight"
+                          - >-
+                            set(attributes["k8s.namespace.name"], resource.attributes["k8s.namespace.name"]) where
+                            IsMatch(metric.name, "^(k8s|container)\\.") and resource.attributes["k8s.namespace.name"]
+                            != nil
+                          - >-
+                            set(attributes["k8s.pod.name"], resource.attributes["k8s.pod.name"]) where
+                            IsMatch(metric.name, "^(k8s|container)\\.") and resource.attributes["k8s.pod.name"] != nil
+                          - >-
+                            set(attributes["k8s.container.name"], resource.attributes["k8s.container.name"]) where
+                            IsMatch(metric.name, "^(k8s|container)\\.") and resource.attributes["k8s.container.name"]
+                            != nil
+                          - >-
+                            set(attributes["k8s.node.name"], resource.attributes["k8s.node.name"]) where
+                            IsMatch(metric.name, "^(k8s|container)\\.") and resource.attributes["k8s.node.name"] !=
+                            nil
+                    log_statements:
+                      - context: resource
+                        statements:
+                          - 'keep_matching_keys(attributes, "^(service|k8s)\\.")'
+                      - context: log
+                        statements:
+                          - 'keep_keys(attributes, ["log.iostream"])'
+                  batch: {}
+
+                exporters:
+                  debug: null
+                  # One endpoint carries all three signals.
+                  otlp_http:
+                    endpoint: ${file:/secrets/otlp-endpoint}
+                    auth:
+                      authenticator: basicauth/grafana
+
+                service:
+                  extensions: [health_check, basicauth/grafana, k8s_leader_elector]
+                  pipelines:
+                    traces:
+                      receivers: [otlp]
+                      processors: [memory_limiter, k8s_attributes, transform/allowlist, batch]
+                      exporters: [otlp_http]
+                    metrics:
+                      receivers: [otlp, kubeletstats, k8s_cluster, prometheus]
+                      processors: [memory_limiter, k8s_attributes, transform/allowlist, batch]
+                      exporters: [otlp_http]
+                    # Logs come from file_log only, so Loki holds one copy.
+                    logs:
+                      receivers: [file_log]
+                      processors: [memory_limiter, k8s_attributes, transform/allowlist, batch]
+                      exporters: [otlp_http]
+        - repoURL: '{{ .metadata.annotations.gitops_repo_url }}'
+          targetRevision: '{{ .metadata.annotations.gitops_revision }}'
+          path: deploy/platform/config/observability
+      destination:
+        server: '{{ .server }}'
+        namespace: observability
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - ServerSideApply=true

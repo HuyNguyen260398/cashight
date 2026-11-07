@@ -1,0 +1,57 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: cert-manager
+  namespace: argocd
+spec:
+  # Required: the template below uses Go-template syntax ({{ .name }},
+  # {{ .metadata.annotations.* }}). Without this, Argo CD falls back to legacy
+  # fasttemplate, which only understands {{name}}/{{server}} and cannot
+  # traverse annotations - every Application fails destination validation.
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            platform_cluster: "true"
+  template:
+    metadata:
+      name: '{{ .name }}-cert-manager'
+      annotations:
+        # Must be established before the AWS Load Balancer Controller, which
+        # issues its webhook certificate through cert-manager.
+        argocd.argoproj.io/sync-wave: "0"
+    spec:
+      project: default
+      source:
+        repoURL: https://charts.jetstack.io
+        chart: cert-manager
+        targetRevision: v1.21.0
+        helm:
+          releaseName: cert-manager
+          values: |
+            crds:
+              enabled: true
+            # A single replica per component is the cheapest layout that still
+            # serves the load balancer controller's webhook certificate.
+            replicaCount: 1
+            webhook:
+              # Keep the chart's default securePort (10250). Pods have their
+              # own VPC IPs, and the node security group admits the control
+              # plane on 10250, 4443, 6443, 8443 and 9443 only, so any other
+              # port would make the API server's webhook calls time out.
+              replicaCount: 1
+            cainjector:
+              replicaCount: 1
+      destination:
+        server: '{{ .server }}'
+        namespace: cert-manager
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - ServerSideApply=true
+          - CreateNamespace=true

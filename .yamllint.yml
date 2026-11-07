@@ -1,0 +1,16 @@
+extends: default
+
+ignore: |
+  deploy/platform/charts/namespace-config/templates/
+  .terraform/
+
+rules:
+  document-start: disable
+  indentation:
+    indent-sequences: whatever
+  line-length:
+    max: 120
+    level: warning
+  truthy:
+    allowed-values: ["true", "false"]
+    check-keys: false

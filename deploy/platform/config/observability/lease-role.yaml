@@ -1,0 +1,27 @@
+# The k8s_leader_elector extension keeps one collector reporting k8s_cluster
+# metrics once there is more than one node. It holds a Lease in this
+# namespace; the chart only renders the ClusterRole, so the namespaced grant
+# lives here.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: otel-collector-leases
+  namespace: observability
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: otel-collector-leases
+  namespace: observability
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: otel-collector-leases
+subjects:
+  - kind: ServiceAccount
+    name: otel-collector
+    namespace: observability

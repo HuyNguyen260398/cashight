@@ -1,6 +1,6 @@
 # Cashight on EKS — migration design
 
-**Date:** 2026-10-08 · **Status:** proposal, awaiting review
+**Date:** 2026-10-08 · **Status:** accepted; revised 2026-11-05
 **Scope:** move Cashight's API and worker compute from Lambda + API Gateway to Amazon EKS, with Terraform provisioning, Argo CD GitOps, and a self-hosted Grafana stack fed by OpenTelemetry.
 
 ## 1. Decisions already taken
@@ -9,7 +9,8 @@
 |---|---|
 | Target service | Amazon **EKS** (the request said "AKS", which is Azure's service) |
 | Goal | Full production cutover; the serverless compute is decommissioned afterwards |
-| Platform ownership | The cluster and platform add-ons live in the existing `aws-eks-infra` repo; Cashight is a workload on it |
+| Platform ownership | ~~The cluster and platform add-ons live in the existing `aws-eks-infra` repo; Cashight is a workload on it~~ Revised 2026-11-05: platform lives in `cashight` (`terraform/platform-base`, `terraform/platform`, `deploy/platform`); see the [open-points file](./2026-11-05-eks-plan-4-open-points.md) |
+| Environment (2026-11-05) | v2 is a repeatable on-demand test environment; cutover (phases 6–7) parked |
 | Observability hosting | ~~Self-hosted Grafana stack in the cluster~~ Revised 2026-10-18: Grafana Cloud free tier, see the [observability design](./2026-10-18-eks-observability-design.md) |
 | Rollout (decided 2026-10-13) | **Parallel stack on a second hostname, not a weighted DNS shift.** The current architecture keeps `cashight.nghuy.link` untouched. The new one comes up at `cashight-v2.nghuy.link` (API at `api.cashight-v2.nghuy.link`). Once it has run smoothly, the old architecture is retired and the new stack is renamed to `cashight.nghuy.link` |
 | Branching (decided 2026-10-13) | New-architecture work lives on the long-lived branch `cashight-v2`, cut from `main`. Every feature branch for it is created from `cashight-v2` and merges back into it. `main` keeps deploying the current architecture; `cashight-v2` merges into `main` once, at the retire-and-rename step (phase 7) |
@@ -81,6 +82,8 @@ Browser ──► cashight-v2.nghuy.link ─► CloudFront + S3 (v2 build of the
 ```
 
 ### 4.1 Platform changes (`aws-eks-infra`)
+
+> Revised: Plan 2 built this capacity in `aws-eks-infra`; Plan 4a moved it into `cashight` (`docs/superpowers/plans/2026-11-05-eks-migration-04a-platform-port.md`), and the nodes are now 2 × `t4g.large` on-demand (open-points F5).
 
 The platform is Fargate-only today. Self-hosted Loki, Tempo and Mimir need EBS volumes, and node-level log and metric collection needs DaemonSets; Fargate supports neither. So the platform gains EC2 capacity:
 
@@ -165,6 +168,8 @@ Each phase leaves production working and is independently reversible until phase
 **Phase 7 is the point of no return**, and its two halves have an order: retire first, rename second, as decided. Between them `cashight.nghuy.link` still serves the old SPA, whose API is gone, so the app is only usable on the v2 hostname until the rename lands. Do both in one session.
 
 ## 6. Cost
+
+> Revised: the cluster is now an on-demand test environment of 2 × `t4g.large` on-demand nodes, created and destroyed the same day (Plan 2 revision in Plan 4a; open-points F5). See `docs/platform.md` for the per-day cost.
 
 Estimates from list prices recalled for `ap-southeast-1`, not quotes. Verify with the AWS calculator before committing.
 

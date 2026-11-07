@@ -1,7 +1,7 @@
 /**
  * Telemetry drill: run Plan 1's real container-runtime instrumentation with
  * fake dependencies, so metrics, spans and logs reach a local OpenTelemetry
- * Collector (aws-eks-infra scripts/run-local-collector.sh) without AWS.
+ * Collector (scripts/platform/run-local-collector.sh) without AWS.
  *
  * Why not `pnpm dev:local`: scripts/dev-server.ts reuses the route table but
  * never starts telemetry, createApiServer or createSqsConsumer, so it emits no

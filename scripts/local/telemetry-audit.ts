@@ -15,8 +15,8 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
 /**
- * Mirrors `transform/allowlist` in aws-eks-infra
- * gitops/platform/config/addons/opentelemetry-collector.yaml. Keep in step.
+ * Mirrors `transform/allowlist` in
+ * deploy/platform/config/addons/opentelemetry-collector.yaml. Keep in step.
  * Data-point keys are checked for Cashight's own metrics only, as the
  * collector allowlists them.
  */
