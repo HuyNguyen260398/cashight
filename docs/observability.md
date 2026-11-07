@@ -16,16 +16,16 @@ check are Grafana-side, defined in `terraform/grafana/`.
 
 | Secret or value | Where it lives | Who reads it |
 |---|---|---|
-| OTLP write token (`metrics:write`, `logs:write`, `traces:write`) | SSM SecureString `/platform/aws-eks-infra/grafana-cloud/otlp-token` | Collector init container (EKS Pod Identity) |
-| OTLP endpoint URL, instance ID (not secret) | SSM String `/platform/aws-eks-infra/grafana-cloud/otlp-endpoint`, `/platform/aws-eks-infra/grafana-cloud/instance-id` | Collector init container |
+| OTLP write token (`metrics:write`, `logs:write`, `traces:write`) | SSM SecureString `/cashight/grafana-cloud/otlp-token` | Collector init container (EKS Pod Identity) |
+| OTLP endpoint URL, instance ID (not secret) | SSM String `/cashight/grafana-cloud/otlp-endpoint`, `/cashight/grafana-cloud/instance-id` | Collector init container |
 | Grafana service-account token, Synthetic Monitoring token | `terraform/grafana/terraform.tfvars` (gitignored) on the workstation only | `terraform/grafana/` |
 | Slack webhook URL | SSM SecureString `/cashight/grafana/slack-webhook-url` | `terraform/grafana/` (data source) |
 
 There is no Kubernetes Secret: the init container copies the three parameters
 into a memory-backed volume, and the collector config reads them with
-`${file:/secrets/...}`. The collector side lives in `aws-eks-infra`
-(`gitops/platform/config/addons/opentelemetry-collector.yaml`; check it with
-`make collector-check` there).
+`${file:/secrets/...}`. The collector side lives in
+`deploy/platform/config/addons/opentelemetry-collector.yaml`; check it with
+`bash scripts/platform/check-collector.sh`.
 
 ## 2. One-time setup (about 15 minutes)
 
@@ -56,11 +56,11 @@ into a memory-backed volume, and the collector config reads them with
 
    ```bash
    read -rs VALUE && aws ssm put-parameter --region ap-southeast-1 --type SecureString \
-     --name /platform/aws-eks-infra/grafana-cloud/otlp-token --value "$VALUE" && unset VALUE
+     --name /cashight/grafana-cloud/otlp-token --value "$VALUE" && unset VALUE
    aws ssm put-parameter --region ap-southeast-1 --type String \
-     --name /platform/aws-eks-infra/grafana-cloud/otlp-endpoint --value "<endpoint>"
+     --name /cashight/grafana-cloud/otlp-endpoint --value "<endpoint>"
    aws ssm put-parameter --region ap-southeast-1 --type String \
-     --name /platform/aws-eks-infra/grafana-cloud/instance-id --value "<instance id>"
+     --name /cashight/grafana-cloud/instance-id --value "<instance id>"
    read -rs VALUE && aws ssm put-parameter --region ap-southeast-1 --type SecureString \
      --name /cashight/grafana/slack-webhook-url --value "$VALUE" && unset VALUE
    ```
@@ -69,8 +69,8 @@ into a memory-backed volume, and the collector config reads them with
 
    ```bash
    aws ssm get-parameters --region ap-southeast-1 --query 'length(Parameters)' --names \
-     /platform/aws-eks-infra/grafana-cloud/otlp-token /platform/aws-eks-infra/grafana-cloud/otlp-endpoint \
-     /platform/aws-eks-infra/grafana-cloud/instance-id /cashight/grafana/slack-webhook-url
+     /cashight/grafana-cloud/otlp-token /cashight/grafana-cloud/otlp-endpoint \
+     /cashight/grafana-cloud/instance-id /cashight/grafana/slack-webhook-url
    ```
 
 8. **tfvars.** `cp terraform/grafana/terraform.tfvars.example terraform/grafana/terraform.tfvars`
@@ -111,14 +111,14 @@ disabled. Slack test notification received 2026-11-02.
 ## 5. Local verification run
 
 Proves the app's telemetry reaches the stack and stays private, without a
-cluster. Needs Docker, AWS credentials and both checkouts side by side.
+cluster. Needs Docker and AWS credentials.
 
-1. **Collector**, in `aws-eks-infra`. It reads the same three SSM parameters
+1. **Collector**. It reads the same three SSM parameters
    as the in-cluster init container and listens on `localhost:4318`:
 
    ```bash
    LOG_DIR=$(mktemp -d) && echo "$LOG_DIR"
-   PARAMETER_PREFIX=/platform/aws-eks-infra ./scripts/run-local-collector.sh "$LOG_DIR"
+   GRAFANA_CLOUD_PARAMETER_PATH=/cashight/grafana-cloud ./scripts/platform/run-local-collector.sh "$LOG_DIR"
    ```
 
    Wait for `Everything is ready. Begin running and processing data.` and no

@@ -4,7 +4,8 @@
 # first bring-up, and nothing else catches it before a cluster exists.
 #
 # Fails (exit 1, naming file:line) when:
-#   (a) any file under deploy/ mentions gitops/ or aws-eks-infra;
+#   (a) any file under deploy/ mentions gitops/ or the old platform repository
+#       (matched as aws-eks-[i]nfra so this file does not name it);
 #   (b) a path: in deploy/platform/bootstrap/*.yaml or
 #       deploy/platform/config/addons/*.yaml does not start with deploy/
 #       (Helm-chart-internal paths are allowlisted by exact string);
@@ -31,7 +32,7 @@ fi
 if [ -d deploy ]; then
   while IFS= read -r hit; do
     fail "(a) $hit"
-  done < <(grep -rnE 'gitops/|aws-eks-infra' deploy || true)
+  done < <(grep -rnE 'gitops/|aws-eks-[i]nfra' deploy || true)
 fi
 
 shopt -s nullglob
