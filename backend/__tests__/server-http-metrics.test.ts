@@ -5,7 +5,7 @@ import { MeterProvider, MetricReader, type DataPoint } from '@opentelemetry/sdk-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { jsonResponse } from '../shared/api-response';
-import { createApiServer, statusClass } from '../server/http-server';
+import { createApiServer, statusClass, type ApiServerOptions } from '../server/http-server';
 
 class TestReader extends MetricReader {
   protected async onForceFlush(): Promise<void> {}
@@ -40,7 +40,7 @@ async function responses(): Promise<Record<string, number>> {
   return Object.fromEntries(points.map((p) => [String(p.attributes.outcome), p.value]));
 }
 
-async function start(): Promise<string> {
+async function start(overrides: Partial<ApiServerOptions> = {}): Promise<string> {
   server = createApiServer({
     handlers: {
       dashboard: async () => jsonResponse(200, { ok: true }),
@@ -48,6 +48,7 @@ async function start(): Promise<string> {
     },
     verifier: { verify: async () => ({ sub: 'u', token_use: 'access', scope: 's' }) },
     rateLimiter: { take: () => true },
+    ...overrides,
   });
   vi.spyOn(process.stdout, 'write').mockReturnValue(true);
   await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
@@ -73,6 +74,19 @@ describe('cashight.http.server.responses', () => {
     await vi.waitFor(async () => {
       expect(await responses()).toEqual({ '2xx': 1, '3xx': 0, '4xx': 1, '5xx': 1 });
     });
+  });
+
+  it('counts a request that outlives the deadline once, as 5xx', async () => {
+    const base = await start({
+      handlers: {
+        dashboard: () =>
+          new Promise((resolve) => setTimeout(() => resolve(jsonResponse(200, { ok: true })), 100)),
+      },
+      requestTimeoutMs: 50,
+    });
+    await (await fetch(`${base}/dashboard`, { headers: { Authorization: 'Bearer t' } })).arrayBuffer();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(await responses()).toEqual({ '2xx': 0, '3xx': 0, '4xx': 0, '5xx': 1 });
   });
 
   it('keeps probes out of the counter', async () => {

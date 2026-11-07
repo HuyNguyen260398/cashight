@@ -47,6 +47,7 @@ Workers expose no port. A worker that cannot make progress exits and is restarte
 | `PORT` | no | Default `8080` |
 | `RATE_LIMIT_BURST`, `RATE_LIMIT_PER_SECOND` | no | Defaults `50` and `100`, per pod |
 | `SHUTDOWN_DELAY_MS` | no | Default `5000`. Drain time after readiness fails. |
+| `REQUEST_TIMEOUT_MS` | no | Default `29000` (API Gateway's integration limit). A request still running at the deadline answers `504 GATEWAY_TIMEOUT`; the handler's late result is dropped. |
 
 | Workload | Also requires |
 |---|---|

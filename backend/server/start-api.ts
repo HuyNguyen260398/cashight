@@ -24,6 +24,8 @@ export function apiConfigFromEnv(env: Environment = process.env) {
     rateLimitPerSecond: integerFromEnv(env, 'RATE_LIMIT_PER_SECOND', 100),
     // Time for the load balancer to stop routing here after readiness fails.
     shutdownDelayMs: integerFromEnv(env, 'SHUTDOWN_DELAY_MS', 5_000),
+    // API Gateway's integration limit, which the Lambdas lived under.
+    requestTimeoutMs: integerFromEnv(env, 'REQUEST_TIMEOUT_MS', 29_000),
   };
 }
 
@@ -52,6 +54,7 @@ export async function startApiService(
       refillPerSecond: config.rateLimitPerSecond,
     }),
     isReady: () => ready,
+    requestTimeoutMs: config.requestTimeoutMs,
   });
 
   let shuttingDown = false;
