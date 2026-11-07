@@ -14,10 +14,10 @@ overrides:
   nanoid: 3.3.18
   postcss: 8.5.25
   protobufjs: 7.6.5
-  undici: 7.30.0
+  undici: 7.30.1
   source-map-js: 1.2.2
   baseline-browser-mapping: 2.11.28
-  vite: 8.0.16
+  vite: 8.1.6
   # Pinned to the patched release for the audit. Inert here regardless: next.config.ts sets output:'export' with
   # images.unoptimized, so sharp is never invoked.
   sharp: 0.35.5
@@ -34,3 +34,23 @@ auditConfig:
     # > micromatch > braces. It never processes untrusted input. Drop this
     # entry once braces publishes a fix.
     - GHSA-vfj7-8cjw-p6xm
+    # minimatch <11.0.1 globparts-amplification DoS. Only reached through lint
+    # tooling (eslint, @typescript-eslint/typescript-estree), which pin older
+    # majors with no backported fix; overriding them to 11 breaks their API.
+    # Globs come from our own config, never untrusted input. Drop this entry
+    # once eslint and typescript-eslint move to minimatch >=11.0.1.
+    - GHSA-g3hv-75wg-m249
+
+minimumReleaseAgeExclude:
+  - '@next/env@16.4.5'
+  - '@next/swc-darwin-arm64@16.4.5'
+  - '@next/swc-darwin-x64@16.4.5'
+  - '@next/swc-linux-arm64-gnu@16.4.5'
+  - '@next/swc-linux-arm64-musl@16.4.5'
+  - '@next/swc-linux-x64-gnu@16.4.5'
+  - '@next/swc-linux-x64-musl@16.4.5'
+  - '@next/swc-win32-arm64-msvc@16.4.5'
+  - '@next/swc-win32-x64-msvc@16.4.5'
+  - next@16.4.5
+  - '@next/eslint-plugin-next@16.4.5'
+  - eslint-config-next@16.4.5
