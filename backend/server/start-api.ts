@@ -5,6 +5,7 @@ import { createAccessTokenVerifier, verifierConfigFromEnv } from './jwt';
 import { createRateLimiter } from './rate-limit';
 import { assertRequiredEnv } from './required-env';
 import type { HandlerName } from './routes';
+import { createApiShutdown } from './shutdown';
 import { startTelemetry } from './telemetry';
 
 type Environment = Record<string, string | undefined>;
@@ -26,6 +27,8 @@ export function apiConfigFromEnv(env: Environment = process.env) {
     shutdownDelayMs: integerFromEnv(env, 'SHUTDOWN_DELAY_MS', 5_000),
     // API Gateway's integration limit, which the Lambdas lived under.
     requestTimeoutMs: integerFromEnv(env, 'REQUEST_TIMEOUT_MS', 29_000),
+    // Bound on how long in-flight requests may hold a shutting-down pod.
+    shutdownHardDeadlineMs: integerFromEnv(env, 'SHUTDOWN_HARD_DEADLINE_MS', 10_000),
   };
 }
 
@@ -57,19 +60,17 @@ export async function startApiService(
     requestTimeoutMs: config.requestTimeoutMs,
   });
 
-  let shuttingDown = false;
-  const shutdown = (signal: string): void => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    ready = false;
-    logger.info('shutting down', { signal });
-    setTimeout(() => {
-      server.close(() => {
-        void telemetry.shutdown().finally(() => process.exit(0));
-      });
-      server.closeIdleConnections();
-    }, config.shutdownDelayMs);
-  };
+  const shutdown = createApiShutdown({
+    server,
+    setNotReady: () => {
+      ready = false;
+    },
+    flushTelemetry: () => telemetry.shutdown(),
+    delayMs: config.shutdownDelayMs,
+    hardDeadlineMs: config.shutdownHardDeadlineMs,
+    log: logger.info,
+    exit: (code) => process.exit(code),
+  });
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
 

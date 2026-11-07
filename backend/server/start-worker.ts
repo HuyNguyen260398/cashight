@@ -4,6 +4,7 @@ import { logger } from '../shared/observability';
 import { installProcessErrorHandlers } from './process-errors';
 import { assertRequiredEnv } from './required-env';
 import { createSqsConsumer, type BatchHandler } from './sqs-consumer';
+import { workerExitCode } from './shutdown';
 import { startTelemetry } from './telemetry';
 
 type Environment = Record<string, string | undefined>;
@@ -36,7 +37,7 @@ export async function startWorkerService(
   assertRequiredEnv(requiredEnv);
   const telemetry = startTelemetry(serviceName);
 
-  let exitCode = 0;
+  const state = { fatal: false };
   const consumer = createSqsConsumer({
     client: sqsClient,
     queueUrl: config.queueUrl,
@@ -44,7 +45,7 @@ export async function startWorkerService(
     maxProcessingMs: config.maxProcessingMs,
     onFatal: (error) => {
       logger.error('fatal worker error', { reason: error.message });
-      exitCode = 1;
+      state.fatal = true;
     },
   });
 
@@ -62,5 +63,5 @@ export async function startWorkerService(
   await consumer.start();
   await telemetry.shutdown();
   // A timed-out job is still running; exiting is what releases it.
-  process.exit(exitCode);
+  process.exit(workerExitCode(state));
 }

@@ -47,6 +47,7 @@ Workers expose no port. A worker that cannot make progress exits and is restarte
 | `PORT` | no | Default `8080` |
 | `RATE_LIMIT_BURST`, `RATE_LIMIT_PER_SECOND` | no | Defaults `50` and `100`, per pod |
 | `SHUTDOWN_DELAY_MS` | no | Default `5000`. Drain time after readiness fails. |
+| `SHUTDOWN_HARD_DEADLINE_MS` | no | Default `10000`. After the drain, how long in-flight requests may hold the pod; then every connection is closed and the process exits 1. |
 | `REQUEST_TIMEOUT_MS` | no | Default `29000` (API Gateway's integration limit). A request still running at the deadline answers `504 GATEWAY_TIMEOUT`; the handler's late result is dropped. |
 
 | Workload | Also requires |
@@ -73,8 +74,13 @@ keys). Without it every authenticated request answers `503` with
 | `PDF_PASSWORD_PARAM` | statement parser only | SSM parameter name. Not checked at startup: when unset, no PDF password is looked up. |
 
 Set the pod's `terminationGracePeriodSeconds` above `MAX_PROCESSING_SECONDS` for
-workers, and above `SHUTDOWN_DELAY_MS` for APIs, so a rollout never cuts off
-work in progress.
+workers, and above `SHUTDOWN_DELAY_MS + SHUTDOWN_HARD_DEADLINE_MS` for APIs
+(15 s with the defaults), so a rollout never cuts off work in progress.
+
+Exit codes: an API exits 0 after a clean shutdown and 1 when the hard deadline
+forces it. A worker exits 0 after a clean stop and 1 after a fatal consumer
+error. Either kind exits 1 on an unhandled rejection or uncaught exception,
+logging only the error's name.
 
 AWS credentials come from the SDK default chain (EKS Pod Identity in the
 cluster). Secrets are read from SSM at runtime; no secret is passed by
