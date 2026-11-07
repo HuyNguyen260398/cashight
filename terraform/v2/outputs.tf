@@ -97,3 +97,18 @@ output "api_certificate_arn" {
   description = "Regional certificate for api.cashight-v2.nghuy.link; the 4c Ingress attaches it to the ALB."
   value       = aws_acm_certificate_validation.api.certificate_arn
 }
+
+output "ecr_repository_url" {
+  description = "Backend image repository; 4c pushes cashight-backend:<sha> here."
+  value       = aws_ecr_repository.backend.repository_url
+}
+
+output "ecr_repository_arn" {
+  description = "ARN of the backend image repository."
+  value       = aws_ecr_repository.backend.arn
+}
+
+output "github_ci_role_arn" {
+  description = "Role cashight-v2 CI assumes (GitHub OIDC)."
+  value       = aws_iam_role.github_ci.arn
+}
