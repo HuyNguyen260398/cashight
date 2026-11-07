@@ -112,6 +112,14 @@ jobs:
             process.exit(missing.length || unexpected.length ? 1 : 0);
           "
 
+      # Parses a synthetic PDF inside the image with the parser worker's own
+      # pdfjs worker file and DOM polyfill. Real statements never enter the repo.
+      - name: PDF parsing works inside the image
+        run: |
+          node -e "import('./scripts/fixtures/minimal-pdf.mjs').then((m) => m.writeMinimalPdf('/tmp/smoke.pdf'))"
+          docker run --rm -v /tmp/smoke.pdf:/smoke.pdf:ro cashight-backend:ci \
+            /app/parser-worker/pdf-smoke.js /smoke.pdf
+
       - name: API answers probes and enforces auth
         run: |
           docker run -d --name api -p 8080:8080 \
@@ -184,4 +192,13 @@ jobs:
             # 1 = refused to start. 124 would mean it started and kept polling.
             test "$status" = 1
             echo "$out" | grep -q 'Missing required configuration: QUEUE_URL'
+          done
+
+      - name: Container logs (on failure)
+        if: failure()
+        run: |
+          for name in api aws-api api-default; do
+            echo "::group::docker logs ${name}"
+            docker logs "${name}" 2>&1 || true
+            echo "::endgroup::"
           done

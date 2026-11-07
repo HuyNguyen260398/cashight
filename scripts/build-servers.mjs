@@ -39,17 +39,23 @@ export async function buildServers({ projectRoot = defaultProjectRoot } = {}) {
       }
     }
 
-    await build({
-      absWorkingDir: projectRoot,
-      entryPoints: [`backend/server/entrypoints/${name}.ts`],
-      outfile: path.join(outputDirectory, 'index.js'),
-      bundle: true,
-      format: 'cjs',
-      logLevel: 'silent',
-      platform: 'node',
-      sourcemap: 'external',
-      target: 'node22',
-    });
+    const bundles = [{ entry: name, outfile: 'index.js' }];
+    // CI's in-image PDF smoke test sits next to the parser's pdf.worker.mjs.
+    if (name === 'parser-worker') bundles.push({ entry: 'pdf-smoke', outfile: 'pdf-smoke.js' });
+
+    for (const { entry, outfile } of bundles) {
+      await build({
+        absWorkingDir: projectRoot,
+        entryPoints: [`backend/server/entrypoints/${entry}.ts`],
+        outfile: path.join(outputDirectory, outfile),
+        bundle: true,
+        format: 'cjs',
+        logLevel: 'silent',
+        platform: 'node',
+        sourcemap: 'external',
+        target: 'node22',
+      });
+    }
   }
 
   return { serverNames: SERVERS.map(({ name }) => name), outputRoot };
