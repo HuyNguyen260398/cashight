@@ -1,6 +1,6 @@
 # EKS migration — open points to settle before writing Plan 4
 
-**Date:** 2026-11-05 · **Status:** all points answered (1–8, F1–F7); ready for Plan 4a
+**Date:** 2026-11-05 · **Status:** all points answered; Plan 4a written (docs/superpowers/plans/2026-11-05-eks-migration-04a-platform-port.md)
 **Context:** Plans 1–3 are merged. No EKS cluster exists; `enable_argocd = false`; `api_live = false`. Plan 4 (spec §5 phases 4 and 5) cannot be written until the points below are answered. Record each answer inline (replace `Answer: _pending_`) and copy the decisions into Plan 4's header.
 
 Spec: [`2026-10-08-eks-migration-design.md`](./2026-10-08-eks-migration-design.md)
