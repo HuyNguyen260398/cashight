@@ -122,8 +122,9 @@ cluster. Needs Docker and AWS credentials.
    ```
 
    Wait for `Everything is ready. Begin running and processing data.` and no
-   `401` or `403` from `otlp_http`. `PARAMETER_PREFIX` is needed until the
-   platform root has been applied; after that the script reads its output.
+   `401` or `403` from `otlp_http`. Without `GRAFANA_CLOUD_PARAMETER_PATH` the
+   script reads `terraform/platform`'s output, or falls back to
+   `/cashight/grafana-cloud` while no cluster state exists.
 
 2. **Drill**, in `cashight`, in a second terminal with the same `LOG_DIR`:
 
