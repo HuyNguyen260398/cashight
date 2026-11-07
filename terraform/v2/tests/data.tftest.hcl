@@ -35,6 +35,34 @@ override_resource {
   values          = { arn = "arn:aws:sqs:ap-southeast-1:111122223333:cashight-v2-parse-dlq" }
 }
 
+override_resource {
+  target          = aws_acm_certificate.frontend
+  override_during = plan
+  values = {
+    arn = "arn:aws:acm:us-east-1:111122223333:certificate/frontend-stub"
+    domain_validation_options = [{
+      domain_name           = "cashight-v2.nghuy.link"
+      resource_record_name  = "_f.cashight-v2.nghuy.link."
+      resource_record_type  = "CNAME"
+      resource_record_value = "_f.acm-validations.aws."
+    }]
+  }
+}
+
+override_resource {
+  target          = aws_acm_certificate.api
+  override_during = plan
+  values = {
+    arn = "arn:aws:acm:ap-southeast-1:111122223333:certificate/api-stub"
+    domain_validation_options = [{
+      domain_name           = "api.cashight-v2.nghuy.link"
+      resource_record_name  = "_a.api.cashight-v2.nghuy.link."
+      resource_record_type  = "CNAME"
+      resource_record_value = "_a.acm-validations.aws."
+    }]
+  }
+}
+
 run "table_mirrors_v1" {
   command = plan
 

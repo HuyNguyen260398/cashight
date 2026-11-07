@@ -62,3 +62,38 @@ output "cognito_user_pool_id" {
   description = "The shared (v1) Cognito user pool, passed through for 4c."
   value       = data.terraform_remote_state.v1.outputs.cognito_user_pool_id
 }
+
+output "frontend_bucket_name" {
+  description = "v2 SPA bucket; the 4c deploy syncs the v2 build here."
+  value       = aws_s3_bucket.frontend.id
+}
+
+output "frontend_bucket_arn" {
+  description = "ARN of the v2 SPA bucket."
+  value       = aws_s3_bucket.frontend.arn
+}
+
+output "cloudfront_distribution_id" {
+  description = "v2 CloudFront distribution, for cache invalidation."
+  value       = aws_cloudfront_distribution.frontend.id
+}
+
+output "cloudfront_distribution_arn" {
+  description = "ARN of the v2 CloudFront distribution."
+  value       = aws_cloudfront_distribution.frontend.arn
+}
+
+output "cloudfront_domain_name" {
+  description = "v2 distribution domain (xxxx.cloudfront.net)."
+  value       = aws_cloudfront_distribution.frontend.domain_name
+}
+
+output "frontend_certificate_arn" {
+  description = "us-east-1 certificate for cashight-v2.nghuy.link."
+  value       = aws_acm_certificate_validation.frontend.certificate_arn
+}
+
+output "api_certificate_arn" {
+  description = "Regional certificate for api.cashight-v2.nghuy.link; the 4c Ingress attaches it to the ALB."
+  value       = aws_acm_certificate_validation.api.certificate_arn
+}
