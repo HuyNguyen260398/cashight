@@ -12,7 +12,7 @@ describe('apiConfigFromEnv', () => {
       rateLimitPerSecond: 100,
       shutdownDelayMs: 5_000,
       requestTimeoutMs: 29_000,
-      shutdownHardDeadlineMs: 10_000,
+      shutdownHardDeadlineMs: 30_000,
     });
   });
 
@@ -24,7 +24,7 @@ describe('apiConfigFromEnv', () => {
         RATE_LIMIT_PER_SECOND: '2',
         SHUTDOWN_DELAY_MS: '0',
       }),
-    ).toEqual({ port: 9000, rateLimitBurst: 5, rateLimitPerSecond: 2, shutdownDelayMs: 0, requestTimeoutMs: 29_000, shutdownHardDeadlineMs: 10_000 });
+    ).toEqual({ port: 9000, rateLimitBurst: 5, rateLimitPerSecond: 2, shutdownDelayMs: 0, requestTimeoutMs: 29_000, shutdownHardDeadlineMs: 30_000 });
   });
 
   it('reads REQUEST_TIMEOUT_MS', () => {

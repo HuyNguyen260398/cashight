@@ -27,8 +27,9 @@ export function apiConfigFromEnv(env: Environment = process.env) {
     shutdownDelayMs: integerFromEnv(env, 'SHUTDOWN_DELAY_MS', 5_000),
     // API Gateway's integration limit, which the Lambdas lived under.
     requestTimeoutMs: integerFromEnv(env, 'REQUEST_TIMEOUT_MS', 29_000),
-    // Bound on how long in-flight requests may hold a shutting-down pod.
-    shutdownHardDeadlineMs: integerFromEnv(env, 'SHUTDOWN_HARD_DEADLINE_MS', 10_000),
+    // Bound on how long in-flight requests may hold a shutting-down pod; above
+    // the request deadline so a legitimate slow request still finishes.
+    shutdownHardDeadlineMs: integerFromEnv(env, 'SHUTDOWN_HARD_DEADLINE_MS', 30_000),
   };
 }
 

@@ -3,3 +3,6 @@
 *.tfstate*
 backend.hcl
 .placeholder.zip
+# Saved plans embed prior state, including sensitive values. Never commit them.
+tfplan
+*.tfplan

@@ -86,3 +86,58 @@ describe('workerExitCode', () => {
     expect(workerExitCode({ fatal: true })).toBe(1);
   });
 });
+
+describe('createApiShutdown with a real server', () => {
+  it('lets a keep-alive request in flight at close finish and exits 0 before the deadline', async () => {
+    const http = await import('node:http');
+    const { createApiServer } = await import('../server/http-server');
+    const { jsonResponse } = await import('../shared/api-response');
+    vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+
+    let ready = true;
+    const server = createApiServer({
+      handlers: {
+        dashboard: () =>
+          new Promise((resolve) => setTimeout(() => resolve(jsonResponse(200, { ok: true })), 300)),
+      },
+      verifier: { verify: async () => ({ sub: 'u', token_use: 'access', scope: 's' }) },
+      rateLimiter: { take: () => true },
+      isReady: () => ready,
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address() as { port: number };
+
+    const exit = vi.fn();
+    const log = vi.fn();
+    const shutdown = createApiShutdown({
+      server,
+      setNotReady: () => {
+        ready = false;
+      },
+      flushTelemetry: async () => {},
+      delayMs: 0,
+      hardDeadlineMs: 2_000,
+      log,
+      exit,
+    });
+
+    const agent = new http.Agent({ keepAlive: true });
+    const status = new Promise<number>((resolve, reject) => {
+      http
+        .get({ port, host: '127.0.0.1', path: '/dashboard', agent, headers: { Authorization: 'Bearer t' } }, (res) => {
+          res.resume();
+          res.on('end', () => resolve(res.statusCode ?? 0));
+        })
+        .on('error', reject);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    shutdown('SIGTERM');
+
+    expect(await status).toBe(200);
+    await vi.waitFor(() => expect(exit).toHaveBeenCalled(), { timeout: 1_500 });
+    expect(exit).toHaveBeenCalledWith(0);
+    expect(log).not.toHaveBeenCalledWith('shutdown deadline exceeded', expect.anything());
+    agent.destroy();
+    server.closeAllConnections();
+  });
+});

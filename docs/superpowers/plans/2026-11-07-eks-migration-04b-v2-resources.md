@@ -673,6 +673,10 @@ Expected: the new assertion FAILs, and every other assertion passes.
 
 - [ ] **Step 3: Add the two URLs** to the lists, after the production entries. Comment: "v2 parallel stack (open-points answer 4); remove at the rename."
 
+  In the same PR (added after the final review), also land on `main`:
+  - the `docker` ecosystem entry from `cashight-v2`'s `.github/dependabot.yml`. Dependabot reads its config only from the default branch, so on `cashight-v2` alone it never runs. It targets `cashight-v2`, so v1 is unaffected.
+  - `tfplan` and `*.tfplan` in `terraform/.gitignore`, before Step 5 writes `terraform/tfplan`.
+
 - [ ] **Step 4: Run the checks and open the PR into `main`**
 
 Run: `terraform -chdir=terraform fmt -check -recursive && terraform -chdir=terraform test`, then commit and run `gh pr create --base main`.
@@ -684,7 +688,7 @@ Expected: tests pass and `Terraform CI` is green.
 git switch main && git pull --ff-only
 terraform -chdir=terraform init && terraform -chdir=terraform plan -out=tfplan -input=false
 ```
-Expected: `Plan: 0 to add, 1 to change, 0 to destroy`, and the only change is `aws_cognito_user_pool_client.spa`, gaining exactly the two URLs. **Anything else: stop, do not apply, and report the drift.** Otherwise run `terraform -chdir=terraform apply tfplan`.
+Expected: `Plan: 0 to add, 1 to change, 0 to destroy`, and the only change is `aws_cognito_user_pool_client.spa`, gaining exactly the two URLs. **Anything else: stop, do not apply, and report the drift.** Otherwise run `terraform -chdir=terraform apply tfplan`, then `rm terraform/tfplan` (saved plans embed state).
 
 - [ ] **Step 6: Merge `main` forward into `cashight-v2`** through a PR (`git switch -c chore/merge-main-into-v2 origin/cashight-v2 && git merge origin/main`, push, `gh pr create --base cashight-v2`). The branching rule is that fixes flow forward from `main`, never back.
 
@@ -697,7 +701,7 @@ git switch cashight-v2 && git pull --ff-only
 eval "$(aws configure export-credentials --format env)"
 terraform -chdir=terraform/v2 init && terraform -chdir=terraform/v2 plan -out=tfplan -input=false
 ```
-Expected: additions only (`0 to change, 0 to destroy`). The plan includes no resource from `terraform/`, and the v1 state is only read. Then run `terraform -chdir=terraform/v2 apply tfplan`. The certificate validations can take a few minutes, and the CloudFront distribution 5–15 minutes.
+Expected: additions only (`0 to change, 0 to destroy`). The plan includes no resource from `terraform/`, and the v1 state is only read. Then run `terraform -chdir=terraform/v2 apply tfplan` and `rm terraform/v2/tfplan`. The certificate validations can take a few minutes, and the CloudFront distribution 5–15 minutes.
 
 - [ ] **Step 2: Check the results**
 
@@ -741,6 +745,6 @@ Expected: exit 0, with no changes. Task 10's apply already landed.
   - `TABLE_NAME=cashight-v2`, the v2 bucket names, the v2 `QUEUE_URL`s and `ALLOWED_ORIGIN=https://cashight-v2.nghuy.link`.
   - `COGNITO_USER_POOL_ID` from v1, and `COGNITO_CLIENT_IDS` = v1 SPA client + smoke client.
   - `REQUEST_TIMEOUT_MS`, `SHUTDOWN_DELAY_MS` and `SHUTDOWN_HARD_DEADLINE_MS` per `docs/container-runtime.md`.
-  - API `terminationGracePeriodSeconds` > 15.
+  - API `terminationGracePeriodSeconds` > 35 (`SHUTDOWN_DELAY_MS` 5 s + `SHUTDOWN_HARD_DEADLINE_MS` 30 s; revised in the final review).
 - **The image workflow** assumes `github_ci_role_arn` on pushes to `cashight-v2`, pushes `cashight-backend:<sha>`, and pins the digest in `deploy/cashight/`. The v2 SPA build is deployed to `frontend_bucket_name`, followed by an invalidation of `cloudfront_distribution_id`.
 - **The seed script** runs as part of each bring-up.

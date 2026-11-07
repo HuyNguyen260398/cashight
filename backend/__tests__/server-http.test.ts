@@ -381,6 +381,9 @@ describe('request deadline', () => {
     await new Promise((resolve) => setTimeout(resolve, 150));
     const logged = writes.mock.calls.map(([line]) => String(line));
     expect(logged.some((line) => line.includes('unhandled request error'))).toBe(false);
+    // Without the headersSent guard the late write throws ERR_HTTP_HEADERS_SENT,
+    // which the late-result catch would log here.
+    expect(logged.some((line) => line.includes('late request error'))).toBe(false);
     expect(logged.filter((line) => line.includes('"message":"request"'))).toHaveLength(1);
   });
 });
