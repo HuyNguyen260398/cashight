@@ -1,0 +1,12 @@
+# The collector reads pod log files through a hostPath mount, which the
+# restricted and baseline Pod Security levels forbid. No default-deny
+# NetworkPolicy here: the only inbound traffic is OTLP from workloads, and the
+# collector needs egress to Grafana Cloud.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged

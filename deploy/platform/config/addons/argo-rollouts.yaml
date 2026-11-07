@@ -1,0 +1,55 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: argo-rollouts
+  namespace: argocd
+spec:
+  # Required: the template below uses Go-template syntax ({{ .name }},
+  # {{ .metadata.annotations.* }}). Without this, Argo CD falls back to legacy
+  # fasttemplate, which only understands {{name}}/{{server}} and cannot
+  # traverse annotations - every Application fails destination validation.
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            platform_cluster: "true"
+  template:
+    metadata:
+      name: '{{ .name }}-argo-rollouts'
+    spec:
+      project: default
+      source:
+        repoURL: https://argoproj.github.io/argo-helm
+        chart: argo-rollouts
+        targetRevision: 2.40.5
+        helm:
+          releaseName: argo-rollouts
+          values: |
+            # One node, so a second replica would add memory and no availability.
+            controller:
+              replicas: 1
+            dashboard:
+              enabled: false
+      # The chart ships preserveUnknownFields: false, which the API server
+      # strips (it is gone from apiextensions.k8s.io/v1), and the API server
+      # adds conversion.strategy: None. Neither can ever match the rendered
+      # manifest, so the five CRDs would report OutOfSync forever.
+      ignoreDifferences:
+        - group: apiextensions.k8s.io
+          kind: CustomResourceDefinition
+          jsonPointers:
+            - /spec/conversion
+            - /spec/preserveUnknownFields
+      destination:
+        server: '{{ .server }}'
+        namespace: argo-rollouts
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - ServerSideApply=true
+          - CreateNamespace=true

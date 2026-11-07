@@ -1,0 +1,41 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-namespaces
+  namespace: argocd
+spec:
+  # Required: the template below uses Go-template syntax ({{ .name }},
+  # {{ .metadata.annotations.* }}). Without this, Argo CD falls back to legacy
+  # fasttemplate, which only understands {{name}}/{{server}} and cannot
+  # traverse annotations - every Application fails destination validation.
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            workload_cluster: "true"
+  template:
+    metadata:
+      name: '{{ .name }}-platform-namespaces'
+    spec:
+      project: default
+      source:
+        repoURL: '{{ .metadata.annotations.gitops_repo_url }}'
+        targetRevision: '{{ .metadata.annotations.gitops_revision }}'
+        path: deploy/platform/charts/namespace-config
+        helm:
+          releaseName: namespaces
+          # Relative to the chart path; stays inside this repository.
+          valueFiles:
+            - ../../config/namespaces/values.yaml
+      destination:
+        server: '{{ .server }}'
+        namespace: default
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - ServerSideApply=true

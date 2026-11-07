@@ -1,0 +1,68 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: aws-load-balancer-controller
+  namespace: argocd
+spec:
+  # Required: the template below uses Go-template syntax ({{ .name }},
+  # {{ .metadata.annotations.* }}). Without this, Argo CD falls back to legacy
+  # fasttemplate, which only understands {{name}}/{{server}} and cannot
+  # traverse annotations - every Application fails destination validation.
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            platform_cluster: "true"
+  template:
+    metadata:
+      name: '{{ .name }}-aws-load-balancer-controller'
+    spec:
+      project: default
+      source:
+        repoURL: https://aws.github.io/eks-charts
+        chart: aws-load-balancer-controller
+        targetRevision: 1.14.0
+        helm:
+          # Argo CD defaults the release name to the Application name, which
+          # would prefix every rendered object with the cluster name. Pin it so
+          # object names stay deterministic and match the acceptance script.
+          releaseName: aws-load-balancer-controller
+          values: |
+            clusterName: '{{ .metadata.labels.cluster_name }}'
+            region: '{{ .metadata.annotations.aws_region }}'
+            vpcId: '{{ .metadata.annotations.vpc_id }}'
+            # One node, so a second replica would add memory and no availability.
+            replicaCount: 1
+            # Let cert-manager issue the admission webhook certificate.
+            #
+            # Without this the chart mints a self-signed CA at render time, so
+            # every Argo CD re-render produces a new one. Argo CD ignores
+            # caBundle differences on webhook configurations by default, so the
+            # ValidatingWebhookConfiguration keeps advertising the CA from one
+            # render while the Secret the pods serve comes from another. They
+            # drift apart permanently and every Ingress admission then fails
+            # with "x509: certificate signed by unknown authority", which blocks
+            # ALB creation for every workload.
+            #
+            # cert-manager owns the certificate instead and its ca-injector
+            # keeps caBundle in step, so the pair cannot drift. cert-manager is
+            # installed by config/addons/cert-manager.yaml and must be Healthy
+            # before this Application syncs.
+            enableCertManager: true
+            serviceAccount:
+              create: true
+              name: aws-load-balancer-controller
+              annotations:
+                eks.amazonaws.com/role-arn: '{{ .metadata.annotations.aws_load_balancer_controller_role_arn }}'
+      destination:
+        server: '{{ .server }}'
+        namespace: kube-system
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - ServerSideApply=true

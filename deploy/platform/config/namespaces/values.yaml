@@ -1,0 +1,63 @@
+# Tenant namespaces. Rendered by deploy/platform/charts/namespace-config
+# through deploy/platform/bootstrap/config-namespaces.yaml.
+
+# Prefix for the shared NetworkPolicy names (tenant-ingress-deny-all, ...).
+name: tenant
+
+networkPolicies:
+  enabled: true
+  egress:
+    deny:
+      all:
+        enabled: true
+        podSelector: {}
+    allow:
+      dns:
+        enabled: true
+        namespace: kube-system
+        podLabels:
+          k8s-app: kube-dns
+        podSelector: {}
+  ingress:
+    deny:
+      all:
+        enabled: true
+        podSelector: {}
+
+namespaces:
+  cashight:
+    annotations:
+      additionalAnnotations:
+        # Removing a tenant from this file must not cascade-delete its
+        # workloads. Delete the namespace by hand once it is empty.
+        argocd.argoproj.io/sync-options: Prune=false
+    labels:
+      podSecurityAdmission:
+        audit:
+          standard: restricted
+          version: latest
+        enforce:
+          standard: restricted
+          version: latest
+        warn:
+          standard: restricted
+          version: latest
+    limitRanges:
+      - name: cashight-defaults
+        limits:
+          - type: Container
+            defaultRequest:
+              cpu: 100m
+              memory: 128Mi
+            default:
+              memory: 512Mi
+            max:
+              memory: 3Gi
+    resourceQuotas:
+      - name: cashight-quota
+        spec:
+          hard:
+            requests.cpu: "3"
+            requests.memory: 12Gi
+            limits.memory: 16Gi
+            pods: "30"

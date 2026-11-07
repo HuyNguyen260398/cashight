@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-addons
+  namespace: argocd
+spec:
+  # Required: the template below uses Go-template syntax ({{ .name }},
+  # {{ .metadata.annotations.* }}). Without this, Argo CD falls back to legacy
+  # fasttemplate, which only understands {{name}}/{{server}} and cannot
+  # traverse annotations - every Application fails destination validation.
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            platform_cluster: "true"
+  template:
+    metadata:
+      name: '{{ .name }}-platform-addons'
+    spec:
+      project: default
+      source:
+        repoURL: '{{ .metadata.annotations.gitops_repo_url }}'
+        targetRevision: '{{ .metadata.annotations.gitops_revision }}'
+        path: deploy/platform/config/addons
+      destination:
+        server: '{{ .server }}'
+        namespace: argocd
+      syncPolicy:
+        automated:
+          prune: true
+          allowEmpty: true
+        syncOptions:
+          - ServerSideApply=true
