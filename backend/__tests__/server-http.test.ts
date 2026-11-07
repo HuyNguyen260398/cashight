@@ -353,3 +353,37 @@ describe('request body limits', () => {
     expect(logged).toContain('"status":400');
   });
 });
+
+describe('request deadline', () => {
+  it('answers 504 when a handler exceeds the deadline', async () => {
+    const base = await start({
+      handlers: { dashboard: () => new Promise(() => {}) },
+      requestTimeoutMs: 50,
+    });
+    const res = await fetch(`${base}/dashboard`, { headers: auth });
+    expect(res.status).toBe(504);
+    expect((await errorOf(res)).code).toBe('GATEWAY_TIMEOUT');
+    expect(res.headers.get('access-control-allow-origin')).toBe('https://cashight.nghuy.link');
+  });
+
+  it('handler finishing after the deadline does not write again', async () => {
+    const base = await start({
+      handlers: {
+        dashboard: () =>
+          new Promise((resolve) => setTimeout(() => resolve(jsonResponse(200, { ok: true })), 100)),
+      },
+      requestTimeoutMs: 50,
+    });
+    const writes = vi.mocked(process.stdout.write);
+    const res = await fetch(`${base}/dashboard`, { headers: auth });
+    expect(res.status).toBe(504);
+    await res.arrayBuffer();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const logged = writes.mock.calls.map(([line]) => String(line));
+    expect(logged.some((line) => line.includes('unhandled request error'))).toBe(false);
+    // Without the headersSent guard the late write throws ERR_HTTP_HEADERS_SENT,
+    // which the late-result catch would log here.
+    expect(logged.some((line) => line.includes('late request error'))).toBe(false);
+    expect(logged.filter((line) => line.includes('"message":"request"'))).toHaveLength(1);
+  });
+});

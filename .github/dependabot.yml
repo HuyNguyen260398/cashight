@@ -18,3 +18,12 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+
+  # Base images are pinned by digest in the Dockerfile, which lives on
+  # cashight-v2 (the EKS work), so bumps target that branch.
+  - package-ecosystem: docker
+    directory: /
+    target-branch: cashight-v2
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5

@@ -36,6 +36,8 @@ export interface ApiServerOptions {
   rateLimiter: RateLimiter;
   isReady?: () => boolean;
   maxBodyBytes?: number;
+  /** Per-request deadline; the request is answered 504 when it passes. */
+  requestTimeoutMs?: number;
 }
 
 // Methods, headers and max-age mirror x-amazon-apigateway-cors in
@@ -50,6 +52,8 @@ const CORS_HEADERS = {
 } as const;
 
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
+/** API Gateway's integration limit, which the Lambdas lived under. */
+const DEFAULT_REQUEST_TIMEOUT_MS = 29_000;
 
 class PayloadTooLargeError extends Error {}
 
@@ -108,6 +112,9 @@ function write(
   result: ApiResponse,
   extraHeaders: Record<string, string> = {},
 ): number {
+  // A handler that outlives the request deadline must not write a second
+  // response after the 504.
+  if (response.headersSent) return result.statusCode;
   response.writeHead(result.statusCode, { ...result.headers, ...extraHeaders });
   response.end(result.body);
   return result.statusCode;
@@ -139,6 +146,7 @@ export function createApiServer(options: ApiServerOptions): http.Server {
     rateLimiter,
     isReady = () => true,
     maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
+    requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
   } = options;
 
   // Created here, not at module scope: instruments made before telemetry
@@ -319,10 +327,33 @@ export function createApiServer(options: ApiServerOptions): http.Server {
 
     void tracer.startActiveSpan('http.request', async (span) => {
       let outcome: Outcome = { status: 500, route: 'unmatched' };
+      let timer: NodeJS.Timeout | undefined;
       try {
-        outcome = await dispatch(request, response, requestId, (name) => {
+        const dispatched = dispatch(request, response, requestId, (name) => {
           outcome = { status: 500, route: name };
         });
+        const deadline = new Promise<'timeout'>((resolve) => {
+          timer = setTimeout(() => resolve('timeout'), requestTimeoutMs);
+        });
+        const first = await Promise.race([dispatched, deadline]);
+        if (first === 'timeout') {
+          // The handler keeps running; its result is dropped by write(). A late
+          // failure is logged by name only, never left as an unhandled rejection.
+          dispatched.catch((error: unknown) => {
+            const errorName = error instanceof Error ? error.name : 'unknown';
+            logger.error('late request error', { requestId, errorName });
+          });
+          outcome = {
+            status: writeError(
+              response,
+              requestId,
+              new ApiError('GATEWAY_TIMEOUT', 504, 'The request took too long.', true),
+            ),
+            route: outcome.route,
+          };
+        } else {
+          outcome = first;
+        }
       } catch (error) {
         // Name only: messages and stacks can carry statement data.
         const errorName = error instanceof Error ? error.name : 'unknown';
@@ -334,6 +365,7 @@ export function createApiServer(options: ApiServerOptions): http.Server {
           response.end();
         }
       } finally {
+        clearTimeout(timer);
         const seconds = Number(process.hrtime.bigint() - started) / 1e9;
         const attributes = {
           'http.request.method': method,

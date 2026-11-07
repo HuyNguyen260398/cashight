@@ -17,6 +17,8 @@ describe('buildServers', () => {
     for (const name of ['parser-worker', 'invoice-parser-worker']) {
       expect(existsSync(path.join(outputRoot, name, 'pdf.worker.mjs'))).toBe(true);
     }
+    // The in-image PDF smoke test sits next to the parser's pdf.worker.mjs.
+    expect(existsSync(path.join(outputRoot, 'parser-worker', 'pdf-smoke.js'))).toBe(true);
     for (const name of ['api', 'aws-api']) {
       expect(existsSync(path.join(outputRoot, name, 'pdf.worker.mjs'))).toBe(false);
     }
