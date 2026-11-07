@@ -1,6 +1,7 @@
 import { sqsClient } from '../shared/clients';
 import { requiredEnvironmentValue } from '../shared/config';
 import { logger } from '../shared/observability';
+import { installProcessErrorHandlers } from './process-errors';
 import { assertRequiredEnv } from './required-env';
 import { createSqsConsumer, type BatchHandler } from './sqs-consumer';
 import { startTelemetry } from './telemetry';
@@ -25,6 +26,11 @@ export async function startWorkerService(
   handler: BatchHandler,
   requiredEnv: readonly string[],
 ): Promise<void> {
+  installProcessErrorHandlers({
+    on: (event, listener) => process.on(event, listener),
+    log: logger.error,
+    exit: (code) => process.exit(code),
+  });
   // Queue settings first so their error messages stay as they were.
   const config = workerConfigFromEnv();
   assertRequiredEnv(requiredEnv);

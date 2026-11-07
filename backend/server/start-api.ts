@@ -1,4 +1,5 @@
 import { logger } from '../shared/observability';
+import { installProcessErrorHandlers } from './process-errors';
 import { createApiServer, type ApiHandler } from './http-server';
 import { createAccessTokenVerifier, verifierConfigFromEnv } from './jwt';
 import { createRateLimiter } from './rate-limit';
@@ -31,6 +32,11 @@ export async function startApiService(
   handlers: Partial<Record<HandlerName, ApiHandler>>,
   requiredEnv: readonly string[],
 ): Promise<void> {
+  installProcessErrorHandlers({
+    on: (event, listener) => process.on(event, listener),
+    log: logger.error,
+    exit: (code) => process.exit(code),
+  });
   assertRequiredEnv(requiredEnv);
   const config = apiConfigFromEnv();
   const verifierConfig = verifierConfigFromEnv();
