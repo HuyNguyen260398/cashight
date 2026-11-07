@@ -144,6 +144,22 @@ run "spa_client_has_read_and_write_scopes" {
   }
 }
 
+# The v2 parallel stack (cashight-v2.nghuy.link) signs in through this client
+# (open-points answer 4). Additive: the production URLs must stay.
+run "spa_client_allows_v2_urls" {
+  command = plan
+
+  assert {
+    condition = (
+      contains(aws_cognito_user_pool_client.spa.callback_urls, "https://cashight-v2.nghuy.link/auth/callback/") &&
+      contains(aws_cognito_user_pool_client.spa.logout_urls, "https://cashight-v2.nghuy.link/signin/") &&
+      contains(aws_cognito_user_pool_client.spa.callback_urls, "https://cashight.nghuy.link/auth/callback/") &&
+      contains(aws_cognito_user_pool_client.spa.logout_urls, "https://cashight.nghuy.link/signin/")
+    )
+    error_message = "v2 URLs are added and the production URLs stay"
+  }
+}
+
 run "cognito_resource_server_exists" {
   command = plan
 

@@ -136,12 +136,16 @@ resource "aws_cognito_user_pool_client" "spa" {
     "https://cashight.nghuy.link/auth/callback/",
     "https://${aws_cloudfront_distribution.frontend.domain_name}/auth/callback/",
     "http://localhost:3000/auth/callback/",
+    # v2 parallel stack (open-points answer 4); remove at the rename.
+    "https://cashight-v2.nghuy.link/auth/callback/",
   ]
 
   logout_urls = [
     "https://cashight.nghuy.link/signin/",
     "https://${aws_cloudfront_distribution.frontend.domain_name}/signin/",
     "http://localhost:3000/signin/",
+    # v2 parallel stack (open-points answer 4); remove at the rename.
+    "https://cashight-v2.nghuy.link/signin/",
   ]
 
   prevent_user_existence_errors = "ENABLED"
