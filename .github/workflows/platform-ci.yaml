@@ -104,7 +104,7 @@ jobs:
         with:
           version: v1.35.0
 
-      - name: Install yamllint and kubeconform
+      - name: Install yamllint, kubeconform and yq
         run: |
           set -euo pipefail
           pip install --disable-pip-version-check yamllint==1.37.1
@@ -113,9 +113,18 @@ jobs:
             --output /tmp/kubeconform.tar.gz
           tar -xzf /tmp/kubeconform.tar.gz -C /tmp kubeconform
           sudo install /tmp/kubeconform /usr/local/bin/kubeconform
+          curl --fail --location --silent --show-error \
+            https://github.com/mikefarah/yq/releases/download/v4.54.1/yq_linux_amd64 \
+            --output /tmp/yq
+          sudo install /tmp/yq /usr/local/bin/yq
 
       - name: Argo CD paths
         run: bash scripts/platform/check-deploy-paths.sh
+
+      # Schema (with the Argo Rollouts and KEDA CRDs), Pod Security, digest
+      # pins, quota at max scale, NetworkPolicies, grace periods.
+      - name: Cashight manifests
+        run: bash scripts/platform/check-cashight-manifests.sh
 
       - name: yamllint
         run: yamllint -c .yamllint.yml deploy

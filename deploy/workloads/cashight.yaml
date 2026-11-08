@@ -1,0 +1,30 @@
+# Cashight on the v2 test cluster. Applied into argocd by the platform-workloads
+# ApplicationSet (deploy/platform/bootstrap/config-workloads.yaml).
+#
+# The finalizer makes `kubectl -n argocd delete application cashight` prune
+# everything below first, including the Ingress, so the load balancer
+# controller removes the ALB before teardown (scripts/platform/teardown.sh).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cashight
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    # terraform -chdir=terraform/platform output -raw gitops_repo_url
+    repoURL: https://codeconnections.ap-southeast-1.amazonaws.com/git-http/010382427026/ap-southeast-1/d3d7e032-c805-4557-b706-cd83ebe3df30/HuyNguyen260398/cashight.git
+    targetRevision: cashight-v2
+    path: deploy/cashight/overlays/v2
+  destination:
+    # The cluster Secret terraform/modules/platform_bootstrap registers.
+    name: cashight-v2
+    namespace: cashight
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

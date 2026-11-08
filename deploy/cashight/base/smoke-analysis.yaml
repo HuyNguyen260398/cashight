@@ -1,0 +1,59 @@
+# The canary gate (spec §4.5, Plan 3 handover item 7): a Job that fails unless
+# the canary pods answer /readyz and /health. No metrics AnalysisTemplate.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: smoke
+spec:
+  args:
+    - name: service
+  metrics:
+    - name: smoke
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            activeDeadlineSeconds: 120
+            ttlSecondsAfterFinished: 600
+            template:
+              metadata:
+                labels:
+                  cashight.nghuy.link/role: smoke
+              spec:
+                restartPolicy: Never
+                automountServiceAccountToken: false
+                securityContext:
+                  runAsNonRoot: true
+                  # curlimages/curl runs as curl_user (100); a numeric UID
+                  # lets the kubelet verify runAsNonRoot.
+                  runAsUser: 100
+                  runAsGroup: 101
+                  seccompProfile:
+                    type: RuntimeDefault
+                containers:
+                  - name: smoke
+                    # curlimages/curl:8.17.0 (multi-arch index)
+                    image: curlimages/curl@sha256:935d9100e9ba842cdb060de42472c7ca90cfe9a7c96e4dacb55e79e560b3ff40
+                    command: ["sh", "-c"]
+                    args:
+                      - >-
+                        set -e;
+                        for path in readyz health; do
+                        curl --fail --silent --show-error --max-time 5 --output /dev/null
+                        "http://{{args.service}}:8080/$path";
+                        echo "$path ok";
+                        done
+                    resources:
+                      requests:
+                        cpu: 50m
+                        memory: 32Mi
+                      limits:
+                        memory: 64Mi
+                    securityContext:
+                      runAsNonRoot: true
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                      capabilities:
+                        drop: ["ALL"]
+                      seccompProfile:
+                        type: RuntimeDefault

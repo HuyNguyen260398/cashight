@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: parser-worker
+spec:
+  # KEDA owns replicas (deploy/cashight/overlays/*/scaling.yaml); 0 when idle.
+  replicas: 0
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: parser-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: parser-worker
+        cashight.nghuy.link/role: worker
+    spec:
+      serviceAccountName: parser-worker
+      automountServiceAccountToken: true
+      # Above MAX_PROCESSING_SECONDS (120 s), so a rollout never cuts off a job.
+      terminationGracePeriodSeconds: 150
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: cashight-backend
+          args: ["/app/parser-worker/index.js"]
+          envFrom:
+            - configMapRef:
+                name: cashight-env
+          env:
+            - name: QUEUE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: cashight-env
+                  key: PARSE_QUEUE_URL
+            - name: MAX_PROCESSING_SECONDS
+              value: "120"
+            - name: PDF_PASSWORD_PARAM
+              value: /cashight/prod/pdf-password
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1536Mi
+            limits:
+              memory: 1536Mi
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: invoice-parser-worker
+spec:
+  # KEDA owns replicas (deploy/cashight/overlays/*/scaling.yaml); 0 when idle.
+  replicas: 0
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: invoice-parser-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: invoice-parser-worker
+        cashight.nghuy.link/role: worker
+    spec:
+      serviceAccountName: invoice-parser-worker
+      automountServiceAccountToken: true
+      # Above MAX_PROCESSING_SECONDS (300 s), so a rollout never cuts off a job.
+      terminationGracePeriodSeconds: 330
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: cashight-backend
+          args: ["/app/invoice-parser-worker/index.js"]
+          envFrom:
+            - configMapRef:
+                name: cashight-env
+          env:
+            - name: QUEUE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: cashight-env
+                  key: INVOICE_PARSE_QUEUE_URL
+            - name: MAX_PROCESSING_SECONDS
+              value: "300"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 2Gi
+            limits:
+              memory: 2Gi
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi

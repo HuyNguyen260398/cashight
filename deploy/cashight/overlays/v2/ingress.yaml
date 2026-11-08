@@ -1,0 +1,35 @@
+# One internet-facing ALB for the `cashight` Ingress group. terraform/platform
+# finds it by the group tag and points api.cashight-v2.nghuy.link at it.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cashight
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/group.name: cashight
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    # terraform -chdir=terraform/v2 output -raw api_certificate_arn
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-southeast-1:010382427026:certificate/3100f36d-b704-42c9-87da-a62ffad14d37
+    alb.ingress.kubernetes.io/healthcheck-path: /readyz
+spec:
+  ingressClassName: alb
+  rules:
+    - host: api.cashight-v2.nghuy.link
+      http:
+        paths:
+          - path: /aws
+            pathType: Prefix
+            backend:
+              service:
+                name: cashight-aws-api
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: cashight-api
+                port:
+                  name: http
