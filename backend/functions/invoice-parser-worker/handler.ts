@@ -17,6 +17,7 @@ import {
 } from '../../shared/metadata';
 import { MetricUnit, metrics } from '../../shared/observability';
 import { parseAwsInvoiceObject } from '../../shared/storage';
+import { parseS3Notification } from '../../shared/s3-notification';
 import { computeSha256, createInvoiceProcessJob } from './process-job';
 
 export interface InvoiceQueueRecord {
@@ -26,10 +27,6 @@ export interface InvoiceQueueRecord {
 
 interface InvoiceQueueEvent {
   Records: InvoiceQueueRecord[];
-}
-
-interface S3Notification {
-  Records?: Array<{ s3?: { object?: { key?: string } } }>;
 }
 
 interface InvoiceQueueBatchResponse {
@@ -69,13 +66,6 @@ export function emitAwsInvoiceParseFailureMetric(
   metrics.addMetric('AwsInvoiceParseFailure', MetricUnit.Count, 1, { error_code: errorCode });
 }
 
-function extractS3Key(body: string): string {
-  const notification = JSON.parse(body) as S3Notification;
-  const key = notification.Records?.[0]?.s3?.object?.key;
-  if (!key) throw new Error('Invoice notification has no object key.');
-  return decodeURIComponent(key.replace(/\+/g, ' '));
-}
-
 export function createInvoiceParserWorkerHandler(
   processJob: (key: string, claimId: string) => Promise<void>,
 ) {
@@ -85,7 +75,12 @@ export function createInvoiceParserWorkerHandler(
     const batchItemFailures: Array<{ itemIdentifier: string }> = [];
     for (const record of event.Records) {
       try {
-        await processJob(extractS3Key(record.body), record.messageId);
+        const message = parseS3Notification(record.body);
+        if (message.kind === 'test') {
+          console.info({ messageId: record.messageId, skipped: 's3:TestEvent' });
+          continue;
+        }
+        await processJob(message.key, record.messageId);
       } catch (error) {
         console.error({
           messageId: record.messageId,

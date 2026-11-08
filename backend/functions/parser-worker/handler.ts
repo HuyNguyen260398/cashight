@@ -10,6 +10,7 @@ import {
   putStatementMetadata,
 } from '../../shared/metadata';
 import { getSecretString } from '../../shared/secrets';
+import { parseS3Notification } from '../../shared/s3-notification';
 import { statementId } from '../../shared/storage';
 import { MetricUnit, metrics } from '../../shared/observability';
 import { createProcessJob, computeSha256 } from './process-job';
@@ -27,20 +28,6 @@ interface SQSBatchResponse {
   batchItemFailures: Array<{ itemIdentifier: string }>;
 }
 
-interface S3Notification {
-  Records?: Array<{
-    s3?: {
-      object?: { key?: string };
-    };
-  }>;
-}
-
-function extractS3Key(body: string): string {
-  const notification = JSON.parse(body) as S3Notification;
-  const key = notification.Records?.[0]?.s3?.object?.key;
-  if (!key) throw new Error('No S3 key in notification');
-  return decodeURIComponent(key.replace(/\+/g, ' '));
-}
 
 function createProductionProcessJob(tableName: string, uploadBucket: string, statementBucket: string) {
   return createProcessJob({
@@ -148,18 +135,27 @@ export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
   const uploadBucket = requiredEnvironmentValue('UPLOAD_BUCKET');
   const statementBucket = requiredEnvironmentValue('STATEMENTS_BUCKET');
 
-  const processJob = createProductionProcessJob(tableName, uploadBucket, statementBucket);
-  const batchItemFailures: Array<{ itemIdentifier: string }> = [];
+  return createParserWorkerHandler(createProductionProcessJob(tableName, uploadBucket, statementBucket))(event);
+}
 
-  for (const record of event.Records) {
-    try {
-      const s3Key = extractS3Key(record.body);
-      await processJob(s3Key);
-    } catch (err) {
-      console.error({ messageId: record.messageId, err: (err as Error).message });
-      batchItemFailures.push({ itemIdentifier: record.messageId });
+export function createParserWorkerHandler(processJob: (s3Key: string) => Promise<void>) {
+  return async (event: SQSEvent): Promise<SQSBatchResponse> => {
+    const batchItemFailures: Array<{ itemIdentifier: string }> = [];
+
+    for (const record of event.Records) {
+      try {
+        const message = parseS3Notification(record.body);
+        if (message.kind === 'test') {
+          console.info({ messageId: record.messageId, skipped: 's3:TestEvent' });
+          continue;
+        }
+        await processJob(message.key);
+      } catch (err) {
+        console.error({ messageId: record.messageId, err: (err as Error).message });
+        batchItemFailures.push({ itemIdentifier: record.messageId });
+      }
     }
-  }
 
-  return { batchItemFailures };
+    return { batchItemFailures };
+  };
 }
