@@ -1,0 +1,49 @@
+# <name> selects every pod and backs the Ingress. <name>-canary is narrowed to
+# the canary pods by Argo Rollouts (canaryService) and is what the smoke Job hits.
+apiVersion: v1
+kind: Service
+metadata:
+  name: cashight-api
+spec:
+  selector:
+    app.kubernetes.io/name: cashight-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cashight-api-canary
+spec:
+  selector:
+    app.kubernetes.io/name: cashight-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cashight-aws-api
+spec:
+  selector:
+    app.kubernetes.io/name: cashight-aws-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cashight-aws-api-canary
+spec:
+  selector:
+    app.kubernetes.io/name: cashight-aws-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

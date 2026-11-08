@@ -1,0 +1,61 @@
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: parse-queue
+spec:
+  podIdentity:
+    provider: aws
+    # terraform -chdir=terraform/platform output keda_scaler_role_arns
+    roleArn: arn:aws:iam::010382427026:role/cashight-v2-keda-parse
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: parser-worker
+spec:
+  scaleTargetRef:
+    name: parser-worker
+  minReplicaCount: 0
+  # Matches the former Lambda's reserved concurrency.
+  maxReplicaCount: 2
+  pollingInterval: 15
+  cooldownPeriod: 300
+  triggers:
+    - type: aws-sqs-queue
+      authenticationRef:
+        name: parse-queue
+      metadata:
+        queueURL: https://sqs.ap-southeast-1.amazonaws.com/010382427026/cashight-v2-parse
+        queueLength: "1"
+        awsRegion: ap-southeast-1
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: invoice-parse-queue
+spec:
+  podIdentity:
+    provider: aws
+    # terraform -chdir=terraform/platform output keda_scaler_role_arns
+    roleArn: arn:aws:iam::010382427026:role/cashight-v2-keda-invoice-parse
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: invoice-parser-worker
+spec:
+  scaleTargetRef:
+    name: invoice-parser-worker
+  minReplicaCount: 0
+  # Matches the former Lambda's reserved concurrency.
+  maxReplicaCount: 1
+  pollingInterval: 15
+  cooldownPeriod: 300
+  triggers:
+    - type: aws-sqs-queue
+      authenticationRef:
+        name: invoice-parse-queue
+      metadata:
+        queueURL: https://sqs.ap-southeast-1.amazonaws.com/010382427026/cashight-v2-invoice-parse
+        queueLength: "1"
+        awsRegion: ap-southeast-1

@@ -106,3 +106,9 @@ variable "enable_argocd" {
   type        = bool
   default     = true
 }
+
+variable "api_alb_ready" {
+  description = "Set once Argo CD has synced the cashight Ingress and its ALB exists. Creates the api.cashight-v2.nghuy.link records (scripts/platform/bring-up.sh)."
+  type        = bool
+  default     = false
+}

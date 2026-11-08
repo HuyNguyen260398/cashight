@@ -1,0 +1,18 @@
+# Cashight's workloads, hostname- and account-neutral. Account-specific values
+# (env, Ingress, KEDA scaling) live in overlays/. Spec §4.2, Plan 4c Task 3.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: cashight
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: cashight
+    includeSelectors: false
+resources:
+  - serviceaccounts.yaml
+  - api-rollout.yaml
+  - aws-api-rollout.yaml
+  - services.yaml
+  - pdbs.yaml
+  - workers.yaml
+  - networkpolicies.yaml
+  - smoke-analysis.yaml

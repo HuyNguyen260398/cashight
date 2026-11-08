@@ -1,0 +1,76 @@
+# Allow-policies on top of the namespace's default deny (ingress and egress)
+# and DNS allow, from deploy/platform/config/namespaces/values.yaml.
+
+# The ALB targets pods directly (target-type ip) from inside the VPC; the smoke
+# Job checks the canary pods.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cashight-api-ingress
+spec:
+  podSelector:
+    matchLabels:
+      cashight.nghuy.link/role: api
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 10.0.0.0/16
+        - podSelector:
+            matchLabels:
+              cashight.nghuy.link/role: smoke
+      ports:
+        - protocol: TCP
+          port: 8080
+---
+# AWS APIs (S3, DynamoDB, SQS, SSM), the Cognito JWKS and Gemini over HTTPS;
+# the EKS Pod Identity agent for credentials; the in-cluster OTel Collector.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cashight-workload-egress
+spec:
+  podSelector:
+    matchExpressions:
+      - key: cashight.nghuy.link/role
+        operator: In
+        values: ["api", "worker"]
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+    - to:
+        - ipBlock:
+            cidr: 169.254.170.23/32
+      ports:
+        - protocol: TCP
+          port: 80
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - protocol: TCP
+          port: 4318
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cashight-smoke-egress
+spec:
+  podSelector:
+    matchLabels:
+      cashight.nghuy.link/role: smoke
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              cashight.nghuy.link/role: api
+      ports:
+        - protocol: TCP
+          port: 8080

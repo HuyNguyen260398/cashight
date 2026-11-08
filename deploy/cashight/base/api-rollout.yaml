@@ -1,0 +1,98 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: cashight-api
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cashight-api
+  strategy:
+    # Replica-based canary, no traffic routing: the Ingress Service selects
+    # every pod, so a step's weight is its share of pods. With 2 replicas,
+    # setWeight 10 rounds up to 1 canary pod. Each step is gated by the smoke
+    # Job against the canary-only Service (no metrics AnalysisTemplate).
+    canary:
+      canaryService: cashight-api-canary
+      steps:
+        - setWeight: 10
+        - analysis:
+            templates:
+              - templateName: smoke
+            args:
+              - name: service
+                value: cashight-api-canary
+        - setWeight: 50
+        - analysis:
+            templates:
+              - templateName: smoke
+            args:
+              - name: service
+                value: cashight-api-canary
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cashight-api
+        cashight.nghuy.link/role: api
+    spec:
+      serviceAccountName: cashight-api
+      # Pod Identity injects its token through the projected volume.
+      automountServiceAccountToken: true
+      # SHUTDOWN_DELAY_MS 5 s + SHUTDOWN_HARD_DEADLINE_MS 30 s = 35 s, plus margin.
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: cashight-api
+      containers:
+        - name: app
+          image: cashight-backend
+          args: ["/app/api/index.js"]
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: cashight-env
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi

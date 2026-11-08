@@ -1,0 +1,20 @@
+# The v2 test environment (cashight-v2.nghuy.link, api.cashight-v2.nghuy.link).
+# Synced by deploy/workloads/cashight.yaml from the cashight-v2 branch.
+#
+# Account values below are copied from `terraform output` of terraform/v2 and
+# terraform/platform. scripts/platform/check-overlay.sh compares them on every
+# bring-up, so a re-created resource cannot silently break the stack.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: cashight
+resources:
+  - ../../base
+  - env.yaml
+  - ingress.yaml
+  - scaling.yaml
+# Rewritten by scripts/platform/pin-image.sh in .github/workflows/v2-release.yaml.
+# The all-zero digest means "not built yet"; bring-up refuses it.
+images:
+  - name: cashight-backend
+    newName: 010382427026.dkr.ecr.ap-southeast-1.amazonaws.com/cashight-backend
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000

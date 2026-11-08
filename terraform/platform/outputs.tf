@@ -82,3 +82,18 @@ output "grafana_cloud_parameter_path" {
   description = "SSM path holding the Grafana Cloud OTLP parameters the collector reads."
   value       = local.grafana_cloud_parameter_path
 }
+
+output "keda_scaler_role_arns" {
+  description = "KEDA scaler roles by queue (parse, invoice_parse). deploy/cashight TriggerAuthentications name these."
+  value       = { for k, r in aws_iam_role.keda_scaler : k => r.arn }
+}
+
+output "workload_role_arns" {
+  description = "Pod Identity roles of the four Cashight workloads, by workload."
+  value       = { for k, r in aws_iam_role.workload : k => r.arn }
+}
+
+output "api_hostname" {
+  description = "Public hostname of the v2 API. Its record exists only while api_alb_ready is true."
+  value       = local.api_hostname
+}
