@@ -122,6 +122,7 @@ describe('bring-up.sh', () => {
 
     const log = recorded();
     const steps = [
+      indexOf(log, 'terraform', '-chdir=terraform/v2', 'init'),
       indexOf(log, 'pnpm', 'seed-authz', '--dry-run'),
       log.findIndex((l) => l.includes('seed-authz') && !l.includes('--dry-run')),
       indexOf(log, 'terraform', '-chdir=terraform/platform', '-target=module.platform_cluster'),

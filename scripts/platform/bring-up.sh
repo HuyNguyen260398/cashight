@@ -63,6 +63,10 @@ digest=$(yq -r '.images[] | select(.name == "cashight-backend") | .digest' "$OVE
 
 aws sts get-caller-identity >/dev/null || die "no AWS credentials (eval \"\$(aws configure export-credentials --format env)\")"
 
+# check-overlay.sh reads terraform/v2's outputs at step 5; initialise it now so
+# a fresh checkout fails here, not after the cluster has been created.
+terraform -chdir=terraform/v2 init -input=false >/dev/null
+
 log "Copying AUTHZ records into the v2 table"
 pnpm tsx scripts/v2/seed-authz.ts --source cashight --target cashight-v2 --dry-run
 pnpm tsx scripts/v2/seed-authz.ts --source cashight --target cashight-v2

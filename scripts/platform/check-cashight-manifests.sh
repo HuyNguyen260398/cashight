@@ -91,6 +91,15 @@ done < <(jq -r '.[0].resources.limits.memory // empty' <<<"$jobs")
 [ "$total" -le "$QUOTA_LIMITS_MI" ] ||
   fail "limits.memory at max scale + surge is ${total}Mi, quota is ${QUOTA_LIMITS_MI}Mi"
 
+# KEDA owns the replica count of a ScaledObject's target. A replicas field in
+# the manifest makes Argo CD (selfHeal) reset every scale-up.
+while IFS= read -r name; do
+  [ -n "$name" ] && fail "$name: scaled by a ScaledObject, so it must not set spec.replicas"
+done < <(jq -r '
+  (map(select(.kind == "ScaledObject") | .spec.scaleTargetRef.name)) as $scaled
+  | .[] | select(.kind == "Deployment" and (.metadata.name as $n | $scaled | index($n)) and (.spec | has("replicas")))
+  | .metadata.name' <<<"$docs")
+
 expect_grace() {
   local name=$1 want=$2 got
   got=$(jq -r --arg n "$name" '.[] | select(.name == $n) | .spec.terminationGracePeriodSeconds' <<<"$pods")

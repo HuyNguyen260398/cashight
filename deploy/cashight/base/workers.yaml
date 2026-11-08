@@ -3,8 +3,8 @@ kind: Deployment
 metadata:
   name: parser-worker
 spec:
-  # KEDA owns replicas (deploy/cashight/overlays/*/scaling.yaml); 0 when idle.
-  replicas: 0
+  # No replicas field: KEDA owns the count (overlays/*/scaling.yaml, 0 when
+  # idle). Setting one here would make Argo CD selfHeal undo every scale-up.
   revisionHistoryLimit: 3
   selector:
     matchLabels:
@@ -69,8 +69,8 @@ kind: Deployment
 metadata:
   name: invoice-parser-worker
 spec:
-  # KEDA owns replicas (deploy/cashight/overlays/*/scaling.yaml); 0 when idle.
-  replicas: 0
+  # No replicas field: KEDA owns the count (overlays/*/scaling.yaml, 0 when
+  # idle). Setting one here would make Argo CD selfHeal undo every scale-up.
   revisionHistoryLimit: 3
   selector:
     matchLabels:
