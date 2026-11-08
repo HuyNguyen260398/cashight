@@ -27,6 +27,16 @@ describe('apiConfigFromEnv', () => {
     ).toEqual({ port: 9000, rateLimitBurst: 5, rateLimitPerSecond: 2, shutdownDelayMs: 0, requestTimeoutMs: 29_000, shutdownHardDeadlineMs: 30_000 });
   });
 
+  it('reads the pod-template revision from POD_TEMPLATE_HASH', () => {
+    expect(apiConfigFromEnv({ POD_TEMPLATE_HASH: '59f56586c' }).revision).toBe('59f56586c');
+  });
+
+  it('ignores a missing or malformed POD_TEMPLATE_HASH', () => {
+    expect(apiConfigFromEnv({}).revision).toBeUndefined();
+    expect(apiConfigFromEnv({ POD_TEMPLATE_HASH: '' }).revision).toBeUndefined();
+    expect(apiConfigFromEnv({ POD_TEMPLATE_HASH: '"><script>' }).revision).toBeUndefined();
+  });
+
   it('reads REQUEST_TIMEOUT_MS', () => {
     expect(apiConfigFromEnv({ REQUEST_TIMEOUT_MS: '1000' }).requestTimeoutMs).toBe(1000);
   });

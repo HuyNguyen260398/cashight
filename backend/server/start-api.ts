@@ -30,6 +30,9 @@ export function apiConfigFromEnv(env: Environment = process.env) {
     // Bound on how long in-flight requests may hold a shutting-down pod; above
     // the request deadline so a legitimate slow request still finishes.
     shutdownHardDeadlineMs: integerFromEnv(env, 'SHUTDOWN_HARD_DEADLINE_MS', 30_000),
+    // Set from the rollouts-pod-template-hash label (Downward API); anything
+    // that is not a plain hash is dropped rather than echoed on /health.
+    revision: /^[a-z0-9]{1,16}$/.test(env.POD_TEMPLATE_HASH ?? '') ? env.POD_TEMPLATE_HASH : undefined,
   };
 }
 
@@ -59,6 +62,7 @@ export async function startApiService(
     }),
     isReady: () => ready,
     requestTimeoutMs: config.requestTimeoutMs,
+    revision: config.revision,
   });
 
   const shutdown = createApiShutdown({

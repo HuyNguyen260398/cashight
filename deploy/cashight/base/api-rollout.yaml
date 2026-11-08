@@ -12,7 +12,9 @@ spec:
     # Replica-based canary, no traffic routing: the Ingress Service selects
     # every pod, so a step's weight is its share of pods. With 2 replicas,
     # setWeight 10 rounds up to 1 canary pod. Each step is gated by the smoke
-    # Job against the canary-only Service (no metrics AnalysisTemplate).
+    # Job against the canary Service (no metrics AnalysisTemplate). That
+    # Service points at the stable pods until the canary pods are available,
+    # so the Job checks the pod-template hash it is answered with.
     canary:
       canaryService: cashight-api-canary
       steps:
@@ -23,6 +25,11 @@ spec:
             args:
               - name: service
                 value: cashight-api-canary
+              # The smoke Job passes only when the canary Service answers
+              # with this hash, i.e. from the new pods.
+              - name: canary-hash
+                valueFrom:
+                  podTemplateHashValue: Latest
         - setWeight: 50
         - analysis:
             templates:
@@ -30,6 +37,11 @@ spec:
             args:
               - name: service
                 value: cashight-api-canary
+              # The smoke Job passes only when the canary Service answers
+              # with this hash, i.e. from the new pods.
+              - name: canary-hash
+                valueFrom:
+                  podTemplateHashValue: Latest
   template:
     metadata:
       labels:
@@ -67,6 +79,12 @@ spec:
           envFrom:
             - configMapRef:
                 name: cashight-env
+          env:
+            # Reported on /health for the canary smoke gate.
+            - name: POD_TEMPLATE_HASH
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['rollouts-pod-template-hash']
           readinessProbe:
             httpGet:
               path: /readyz

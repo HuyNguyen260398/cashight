@@ -76,6 +76,14 @@ describe('probes', () => {
     expect(await res.json()).toEqual({ status: 'ok' });
     expect(res.headers.get('access-control-allow-origin')).toBe('https://cashight.nghuy.link');
   });
+
+  // The canary smoke Job compares this with the canary's pod-template hash, so
+  // a passing analysis proves it reached the new pods (deploy/cashight).
+  it('reports the pod-template revision on /health when one is configured', async () => {
+    const res = await fetch(`${await start({ revision: '59f56586c' })}/health`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: 'ok', revision: '59f56586c' });
+  });
 });
 
 describe('CORS', () => {
