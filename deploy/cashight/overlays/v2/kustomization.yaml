@@ -17,4 +17,4 @@ resources:
 images:
   - name: cashight-backend
     newName: 010382427026.dkr.ecr.ap-southeast-1.amazonaws.com/cashight-backend
-    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    digest: sha256:c9326d3860a0b738433d72134215196fdede78de594daa11943823ac90dd933a
