@@ -115,7 +115,7 @@ assert_eq "ClusterRole verbs are read-only" \
   "$(q '[select(.kind == "ClusterRole") | .rules[].verbs[]] | unique | sort | join(",")')" "get,list,watch"
 assert_eq "ClusterRole resources" \
   "$(q '[select(.kind == "ClusterRole") | .rules[].resources[]] | unique | sort | join(",")')" \
-  "daemonsets,deployments,jobs,namespaces,nodes,nodes/stats,pods,replicasets,statefulsets"
+  "cronjobs,daemonsets,deployments,horizontalpodautoscalers,jobs,namespaces,nodes,nodes/stats,pods,replicasets,replicationcontrollers,resourcequotas,services,statefulsets"
 assert_eq "Lease Role in observability" \
   "$(q 'select(.kind == "Role" and .metadata.namespace == "observability") | .rules[] | (.apiGroups | join(",")) + ";" + (.resources | join(",")) + ";" + (.verbs | sort | join(","))')" \
   "coordination.k8s.io;leases;create,get,list,patch,update,watch"
