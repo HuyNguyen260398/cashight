@@ -168,14 +168,14 @@ dashboard reference only its keys.
 | Key | Prometheus name | Source |
 |---|---|---|
 | `metric.http_count`, `metric.http_bucket` | `http_server_request_duration_seconds_count`, `…_bucket` | observed |
-| `metric.http_responses` | `cashight_http_server_responses_total`, status class in `outcome` | derived like `worker_jobs`; confirm in Explore on the next drill |
+| `metric.http_responses` | `cashight_http_server_responses_total`, status class in `outcome` | observed on EKS, 2026-11-08 |
 | `metric.worker_jobs` | `cashight_worker_jobs_total` | observed |
 | `metric.worker_duration_bucket` | `cashight_worker_job_duration_seconds_bucket` | observed |
 | `metric.invoice_parse_failures` | `cashight_aws_invoice_parse_failure_total` | derived; the drill emits none |
 | `metric.collector_uptime` | `otelcol_process_uptime_total` | observed |
-| `metric.container_restarts`, `pod_cpu`, `pod_memory`, `node_memory`, `container_memory_limit` | `k8s_container_restarts`, `k8s_pod_cpu_usage`, `k8s_pod_memory_working_set_bytes`, `k8s_node_memory_working_set_bytes`, `k8s_container_memory_limit_bytes` | unverified until Plan 4 |
+| `metric.container_restarts`, `pod_cpu`, `pod_memory`, `node_memory`, `container_memory_limit` | `k8s_container_restarts`, `k8s_pod_cpu_usage`, `k8s_pod_memory_working_set_bytes`, `k8s_node_memory_working_set_bytes`, `k8s_container_memory_limit_bytes` | observed on EKS, 2026-11-08. `k8s_container_*` come from the `k8s_cluster` receiver, which reports nothing without its ClusterRole reads (`services`, `replicationcontrollers`, `resourcequotas`, `cronjobs`, `horizontalpodautoscalers`) |
 | `label.status`, `route`, `outcome`, `error_code`, `service` | `http_response_status_code`, `http_route`, `outcome`, `error_code`, `service_name` | observed, except `error_code` |
-| `label.namespace`, `label.pod` | `k8s_namespace_name`, `k8s_pod_name` | `k8s_namespace_name` observed on Loki streams; both unverified on metrics until Plan 4 |
+| `label.namespace`, `label.pod` | `k8s_namespace_name`, `k8s_pod_name` | observed on metrics and Loki streams on EKS, 2026-11-08 |
 
 Series count after the run: 126 of the free tier's 10,000.
 
@@ -246,7 +246,7 @@ the first seconds after a scale-from-zero start is seen.
 ### Pod crash-looping (warning, after 5 minutes)
 
 A pod in `cashight`, `observability` or `keda` restarted 3 or more times in 15
-minutes. Metric names are unverified until Plan 4.
+minutes.
 
 1. `kubectl -n <namespace> describe pod <pod>`: last state, exit code,
    `OOMKilled`.
@@ -267,6 +267,21 @@ transition, grouped by alertname.
 | Resolve, 2026-11-03 00:19–00:39 | `--minutes 20 --error-ratio 0 --failed-jobs 0` | 1196 ok | **Parse jobs failing** resolved 00:24:47, **API errors** 00:27:52 |
 | Low-volume guard, 2026-11-04 15:04–15:14 | `--minutes 10 --rps 0.03 --error-ratio 0.5 --failed-jobs 0` | 9 ok, 9 5xx | stayed inactive; 10-minute `increase` peaked at 15.7 requests, under the 20 minimum; no Slack message |
 
+Rules 1 and 5 fired and resolved on the first EKS test day, 2026-11-08 (UTC),
+both routed to `slack-cashight`:
+
+| Rule | Drill | Pending | Firing | Resolved |
+|---|---|---|---|---|
+| **API down** | `cashight-api` Rollout scaled to 0 at 04:30:43 | (critical, no pending) | 04:36:40 | 04:38:40, about 1 min after the API was back |
+| **Pod crash-looping** | a pod in `cashight` running `exit 1` under `restartPolicy: Always`, from 04:37:49 | 04:41:40 | 04:46:40 | 04:54:40, after the pod was deleted |
+
+To take the API down for a drill, annotate the Application first:
+`kubectl -n argocd annotate application cashight argocd.argoproj.io/skip-reconcile=true`.
+Then scale the Rollout. Do not turn `selfHeal` off instead: the
+`platform-workloads` app-of-apps re-syncs the Application and turns it back on,
+which scales the API up again within minutes. Remove the annotation
+(`…skip-reconcile-`) to restore the API.
+
 Run the low-volume step only after at least 10 minutes without traffic. Run
 straight after the resolve step, the window still holds its tail: on
 2026-11-03 at 00:48 it counted 69 requests, 6 of them 5xx, and the rule went
@@ -274,8 +289,10 @@ pending for a minute until that traffic aged out.
 
 ## 8. Going live (Plan 4)
 
-As soon as the cluster's collector exports to Grafana Cloud, set
-`collector_live = true` in `terraform.tfvars` and apply; that unpauses
-**Telemetry stopped**. Once `https://api.cashight-v2.nghuy.link/health`
-serves, set `api_live = true` and apply. That enables the synthetic check and
-unpauses **API down**.
+The cluster is a test environment that exists only during a test day, so
+`api_live` and `collector_live` stay `false` in `terraform.tfvars`.
+`scripts/platform/bring-up.sh` applies this root with `-var api_live=true
+-var collector_live=true` once smoke passes, and `teardown.sh` applies it with
+both `false` before anything is deleted ([platform runbook](platform.md)).
+`api_live` enables the synthetic check and unpauses **API down**;
+`collector_live` unpauses **Telemetry stopped**.

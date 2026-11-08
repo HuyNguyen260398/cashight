@@ -226,4 +226,50 @@
 
 ## Execution record
 
-_Filled in during Task 6._
+**Implementation (Tasks 1–5), 2026-11-08.** Inline execution, with a self-review in place of a fresh reviewer (the user asked for no subagents). Merged as PR #149. The self-review fixed two bugs before merge: worker `replicas: 0` fought Argo CD self-heal, undoing every KEDA scale-up; and `bring-up.sh` read `terraform/v2` outputs without initialising that root. Rulings taken during execution:
+
+- **IAM:**
+  - The two `*`-resource billing statements are merged under sid `BillingRead`.
+  - `s3:HeadObject` is dropped (HEAD is authorised by `s3:GetObject`).
+  - The workload trust policy is built in the root.
+- **Manifests:**
+  - NetworkPolicy egress also allows the Pod Identity agent (`169.254.170.23:80`).
+  - KEDA objects live in the overlay.
+  - Env comes from a plain, unhashed ConfigMap.
+  - Rollouts set only `canaryService` (later corrected, see #153).
+  - The Application carries the resources finalizer and targets the cluster by name.
+- **Tooling:**
+  - `pin-image.sh` uses `yq` and also writes `APP_VERSION`.
+  - The release workflow re-pins on the branch tip and skips the build when the tag exists.
+  - Test seams are environment variables.
+  - Teardown deletes the `platform-workloads` ApplicationSet before the Application.
+
+**Test day (Task 6), 2026-11-08** (local time UTC+7):
+
+| Step | Result |
+|---|---|
+| Repo variables, first release | `V2_*` set from `terraform/v2` outputs. Release run 42436114645 pinned an arm64 image (`sha256:c9326d38…`) and the SPA served 200 |
+| `bring-up.sh` 10:16–10:55 | Cluster 76 added, bootstrap 18, API record 2. `check-overlay` PASS, smoke **17/17**, Grafana alerts on. `public_access_cidrs` had to be updated to the current egress `/32` first |
+| App walkthrough (user) | Sign-in, TPBank + VIB statements and an AWS invoice: parser-worker 2 and invoice-parser-worker 1 jobs `succeeded` |
+| `verify-platform.sh` (workloads expected) | 39 PASS |
+| Plan 3 handover 1: metric names | All 7 confirmed after #151 |
+| Plan 3 handover 3: logs | `cashight`, `argo-rollouts`, `cert-manager`, `keda`, `kube-system`. Collector excluded. `trace_id`/`span_id` present |
+| Plan 3 handover 5: API down | Fired 04:36:40Z (6m17s after scale-to-0), resolved 04:38:40Z, routed to `slack-cashight` |
+| Plan 3 handover 4: crash-looping | Pending 04:41:40Z, firing 04:46:40Z, resolved 04:54:40Z |
+| Plan 3 handover 7: canary | Release of #152: `cashight-api` completed 4/4 steps. `cashight-aws-api` aborted on its second smoke analysis and stayed on the stable version. The gate aborts, but it did not test the canary pods (see #153) |
+| Teardown 12:40–12:53 | Grafana off, workloads and ALB gone in under 1 min, bootstrap 2 + platform 94 destroyed. No cluster, LB, NAT, VPC, instances or API record left. `terraform/v2`, ECR, the v2 SPA, v1 and the budget intact |
+
+**Bugs found on the test day, all merged into `cashight-v2`:**
+
+| PR | Problem | Fix |
+|---|---|---|
+| #150 | Rollouts stayed OutOfSync: the CRD defaults the container port `protocol`, which Argo CD's diff does not know | Declare `protocol: TCP`; the manifest check rejects ports without one |
+| #151 | No `k8s_cluster` metrics (`k8s_container_restarts`, container memory limit): the collector ClusterRole lacked `services`, `replicationcontrollers`, `resourcequotas`, `cronjobs`, `horizontalpodautoscalers` | Grant them read-only; `check-collector.sh` pins the list |
+| #152 | Workers failed S3's `s3:TestEvent` into the DLQ | `parseS3Notification()`; both workers acknowledge it |
+| #153 | The canary Service selects the stable pods until the canary is available, so a smoke pass proved nothing and a draining stable pod failed it | Pods report their pod-template hash on `/health`; the smoke Job needs 3 consecutive answers with the canary's hash |
+
+**Open:**
+- Verify the #153 canary gate on the next test day: each smoke log shows `canary <hash> healthy`.
+- `destroy-platform.sh` cannot run unattended (its destroys prompt). Teardown ran its guards, then applied the two destroys as reviewed saved plans.
+- Worker error logs are multi-line, not JSON.
+- Loki `service_name` holds the container name (`app`).

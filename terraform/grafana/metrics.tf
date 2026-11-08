@@ -1,6 +1,7 @@
 # Prometheus names of the OTLP metrics the alert rules and dashboard query.
 # Read from Explore after the local run of 2026-11-02 (docs/observability.md
-# section 6); the rules and dashboard reference only these keys.
+# section 6); the Kubernetes names and labels were confirmed on the first EKS
+# test day, 2026-11-08. The rules and dashboard reference only these keys.
 locals {
   metric = {
     http_count  = "http_server_request_duration_seconds_count"
@@ -15,15 +16,10 @@ locals {
     # emits none, so it was not observed.
     invoice_parse_failures = "cashight_aws_invoice_parse_failure_total"
     collector_uptime       = "otelcol_process_uptime_total"
-    # unverified until Plan 4 (handover item 1)
-    container_restarts = "k8s_container_restarts"
-    # unverified until Plan 4 (handover item 1)
-    pod_cpu = "k8s_pod_cpu_usage"
-    # unverified until Plan 4 (handover item 1)
-    pod_memory = "k8s_pod_memory_working_set_bytes"
-    # unverified until Plan 4 (handover item 1)
-    node_memory = "k8s_node_memory_working_set_bytes"
-    # unverified until Plan 4 (handover item 1)
+    container_restarts     = "k8s_container_restarts"
+    pod_cpu                = "k8s_pod_cpu_usage"
+    pod_memory             = "k8s_pod_memory_working_set_bytes"
+    node_memory            = "k8s_node_memory_working_set_bytes"
     container_memory_limit = "k8s_container_memory_limit_bytes"
   }
 
@@ -33,9 +29,7 @@ locals {
     outcome    = "outcome"
     error_code = "error_code"
     service    = "service_name"
-    # unverified until Plan 4 (handover item 1)
-    namespace = "k8s_namespace_name"
-    # unverified until Plan 4 (handover item 1)
-    pod = "k8s_pod_name"
+    namespace  = "k8s_namespace_name"
+    pod        = "k8s_pod_name"
   }
 }
