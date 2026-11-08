@@ -91,6 +91,14 @@ done < <(jq -r '.[0].resources.limits.memory // empty' <<<"$jobs")
 [ "$total" -le "$QUOTA_LIMITS_MI" ] ||
   fail "limits.memory at max scale + surge is ${total}Mi, quota is ${QUOTA_LIMITS_MI}Mi"
 
+# A CRD's schema defaults (unlike a Deployment's) are unknown to Argo CD's
+# diff: a port without protocol is defaulted to TCP by the API server and the
+# Rollout then stays OutOfSync forever. Declare it.
+while IFS= read -r problem; do
+  [ -n "$problem" ] && fail "$problem"
+done < <(jq -r '.[] | .workload as $w | .name as $c | (.ports // [])[] | select(.protocol == null)
+  | "\($w)/\($c): port \(.name // .containerPort) must declare protocol (CRD defaults cause permanent OutOfSync)"' <<<"$all")
+
 # KEDA owns the replica count of a ScaledObject's target. A replicas field in
 # the manifest makes Argo CD (selfHeal) reset every scale-up.
 while IFS= read -r name; do

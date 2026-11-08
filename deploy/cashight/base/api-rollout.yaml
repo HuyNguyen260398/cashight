@@ -61,6 +61,9 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+              # Explicit: Argo CD cannot see the Rollout CRD's default and
+              # would report the Rollout OutOfSync forever.
+              protocol: TCP
           envFrom:
             - configMapRef:
                 name: cashight-env
