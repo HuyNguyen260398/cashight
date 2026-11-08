@@ -92,3 +92,8 @@ output "workload_role_arns" {
   description = "Pod Identity roles of the four Cashight workloads, by workload."
   value       = { for k, r in aws_iam_role.workload : k => r.arn }
 }
+
+output "api_hostname" {
+  description = "Public hostname of the v2 API. Its record exists only while api_alb_ready is true."
+  value       = local.api_hostname
+}

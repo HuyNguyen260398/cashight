@@ -214,3 +214,49 @@ run "workload_roles" {
     error_message = "only parser-worker reads the PDF password"
   }
 }
+
+run "api_record_off_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(aws_route53_record.api) == 0 && length(data.aws_lb.cashight) == 0
+    error_message = "no ALB lookup or api record until api_alb_ready"
+  }
+}
+
+run "api_record_on" {
+  command = plan
+
+  variables {
+    api_alb_ready = true
+  }
+
+  override_data {
+    target = data.aws_lb.cashight[0]
+    values = {
+      dns_name = "k8s-cashight-0123456789-111111111.ap-southeast-1.elb.amazonaws.com"
+      zone_id  = "Z1LMS91P8CMLE5"
+    }
+  }
+
+  assert {
+    condition = (
+      toset(keys(aws_route53_record.api)) == toset(["A", "AAAA"]) &&
+      alltrue([for r in aws_route53_record.api : r.name == "api.cashight-v2.nghuy.link"])
+    )
+    error_message = "A and AAAA alias records for api.cashight-v2.nghuy.link"
+  }
+
+  assert {
+    condition = (
+      data.aws_lb.cashight[0].tags["elbv2.k8s.aws/cluster"] == "cashight-v2" &&
+      data.aws_lb.cashight[0].tags["ingress.k8s.aws/stack"] == "cashight"
+    )
+    error_message = "ALB looked up by the controller's cluster and ingress-group tags"
+  }
+
+  assert {
+    condition     = output.api_hostname == "api.cashight-v2.nghuy.link"
+    error_message = "api_hostname output"
+  }
+}

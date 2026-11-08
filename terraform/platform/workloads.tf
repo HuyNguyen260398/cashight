@@ -21,6 +21,8 @@ data "terraform_remote_state" "v2" {
 }
 
 locals {
+  api_hostname = "api.cashight-v2.nghuy.link"
+
   v2         = data.terraform_remote_state.v2.outputs
   account_id = data.aws_caller_identity.current.account_id
 
@@ -208,4 +210,38 @@ resource "aws_iam_role_policy" "keda_scaler" {
   name   = "cashight-v2-keda-${replace(each.key, "_", "-")}"
   role   = aws_iam_role.keda_scaler[each.key].id
   policy = data.aws_iam_policy_document.keda_scaler[each.key].json
+}
+
+# api.cashight-v2.nghuy.link -> the ALB the load balancer controller creates for
+# the `cashight` Ingress group. The ALB exists only after Argo CD has synced the
+# Ingress, so bring-up sets api_alb_ready on a later apply. The record is
+# destroyed with this root, so no stale name outlives the cluster.
+data "aws_lb" "cashight" {
+  count = var.api_alb_ready ? 1 : 0
+
+  tags = {
+    "elbv2.k8s.aws/cluster" = module.platform_cluster.cluster_name
+    "ingress.k8s.aws/stack" = "cashight"
+  }
+}
+
+data "aws_route53_zone" "nghuy_link" {
+  count = var.api_alb_ready ? 1 : 0
+
+  name         = "nghuy.link."
+  private_zone = false
+}
+
+resource "aws_route53_record" "api" {
+  for_each = var.api_alb_ready ? toset(["A", "AAAA"]) : toset([])
+
+  zone_id = data.aws_route53_zone.nghuy_link[0].zone_id
+  name    = local.api_hostname
+  type    = each.key
+
+  alias {
+    name                   = data.aws_lb.cashight[0].dns_name
+    zone_id                = data.aws_lb.cashight[0].zone_id
+    evaluate_target_health = true
+  }
 }
