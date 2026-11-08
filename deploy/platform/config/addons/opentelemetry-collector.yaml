@@ -51,17 +51,32 @@ spec:
                 create: true
                 name: otel-collector
 
+              # Read-only. kubeletstats and k8s_attributes need pods,
+              # namespaces, nodes and the workload kinds; the k8s_cluster
+              # receiver also lists services, replicationcontrollers,
+              # resourcequotas, cronjobs and HPAs, and without them it reports
+              # nothing (k8s_container_restarts, the container memory limit).
               clusterRole:
                 create: true
                 rules:
                   - apiGroups: [""]
-                    resources: ["pods", "namespaces", "nodes", "nodes/stats"]
+                    resources:
+                      - pods
+                      - namespaces
+                      - nodes
+                      - nodes/stats
+                      - services
+                      - replicationcontrollers
+                      - resourcequotas
                     verbs: ["get", "list", "watch"]
                   - apiGroups: ["apps"]
                     resources: ["replicasets", "deployments", "statefulsets", "daemonsets"]
                     verbs: ["get", "list", "watch"]
                   - apiGroups: ["batch"]
-                    resources: ["jobs"]
+                    resources: ["jobs", "cronjobs"]
+                    verbs: ["get", "list", "watch"]
+                  - apiGroups: ["autoscaling"]
+                    resources: ["horizontalpodautoscalers"]
                     verbs: ["get", "list", "watch"]
 
               # A DaemonSet gets no Service unless asked. internalTrafficPolicy
