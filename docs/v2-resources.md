@@ -58,6 +58,21 @@ It reads v1 only, overwrites the v2 copies, refuses to write into `cashight`, an
 | `api_certificate_arn` | The ALB Ingress for `api.cashight-v2.nghuy.link` |
 | `cognito_user_pool_id` | `COGNITO_USER_POOL_ID` (the shared v1 pool) |
 
+### Repository variables for the v2 Release workflow
+
+`.github/workflows/v2-release.yaml` reads these from **repository** variables. An environment cannot hold them: setting `environment:` on a job changes the OIDC subject, and `cashight-v2-github-ci` trusts only `ref:refs/heads/cashight-v2`.
+
+| Variable | Value |
+|---|---|
+| `V2_CI_ROLE_ARN` | `terraform -chdir=terraform/v2 output -raw github_ci_role_arn` |
+| `V2_ECR_REPOSITORY_URL` | `… output -raw ecr_repository_url` |
+| `V2_FRONTEND_BUCKET` | `… output -raw frontend_bucket_name` |
+| `V2_CLOUDFRONT_DISTRIBUTION_ID` | `… output -raw cloudfront_distribution_id` |
+
+The SPA build also reuses v1's `COGNITO_AUTHORITY`, `COGNITO_SPA_CLIENT_ID` and the two `NEXT_PUBLIC_ENABLE_*` flags.
+
+The account values in `deploy/cashight/overlays/v2` and `deploy/workloads/cashight.yaml` are copied from these outputs. If you re-create a resource here, update them; `scripts/platform/check-overlay.sh` (run by bring-up) fails until they match.
+
 ## 5. Deleting v2
 
 Nothing here is meant to be deleted between test days. To remove v2 entirely:

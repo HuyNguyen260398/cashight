@@ -29,7 +29,7 @@ Anything destroyed with the cluster must not share a root with anything that mus
 | `deploy/platform/bootstrap/` | the `platform-bootstrap` ApplicationSet Terraform creates | The three child ApplicationSets |
 | `deploy/platform/config/addons/` | `platform-addons` | AWS Load Balancer Controller, cert-manager, Argo Rollouts, KEDA, OpenTelemetry Collector |
 | `deploy/platform/charts/namespace-config/` + `config/namespaces/values.yaml` | `platform-namespaces` | The `cashight` namespace, quota, LimitRange, NetworkPolicies |
-| `deploy/workloads/` | `platform-workloads` | Workload Application manifests (empty until Plan 4c) |
+| `deploy/workloads/` | `platform-workloads` | Workload Application manifests: `cashight.yaml` syncs `deploy/cashight/overlays/v2` |
 
 ## 2. One-time setup
 
@@ -79,6 +79,30 @@ If it stays `PENDING`, re-open it in the console and finish the GitHub App insta
 The collector's init container reads three parameters under `/cashight/grafana-cloud/` (`otlp-token` as SecureString, `otlp-endpoint` and `instance-id` as String). They are created by hand so the token never enters Terraform state; see [observability](observability.md). Without them the collector Pod stays in `Init:CrashLoopBackOff` and its init container log names the missing parameter.
 
 ## 3. Bring-up
+
+### Test day: one command
+
+Prerequisites: `terraform/v2` applied ([v2 resources](v2-resources.md)), `terraform/platform/terraform.tfvars` holding your current egress `/32`, the `cashight-v2` branch pushed, and the **v2 Release** workflow having pinned a real image digest in `deploy/cashight/overlays/v2/kustomization.yaml` (bring-up refuses the all-zero placeholder).
+
+```bash
+export AWS_REGION=ap-southeast-1
+eval "$(aws configure export-credentials --format env)"
+bash scripts/platform/bring-up.sh
+```
+
+It runs, in order, stopping at the first failure:
+
+1. Copies the AUTHZ records into the v2 table (`scripts/v2/seed-authz.ts`, dry run first).
+2. Creates the cluster with the targeted apply, then waits for the Argo CD capability (up to 20 min).
+3. Applies the bootstrap, then waits for the `cashight` Application to be `Synced` / `Healthy` (up to 15 min) and for its Ingress to get an ALB.
+4. Applies again with `api_alb_ready=true`, which creates `api.cashight-v2.nghuy.link`.
+5. Runs `scripts/platform/check-overlay.sh`: the bucket names, queue URLs, certificate, scaler roles, image repository and GitOps URL committed in `deploy/` must equal the Terraform outputs.
+6. Waits for DNS and `/health`, mints a smoke token (client credentials on the smoke client) and runs `scripts/smoke-serverless.mjs` against both v2 hostnames.
+7. Applies `terraform/grafana` with `api_live=true collector_live=true`, so the uptime and telemetry alerts are live only once v2 serves.
+
+Each step is idempotent: after fixing a failure, run it again. Every Terraform step plans to a file and applies that plan without a prompt. Run the steps below by hand when you want to review each plan.
+
+### Step by step
 
 Argo CD reads GitHub, not your working tree: push the `cashight-v2` changes you want to test first.
 
@@ -147,6 +171,21 @@ kubectl -n kube-system get deployment coredns
 
 ## 5. Teardown
 
+### Test day: one command
+
+```bash
+bash scripts/platform/teardown.sh "destroy cashight-v2"
+```
+
+1. Applies `terraform/grafana` with `api_live=false collector_live=false` first, so the planned downtime does not page.
+2. Deletes the `platform-workloads` ApplicationSet, so nothing regenerates the Cashight Application. Then it deletes the `cashight` Application. Its `resources-finalizer.argocd.argoproj.io` prunes the workloads and the Ingress, and the load balancer controller deletes the ALB.
+3. Waits up to 10 min until no `k8s-cashight-*` load balancer remains, and stops, naming it, if one survives.
+4. Runs `destroy-platform.sh "destroy platform"` (below), which also removes the `api.cashight-v2.nghuy.link` record. You confirm each of its plans.
+
+`terraform/v2`, `platform-base` and Grafana survive. Then run the "Afterwards" checks below.
+
+### Step by step
+
 ```bash
 ./scripts/platform/destroy-platform.sh "destroy platform"
 ```
@@ -183,7 +222,7 @@ terraform -chdir=terraform/platform state list   # empty
 
 Two things are expected to remain: KMS keys in `PendingDeletion` (30-day window; each teardown adds a set), and stale entries in the Resource Groups Tagging API for recently deleted resources. Confirm against the service's own API before treating anything as a leftover.
 
-The Grafana "telemetry stopped" alert fires while the cluster is down; Plan 4c's bring-up and teardown scripts pause and resume it.
+The Grafana uptime and "telemetry stopped" alerts would fire while the cluster is down, so `teardown.sh` switches them off first and `bring-up.sh` switches them on last. If you tear down by hand, apply `terraform/grafana` with `-var api_live=false -var collector_live=false` first.
 
 ## 6. Known defects and recovery
 
