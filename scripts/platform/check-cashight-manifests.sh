@@ -99,6 +99,19 @@ while IFS= read -r problem; do
 done < <(jq -r '.[] | .workload as $w | .name as $c | (.ports // [])[] | select(.protocol == null)
   | "\($w)/\($c): port \(.name // .containerPort) must declare protocol (CRD defaults cause permanent OutOfSync)"' <<<"$all")
 
+# The smoke gate must prove it reached the canary pods: each Rollout pod
+# reports its pod-template hash on /health (POD_TEMPLATE_HASH from its label),
+# and every analysis step hands the canary's hash to the smoke template.
+while IFS= read -r problem; do
+  [ -n "$problem" ] && fail "$problem"
+done < <(jq -r '.[] | select(.kind == "Rollout") | .metadata.name as $r |
+  ( .spec.template.spec.containers[] | select(([.env[]? | select(.name == "POD_TEMPLATE_HASH" and .valueFrom.fieldRef.fieldPath == "metadata.labels['"'"'rollouts-pod-template-hash'"'"']")] | length) == 0)
+    | "\($r)/\(.name): POD_TEMPLATE_HASH must come from the rollouts-pod-template-hash label" ),
+  ( .spec.strategy.canary.steps[] | select(.analysis) | select(([.analysis.args[]? | select(.name == "canary-hash" and .valueFrom.podTemplateHashValue == "Latest")] | length) == 0)
+    | "\($r): an analysis step does not pass canary-hash from podTemplateHashValue Latest" )' <<<"$docs")
+jq -e 'any(.[]; .kind == "AnalysisTemplate" and .metadata.name == "smoke" and ([.spec.args[].name] | index("canary-hash")))' \
+  <<<"$docs" >/dev/null || fail "AnalysisTemplate smoke does not declare the canary-hash argument"
+
 # KEDA owns the replica count of a ScaledObject's target. A replicas field in
 # the manifest makes Argo CD (selfHeal) reset every scale-up.
 while IFS= read -r name; do

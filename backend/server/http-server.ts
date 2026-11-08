@@ -38,6 +38,11 @@ export interface ApiServerOptions {
   maxBodyBytes?: number;
   /** Per-request deadline; the request is answered 504 when it passes. */
   requestTimeoutMs?: number;
+  /**
+   * This pod's Argo Rollouts pod-template hash, reported on /health so the
+   * canary smoke Job can prove it reached the new pods.
+   */
+  revision?: string;
 }
 
 // Methods, headers and max-age mirror x-amazon-apigateway-cors in
@@ -202,7 +207,7 @@ export function createApiServer(options: ApiServerOptions): http.Server {
         'content-type': 'application/json',
         'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
       });
-      response.end('{"status":"ok"}');
+      response.end(JSON.stringify(options.revision ? { status: 'ok', revision: options.revision } : { status: 'ok' }));
       return { status: 200, route: 'health' };
     }
 

@@ -22,7 +22,7 @@ An ingress must send `/aws/*` to `cashight-aws-api` and everything else to
 |---|---|
 | `GET /healthz` | Liveness. Always 200 while the process runs. |
 | `GET /readyz` | Readiness. 503 from SIGTERM until exit. |
-| `GET /health` | Public health check, same body the API Gateway mock returned. |
+| `GET /health` | Public health check, same body the API Gateway mock returned (`{"status":"ok"}`), plus `"revision"` when `POD_TEMPLATE_HASH` is set. The canary smoke gate (`deploy/cashight/base/smoke-analysis.yaml`) compares it with the canary's pod-template hash. |
 
 Workers expose no port. A worker that cannot make progress exits and is restarted.
 
@@ -48,6 +48,7 @@ Workers expose no port. A worker that cannot make progress exits and is restarte
 | `RATE_LIMIT_BURST`, `RATE_LIMIT_PER_SECOND` | no | Defaults `50` and `100`, per pod |
 | `SHUTDOWN_DELAY_MS` | no | Default `5000`. Drain time after readiness fails. |
 | `SHUTDOWN_HARD_DEADLINE_MS` | no | Default `30000`, above `REQUEST_TIMEOUT_MS` so a request still within its deadline finishes. After the drain, how long in-flight requests may hold the pod; then every connection is closed and the process exits 1. Idle keep-alive connections are closed as soon as their request finishes. |
+| `POD_TEMPLATE_HASH` | no | Set by the Rollout from the `rollouts-pod-template-hash` label (Downward API) and reported on `/health`. Anything other than 1–16 lowercase letters or digits is ignored. |
 | `REQUEST_TIMEOUT_MS` | no | Default `29000` (API Gateway's integration limit). A request still running at the deadline answers `504 GATEWAY_TIMEOUT`; the handler's late result is dropped. |
 
 | Workload | Also requires |

@@ -7,6 +7,7 @@ metadata:
 spec:
   args:
     - name: service
+    - name: canary-hash
   metrics:
     - name: smoke
       provider:
@@ -35,14 +36,23 @@ spec:
                     # curlimages/curl:8.17.0 (multi-arch index)
                     image: curlimages/curl@sha256:935d9100e9ba842cdb060de42472c7ca90cfe9a7c96e4dacb55e79e560b3ff40
                     command: ["sh", "-c"]
+                    # Passes after 3 consecutive /health answers from the
+                    # canary hash. The canary Service selects the stable pods
+                    # until the canary pods are available, and a stable pod
+                    # being scaled down answers 503 while it drains, so a
+                    # single request proves nothing. Fails after 90 s.
                     args:
                       - >-
-                        set -e;
-                        for path in readyz health; do
-                        curl --fail --silent --show-error --max-time 5 --output /dev/null
-                        "http://{{args.service}}:8080/$path";
-                        echo "$path ok";
-                        done
+                        want='"revision":"{{args.canary-hash}}"';
+                        streak=0;
+                        for attempt in $(seq 1 30); do
+                        body=$(curl --fail --silent --max-time 5 "http://{{args.service}}:8080/health" || true);
+                        case "$body" in *"$want"*) streak=$((streak + 1)) ;; *) streak=0 ;; esac;
+                        if [ "$streak" -ge 3 ]; then echo "canary {{args.canary-hash}} healthy"; exit 0; fi;
+                        sleep 3;
+                        done;
+                        echo "canary {{args.canary-hash}} not reached: last /health answer '$body'";
+                        exit 1
                     resources:
                       requests:
                         cpu: 50m
