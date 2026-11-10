@@ -228,3 +228,135 @@ run "fargate_logging" {
     error_message = "log group name"
   }
 }
+
+run "workers" {
+  command = plan
+
+  # Alias ARNs are otherwise unknown until apply.
+  override_resource {
+    target          = aws_lambda_alias.parser_worker_live
+    override_during = plan
+    values          = { arn = "arn:aws:lambda:ap-southeast-1:111122223333:function:cashight-v2-parser-worker:live" }
+  }
+
+  override_resource {
+    target          = aws_lambda_alias.invoice_parser_worker_live
+    override_during = plan
+    values          = { arn = "arn:aws:lambda:ap-southeast-1:111122223333:function:cashight-v2-invoice-parser-worker:live" }
+  }
+
+  assert {
+    condition = alltrue([
+      for f in [aws_lambda_function.parser_worker, aws_lambda_function.invoice_parser_worker] :
+      f.architectures == tolist(["arm64"]) && f.runtime == "nodejs22.x" && f.ephemeral_storage[0].size == 1024
+    ])
+    error_message = "arm64, nodejs22.x, 1024 MB ephemeral storage"
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.parser_worker.function_name == "cashight-v2-parser-worker" &&
+      aws_lambda_function.invoice_parser_worker.function_name == "cashight-v2-invoice-parser-worker"
+    )
+    error_message = "function names"
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.parser_worker.memory_size == 1536 &&
+      aws_lambda_function.parser_worker.timeout == 120 &&
+      aws_lambda_function.parser_worker.reserved_concurrent_executions == 2
+    )
+    error_message = "parser sizing"
+  }
+
+  assert {
+    condition = (
+      aws_lambda_function.invoice_parser_worker.memory_size == 2048 &&
+      aws_lambda_function.invoice_parser_worker.timeout == 300 &&
+      aws_lambda_function.invoice_parser_worker.reserved_concurrent_executions == 1
+    )
+    error_message = "invoice parser sizing"
+  }
+
+  assert {
+    condition = alltrue([
+      for m in [aws_lambda_event_source_mapping.parser_worker, aws_lambda_event_source_mapping.invoice_parser_worker] :
+      m.batch_size == 1 && m.function_response_types == toset(["ReportBatchItemFailures"])
+    ])
+    error_message = "batch size 1 with partial batch failures"
+  }
+
+  assert {
+    condition = (
+      aws_lambda_event_source_mapping.parser_worker.function_name == aws_lambda_alias.parser_worker_live.arn &&
+      aws_lambda_event_source_mapping.invoice_parser_worker.function_name == aws_lambda_alias.invoice_parser_worker_live.arn &&
+      aws_lambda_alias.parser_worker_live.name == "live" &&
+      aws_lambda_alias.invoice_parser_worker_live.name == "live"
+    )
+    error_message = "event source mappings target the live aliases"
+  }
+
+  assert {
+    condition = (
+      aws_lambda_event_source_mapping.parser_worker.event_source_arn == "arn:aws:sqs:ap-southeast-1:111122223333:cashight-v2-parse" &&
+      aws_lambda_event_source_mapping.invoice_parser_worker.event_source_arn == "arn:aws:sqs:ap-southeast-1:111122223333:cashight-v2-invoice-parse"
+    )
+    error_message = "queues"
+  }
+
+  assert {
+    condition     = aws_lambda_function.parser_worker.environment[0].variables["PDF_PASSWORD_PARAM"] == "/cashight/prod/pdf-password"
+    error_message = "the parser reads the PDF password"
+  }
+
+  assert {
+    condition     = !contains(keys(aws_lambda_function.invoice_parser_worker.environment[0].variables), "PDF_PASSWORD_PARAM")
+    error_message = "only the parser reads the PDF password"
+  }
+
+  assert {
+    condition = alltrue([
+      for f in [aws_lambda_function.parser_worker, aws_lambda_function.invoice_parser_worker] :
+      !contains(keys(f.environment[0].variables), "ENABLE_LEGACY_WORKSPACE_FALLBACK") &&
+      !contains(keys(f.environment[0].variables), "GEMINI_PARAM") &&
+      f.environment[0].variables["TABLE_NAME"] == "cashight-v2" &&
+      f.environment[0].variables["STORAGE_REGION"] == "ap-southeast-1"
+    ])
+    error_message = "no legacy fallback or Gemini; v2 table"
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_log_group.parser_worker.retention_in_days == 7 &&
+      aws_cloudwatch_log_group.invoice_parser_worker.retention_in_days == 7 &&
+      aws_cloudwatch_log_group.parser_worker.name == "/aws/lambda/cashight-v2-parser-worker" &&
+      aws_cloudwatch_log_group.invoice_parser_worker.name == "/aws/lambda/cashight-v2-invoice-parser-worker"
+    )
+    error_message = "7-day log groups"
+  }
+
+  assert {
+    condition = (
+      aws_iam_role.parser_worker.name == "cashight-v2-min-parser-worker" &&
+      aws_iam_role.invoice_parser_worker.name == "cashight-v2-min-invoice-parser-worker"
+    )
+    error_message = "role names"
+  }
+
+  # The sids of terraform/platform/workloads.tf's parser-worker and
+  # invoice-parser-worker, plus Logs.
+  assert {
+    condition = toset([for s in local.worker_statements.parser_worker : s.sid]) == toset([
+      "S3ReadDeleteUploads", "S3ReadWriteStatements", "DynamoDBAccess", "GetPdfPassword", "SQSConsume", "Logs",
+    ])
+    error_message = "parser worker grants"
+  }
+
+  assert {
+    condition = toset([for s in local.worker_statements.invoice_parser_worker : s.sid]) == toset([
+      "S3ReadDeleteInvoiceUploads", "S3ReadWriteInvoices", "S3ListStatementsBucket", "DynamoDBInvoiceAccess", "SQSConsumeInvoiceQueue", "Logs",
+    ])
+    error_message = "invoice parser worker grants"
+  }
+}

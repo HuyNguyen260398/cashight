@@ -17,3 +17,13 @@ output "log_group_name" {
   description = "CloudWatch log group of the cashight namespace's container logs."
   value       = aws_cloudwatch_log_group.app.name
 }
+
+output "parser_worker_function_name" {
+  description = "Statement parse worker Lambda; CI deploys its code and moves its live alias."
+  value       = aws_lambda_function.parser_worker.function_name
+}
+
+output "invoice_parser_worker_function_name" {
+  description = "AWS invoice parse worker Lambda; CI deploys its code and moves its live alias."
+  value       = aws_lambda_function.invoice_parser_worker.function_name
+}
