@@ -1,0 +1,279 @@
+name: v2 minimal Release
+
+# Releases v2 minimal (docs/v2-minimal.md) from the cashight-v2 branch. There
+# is no Argo CD: this workflow pushes the release and proves it worked.
+#   image  - builds the arm64 backend image and resolves its digest.
+#   deploy - deploys both worker Lambdas, applies the overlay pinned to the
+#            digest, then gates on rollout status, the /health revision and
+#            the smoke suite. On any failure it rolls the Deployment and the
+#            Lambda aliases back and fails.
+#   spa    - builds the SPA with AI summaries off and deploys it, only after
+#            the API checks pass.
+#
+# Runs only when the repository variable V2_TARGET is `minimal`; otherwise
+# v2-release.yaml releases the full platform. Exactly one of the two deploys.
+#
+# The role (terraform/v2 output github_ci_role_arn) trusts exactly
+# repo:HuyNguyen260398/cashight:ref:refs/heads/cashight-v2. Setting
+# `environment:` on a job changes the OIDC subject and breaks that trust, so no
+# job here uses one; inputs come from repository variables.
+on:
+  push:
+    branches: [cashight-v2]
+    paths:
+      - 'backend/**'
+      - 'packages/**'
+      - 'frontend/**'
+      - 'app/**'
+      - 'components/**'
+      - 'lib/**'
+      - 'public/**'
+      - 'Dockerfile'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'scripts/build-servers.mjs'
+      - 'scripts/build-lambdas.mjs'
+      - 'scripts/deploy-frontend.mjs'
+      - 'scripts/smoke-serverless.mjs'
+      - 'scripts/platform/pin-image.sh'
+      - 'scripts/platform/mint-smoke-token.sh'
+      - 'scripts/v2-minimal/**'
+      - 'deploy/cashight/overlays/v2-minimal/**'
+      - '.github/workflows/v2-minimal-release.yaml'
+  workflow_dispatch:
+
+# One release at a time; a rollback must not race the next deploy.
+concurrency:
+  group: v2-minimal-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ap-southeast-1
+  API_URL: https://api.cashight-v2.nghuy.link
+  APP_URL: https://cashight-v2.nghuy.link
+  OVERLAY: deploy/cashight/overlays/v2-minimal
+
+jobs:
+  image:
+    name: Backend image (arm64)
+    if: vars.V2_TARGET == 'minimal'
+    # Fargate runs the arm64 image; build natively instead of under QEMU.
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      REPOSITORY: ${{ vars.V2_ECR_REPOSITORY_URL }}
+      SHA: ${{ github.sha }}
+    outputs:
+      digest: ${{ steps.digest.outputs.digest }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.V2_CI_ROLE_ARN }}
+          aws-region: ap-southeast-1
+
+      - name: Log in to ECR
+        run: aws ecr get-login-password | docker login --username AWS --password-stdin "${REPOSITORY%%/*}"
+
+      # Tags are immutable, so a re-run for the same commit reuses the image.
+      - name: Build and push
+        run: |
+          set -euo pipefail
+          if aws ecr describe-images --repository-name "${REPOSITORY#*/}" \
+            --image-ids imageTag="${SHA}" >/dev/null 2>&1; then
+            echo "cashight-backend:${SHA} already exists; reusing it"
+          else
+            docker build --platform linux/arm64 -t "${REPOSITORY}:${SHA}" .
+            docker push "${REPOSITORY}:${SHA}"
+          fi
+
+      # No pin commit: the digest is applied in the runner and recorded in the
+      # job summary, which is enough to trace a release.
+      - name: Resolve digest
+        id: digest
+        run: |
+          set -euo pipefail
+          digest=$(aws ecr describe-images --repository-name "${REPOSITORY#*/}" \
+            --image-ids imageTag="${SHA}" --query 'imageDetails[0].imageDigest' --output text)
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+          echo "cashight-backend@${digest} (commit ${SHA})" >> "${GITHUB_STEP_SUMMARY}"
+
+  deploy:
+    name: Deploy and verify (cashight-v2-min)
+    if: vars.V2_TARGET == 'minimal'
+    needs: image
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      REPOSITORY: ${{ vars.V2_ECR_REPOSITORY_URL }}
+      DIGEST: ${{ needs.image.outputs.digest }}
+      SHA: ${{ github.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4.0.1
+        with:
+          version: v1.35.0
+
+      # pin-image.sh edits the overlay with yq; pinned, not the runner's.
+      - name: Install yq
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error \
+            https://github.com/mikefarah/yq/releases/download/v4.54.1/yq_linux_arm64 \
+            --output "${RUNNER_TEMP}/yq"
+          sudo install "${RUNNER_TEMP}/yq" /usr/local/bin/yq
+
+      - name: Build the worker Lambdas
+        run: pnpm build:lambdas
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.V2_CI_ROLE_ARN }}
+          aws-region: ap-southeast-1
+
+      - name: Connect to the cluster
+        run: aws eks update-kubeconfig --name cashight-v2-min --region "${AWS_REGION}"
+
+      # Before anything changes: the Deployment revision and both live alias
+      # versions, so rollback.sh restores exactly the pre-release state.
+      - name: Record the rollback state
+        run: |
+          set -euo pipefail
+          : > "${RUNNER_TEMP}/rollback-state"
+          bash scripts/v2-minimal/record-revision.sh "${RUNNER_TEMP}/rollback-state"
+
+      - name: Deploy the worker Lambdas
+        run: bash scripts/v2-minimal/deploy-workers.sh dist/lambdas "${RUNNER_TEMP}/rollback-state"
+
+      # The app-version annotation changes on every commit, so even a
+      # ConfigMap-only release makes a new ReplicaSet and a pod with fresh env.
+      - name: Pin the image and the app version
+        run: |
+          set -euo pipefail
+          bash scripts/platform/pin-image.sh "${OVERLAY}" "${REPOSITORY}" "${DIGEST}" "${SHA}"
+          yq -i '.spec.template.metadata.annotations."cashight.nghuy.link/app-version" = strenv(SHA)' \
+            "${OVERLAY}/deployment.yaml"
+
+      - name: Apply the overlay
+        run: kubectl apply -k "${OVERLAY}"
+
+      - name: Wait for the rollout
+        run: kubectl rollout status deployment/cashight-api -n cashight --timeout=5m
+
+      # The newest ReplicaSet's pod-template hash; /health must report it,
+      # which proves the ALB routes to the new pod and not the draining one.
+      - name: Wait for /health to report the new revision
+        run: |
+          set -euo pipefail
+          hash=$(kubectl get rs -n cashight -l app.kubernetes.io/name=cashight-api -o json |
+            jq -r '.items
+              | sort_by(.metadata.annotations["deployment.kubernetes.io/revision"] | tonumber)
+              | last | .metadata.labels["pod-template-hash"]')
+          echo "pod-template-hash ${hash}" >> "${GITHUB_STEP_SUMMARY}"
+          bash scripts/v2-minimal/wait-revision.sh "${API_URL}" "${hash}"
+
+      - name: Mint smoke access token
+        id: token
+        env:
+          COGNITO_USER_POOL_ID: ${{ vars.COGNITO_USER_POOL_ID }}
+          COGNITO_SMOKE_CLIENT_ID: ${{ vars.COGNITO_SMOKE_CLIENT_ID }}
+          COGNITO_HOSTED_UI_DOMAIN: ${{ vars.COGNITO_HOSTED_UI_DOMAIN }}
+        run: |
+          set -euo pipefail
+          token=$(bash scripts/platform/mint-smoke-token.sh)
+          echo "::add-mask::${token}"
+          echo "token=${token}" >> "${GITHUB_OUTPUT}"
+
+      - name: Smoke tests
+        run: node scripts/smoke-serverless.mjs
+        env:
+          SMOKE_NATIVE_ACCESS_TOKEN: ${{ steps.token.outputs.token }}
+          SMOKE_REQUIRE_NATIVE_AUTH: 'true'
+          SMOKE_EXPECT_AI_SUMMARY_DISABLED: 'true'
+
+      # Any failure above: restore the recorded Deployment revision and alias
+      # versions, then fail the job (rollback.sh always exits 1).
+      - name: Roll back
+        if: failure()
+        run: bash scripts/v2-minimal/rollback.sh "${RUNNER_TEMP}/rollback-state"
+
+  spa:
+    name: Frontend (cashight-v2.nghuy.link)
+    if: vars.V2_TARGET == 'minimal'
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Same Cognito pool and SPA client as v1; only the origins differ. AI
+      # summaries are off in v2 minimal (the API answers 404 for them).
+      - name: Static export (v2 minimal)
+        env:
+          NEXT_PUBLIC_API_BASE_URL: https://api.cashight-v2.nghuy.link
+          NEXT_PUBLIC_COGNITO_AUTHORITY: ${{ vars.COGNITO_AUTHORITY }}
+          NEXT_PUBLIC_COGNITO_CLIENT_ID: ${{ vars.COGNITO_SPA_CLIENT_ID }}
+          NEXT_PUBLIC_APP_ORIGIN: https://cashight-v2.nghuy.link
+          NEXT_PUBLIC_ENABLE_AWS_COST_EXPLORER: ${{ vars.NEXT_PUBLIC_ENABLE_AWS_COST_EXPLORER || 'false' }}
+          NEXT_PUBLIC_ENABLE_AWS_BILLING_INVOICE: ${{ vars.NEXT_PUBLIC_ENABLE_AWS_BILLING_INVOICE || 'false' }}
+          NEXT_PUBLIC_ENABLE_AI_SUMMARY: 'false'
+        run: NODE_OPTIONS=--disable-warning=DEP0205 pnpm build
+
+      - name: Verify static export
+        run: node scripts/verify-static-export.mjs
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.V2_CI_ROLE_ARN }}
+          aws-region: ap-southeast-1
+
+      - name: Deploy to S3 + CloudFront
+        run: node scripts/deploy-frontend.mjs
+        env:
+          FRONTEND_BUCKET: ${{ vars.V2_FRONTEND_BUCKET }}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.V2_CLOUDFRONT_DISTRIBUTION_ID }}

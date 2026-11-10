@@ -7,6 +7,9 @@ name: v2 Release
 #   spa   - builds the static frontend for cashight-v2.nghuy.link and deploys
 #           it to the v2 bucket behind its own CloudFront distribution.
 #
+# Runs unless the repository variable V2_TARGET is `minimal`, in which case
+# .github/workflows/v2-minimal-release.yaml releases instead (docs/v2-minimal.md).
+#
 # The role (terraform/v2 output github_ci_role_arn) trusts exactly
 # repo:HuyNguyen260398/cashight:ref:refs/heads/cashight-v2. Setting
 # `environment:` on a job changes the OIDC subject and breaks that trust, so no
@@ -44,6 +47,8 @@ env:
 jobs:
   image:
     name: Backend image (arm64)
+    # V2_TARGET=minimal hands releases to v2-minimal-release.yaml.
+    if: vars.V2_TARGET != 'minimal'
     # The test nodes are t4g (Graviton); build natively instead of under QEMU.
     runs-on: ubuntu-24.04-arm
     permissions:
@@ -115,6 +120,8 @@ jobs:
 
   spa:
     name: Frontend (cashight-v2.nghuy.link)
+    # V2_TARGET=minimal: v2-minimal-release.yaml deploys the SPA (summaries off).
+    if: vars.V2_TARGET != 'minimal'
     runs-on: ubuntu-latest
     permissions:
       id-token: write

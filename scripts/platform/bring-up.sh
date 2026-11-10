@@ -118,24 +118,8 @@ wait_for 300 "$API_HOST to resolve" dns_resolves
 wait_for 300 "https://$API_HOST/health to answer 200" health_ok
 
 log "Smoke tests"
-repo_var() {
-  local value=${!1:-}
-  [ -n "$value" ] || value=$(gh variable get "$1")
-  printf '%s' "$value"
-}
-pool_id=$(repo_var COGNITO_USER_POOL_ID)
-client_id=$(repo_var COGNITO_SMOKE_CLIENT_ID)
-hosted_ui=$(repo_var COGNITO_HOSTED_UI_DOMAIN)
-# Client credentials on the smoke client, as in application-deploy.yaml: the
-# API requires the cashight/* scopes. Neither the secret nor the token is printed.
-secret=$(aws cognito-idp describe-user-pool-client --user-pool-id "$pool_id" --client-id "$client_id" \
-  --query 'UserPoolClient.ClientSecret' --output text)
-response=$(curl -sS -X POST "$hosted_ui/oauth2/token" \
-  -H 'Content-Type: application/x-www-form-urlencoded' \
-  -u "$client_id:$secret" \
-  -d 'grant_type=client_credentials&scope=cashight/read cashight/write')
-token=$(jq -r '.access_token // empty' <<<"$response")
-[ -n "$token" ] || die "could not mint a smoke token: $(jq -r '.error // "unknown_error"' <<<"$response")"
+# Neither the client secret nor the token is printed.
+token=$(bash scripts/platform/mint-smoke-token.sh) || die "could not mint a smoke token"
 APP_URL=$APP_URL API_URL="https://$API_HOST" SMOKE_NATIVE_ACCESS_TOKEN=$token SMOKE_REQUIRE_NATIVE_AUTH=true \
   node scripts/smoke-serverless.mjs
 

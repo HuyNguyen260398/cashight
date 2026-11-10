@@ -14,6 +14,7 @@ on:
       - 'terraform/modules/platform_*/**'
       - 'deploy/**'
       - 'scripts/platform/**'
+      - 'scripts/v2-minimal/**'
       - '.yamllint.yml'
       - '.github/workflows/platform-ci.yaml'
 
@@ -217,4 +218,4 @@ jobs:
           sudo install /tmp/shellcheck-v0.11.0/shellcheck /usr/local/bin/shellcheck
 
       - name: shellcheck
-        run: shellcheck scripts/platform/*.sh
+        run: shellcheck scripts/platform/*.sh scripts/v2-minimal/*.sh
