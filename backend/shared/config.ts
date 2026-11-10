@@ -14,3 +14,12 @@ export function requiredEnvironmentValue(
 export function backendRegion(environment: Environment = process.env): string {
   return environment.STORAGE_REGION ?? environment.AWS_REGION ?? DEFAULT_REGION;
 }
+
+/**
+ * AI summaries are on unless AI_SUMMARY_ENABLED is exactly "false", so v1 and
+ * the full v2 platform keep them without setting anything. v2 minimal turns
+ * them off (docs/v2-minimal.md).
+ */
+export function aiSummaryEnabled(environment: Environment = process.env): boolean {
+  return environment.AI_SUMMARY_ENABLED !== 'false';
+}

@@ -5,10 +5,10 @@ import { describe, expect, it } from 'vitest';
 import { buildServers } from '../build-servers.mjs';
 
 describe('buildServers', () => {
-  it('bundles the four entrypoints and ships the pdf worker with both workers', async () => {
+  it('bundles the five entrypoints and ships the pdf worker with both workers', async () => {
     const { serverNames, outputRoot } = await buildServers();
 
-    expect(serverNames).toEqual(['api', 'aws-api', 'invoice-parser-worker', 'parser-worker']);
+    expect(serverNames).toEqual(['api', 'api-all', 'aws-api', 'invoice-parser-worker', 'parser-worker']);
     for (const name of serverNames) {
       const bundle = path.join(outputRoot, name, 'index.js');
       expect(existsSync(bundle), bundle).toBe(true);
@@ -19,7 +19,7 @@ describe('buildServers', () => {
     }
     // The in-image PDF smoke test sits next to the parser's pdf.worker.mjs.
     expect(existsSync(path.join(outputRoot, 'parser-worker', 'pdf-smoke.js'))).toBe(true);
-    for (const name of ['api', 'aws-api']) {
+    for (const name of ['api', 'api-all', 'aws-api']) {
       expect(existsSync(path.join(outputRoot, name, 'pdf.worker.mjs'))).toBe(false);
     }
   }, 120_000);
