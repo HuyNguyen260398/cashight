@@ -177,6 +177,22 @@ describe('AWS invoice month state and dashboard composition', () => {
     ).toEqual(['kpis', 'ai', 'trend', 'cost-usage', 'table', 'history']);
   });
 
+  it('drops the AI summary panel when NEXT_PUBLIC_ENABLE_AI_SUMMARY is false', () => {
+    vi.stubEnv('NEXT_PUBLIC_ENABLE_AI_SUMMARY', 'false');
+    try {
+      render(<AwsInvoiceDashboard />);
+      expect(document.querySelector('[data-dashboard-panel="ai"]')).toBeNull();
+      expect(document.querySelector('[data-dashboard-panel="kpis"]')).not.toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('keeps the AI summary panel by default', () => {
+    render(<AwsInvoiceDashboard />);
+    expect(document.querySelector('[data-dashboard-panel="ai"]')).not.toBeNull();
+  });
+
   it('scopes the cost and usage graph to the displayed month and drops the retired panels', () => {
     render(<AwsInvoiceDashboard />);
     expect(screen.getByText('Cost and usage graph for 2026-07')).toBeTruthy();

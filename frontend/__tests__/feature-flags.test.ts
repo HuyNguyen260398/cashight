@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   isAwsBillingInvoiceEnabled,
   isAwsCostExplorerEnabled,
+  isAiSummaryEnabled,
 } from '../config/features';
 
 afterEach(() => {
@@ -36,5 +37,15 @@ describe('public feature flags', () => {
 
     vi.stubEnv('NEXT_PUBLIC_ENABLE_AWS_BILLING_INVOICE', 'true');
     expect(isAwsBillingInvoiceEnabled()).toBe(true);
+  });
+
+  it('keeps AI summaries enabled unless the build flag is exactly false', () => {
+    for (const value of ['', 'true', 'FALSE']) {
+      vi.stubEnv('NEXT_PUBLIC_ENABLE_AI_SUMMARY', value);
+      expect(isAiSummaryEnabled()).toBe(true);
+    }
+
+    vi.stubEnv('NEXT_PUBLIC_ENABLE_AI_SUMMARY', 'false');
+    expect(isAiSummaryEnabled()).toBe(false);
   });
 });

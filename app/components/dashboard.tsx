@@ -8,6 +8,7 @@ import { MerchantBar } from '@/app/components/merchant-bar';
 import { TrendChart } from '@/app/components/trend-chart';
 import { InstallmentAreaChart } from '@/app/components/installment-area-chart';
 import { RevealPanel } from '@/app/components/reveal-panel';
+import { isAiSummaryEnabled } from '@/frontend/config/features';
 
 export function Dashboard({ view }: { view: AggregatedView }) {
   return (
@@ -16,9 +17,11 @@ export function Dashboard({ view }: { view: AggregatedView }) {
         <KpiCards view={view} />
       </RevealPanel>
 
-      <RevealPanel delayIndex={1} className="col-span-12 xl:col-span-5 xl:h-[636px]">
-        <AiSummaryCard view={view} />
-      </RevealPanel>
+      {isAiSummaryEnabled() && (
+        <RevealPanel delayIndex={1} className="col-span-12 xl:col-span-5 xl:h-[636px]">
+          <AiSummaryCard view={view} />
+        </RevealPanel>
+      )}
 
       <RevealPanel delayIndex={2} className="col-span-12">
         <Card className="min-w-0 overflow-hidden">
