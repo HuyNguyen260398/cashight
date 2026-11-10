@@ -14,6 +14,8 @@ const scripts = {
   recordRevision: path.join(root, 'scripts/v2-minimal/record-revision.sh'),
   waitRevision: path.join(root, 'scripts/v2-minimal/wait-revision.sh'),
   rollback: path.join(root, 'scripts/v2-minimal/rollback.sh'),
+  versionRelease: path.join(root, 'scripts/v2-minimal/version-release.sh'),
+  pruneConfig: path.join(root, 'scripts/v2-minimal/prune-config.sh'),
   mintToken: path.join(root, 'scripts/platform/mint-smoke-token.sh'),
 };
 
@@ -137,10 +139,20 @@ describe('v2-minimal-release workflow', () => {
     expect(workers).toBeLessThan(apply);
   });
 
-  it('stamps the app-version annotation on every release, so a config-only change restarts the pod', () => {
+  it('versions the release (annotation and ConfigMap name) right after pinning the image', () => {
     const steps = workflow().jobs.deploy.steps;
     const pin = steps.find((s) => s.run?.includes('pin-image.sh'));
-    expect(pin?.run).toContain('cashight.nghuy.link/app-version');
+    expect(pin?.run).toContain('version-release.sh');
+    expect(pin!.run!.indexOf('pin-image.sh')).toBeLessThan(pin!.run!.indexOf('version-release.sh'));
+  });
+
+  it('prunes unused ConfigMaps only after the smoke tests pass, without failing the release', () => {
+    const steps = workflow().jobs.deploy.steps as (Step & { 'continue-on-error'?: boolean })[];
+    const smoke = steps.findIndex((s) => s.run?.includes('smoke-serverless.mjs'));
+    const prune = steps.findIndex((s) => s.run?.includes('prune-config.sh'));
+    expect(prune).toBeGreaterThan(smoke);
+    expect(steps[prune].if).toBeUndefined();
+    expect(steps[prune]['continue-on-error']).toBe(true);
   });
 
   it('asserts the summary routes are off in the smoke step', () => {
@@ -392,5 +404,94 @@ describe('mint-smoke-token.sh', () => {
     const result = run(scripts.mintToken, [], { ...env, COGNITO_HOSTED_UI_DOMAIN: '' });
     expect(result.status).toBe(0);
     expect(recorded()).toContainEqual('gh variable get COGNITO_HOSTED_UI_DOMAIN');
+  });
+});
+
+// ── version-release.sh ───────────────────────────────────────────────────────
+
+describe('version-release.sh', () => {
+  const SHA = 'ab'.repeat(20);
+
+  function overlayCopy() {
+    const overlay = path.join(dir, 'overlay');
+    spawnSync('cp', ['-R', path.join(root, 'deploy/cashight/overlays/v2-minimal'), overlay]);
+    return overlay;
+  }
+
+  function render(overlay: string) {
+    const out = spawnSync('bash', ['-c', `kubectl kustomize "${overlay}" | yq -o=json -I=0 '.' | jq -s '.'`], {
+      encoding: 'utf8',
+    });
+    expect(out.status).toBe(0);
+    return JSON.parse(out.stdout) as {
+      kind: string;
+      metadata: { name: string };
+      spec?: { template: { metadata: { annotations: Record<string, string> }; spec: { containers: { envFrom: { configMapRef: { name: string } }[] }[] } } };
+    }[];
+  }
+
+  it('names the ConfigMap after the commit and points the Deployment at it, so an undo restores the old config', () => {
+    const overlay = overlayCopy();
+    const result = run(scripts.versionRelease, [overlay, SHA]);
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+
+    const docs = render(overlay);
+    const configMaps = docs.filter((d) => d.kind === 'ConfigMap').map((d) => d.metadata.name);
+    expect(configMaps).toEqual([`cashight-env-${SHA.slice(0, 12)}`]);
+    const deployment = docs.find((d) => d.kind === 'Deployment')!;
+    expect(deployment.spec!.template.spec.containers[0].envFrom[0].configMapRef.name).toBe(`cashight-env-${SHA.slice(0, 12)}`);
+    expect(deployment.spec!.template.metadata.annotations['cashight.nghuy.link/app-version']).toBe(SHA);
+  });
+
+  it('leaves an overlay the manifest check still accepts', () => {
+    const overlay = overlayCopy();
+    expect(run(scripts.versionRelease, [overlay, SHA]).status).toBe(0);
+    const check = spawnSync('bash', [path.join(root, 'scripts/platform/check-minimal-manifests.sh')], {
+      cwd: root,
+      encoding: 'utf8',
+      env: { ...process.env, OVERLAY: overlay },
+    });
+    expect(check.stderr).not.toContain('FAIL');
+    expect(check.status).toBe(0);
+  });
+
+  it('refuses a malformed commit SHA without touching the overlay', () => {
+    const overlay = overlayCopy();
+    const before = readFileSync(path.join(overlay, 'env.yaml'), 'utf8');
+    const result = run(scripts.versionRelease, [overlay, 'not-a-sha']);
+    expect(result.status).toBe(1);
+    expect(readFileSync(path.join(overlay, 'env.yaml'), 'utf8')).toBe(before);
+  });
+});
+
+// ── prune-config.sh ──────────────────────────────────────────────────────────
+
+describe('prune-config.sh', () => {
+  function kubectlWith(referenced: string[], existing: string[]) {
+    stub(
+      'kubectl',
+      `case "$*" in
+  *"get rs"*) printf '%s\n' ${referenced.map((n) => `'${n}'`).join(' ')} ;;
+  *"get configmap"*) printf '%s\n' ${existing.map((n) => `'${n}'`).join(' ')} ;;
+esac
+exit 0`,
+    );
+  }
+
+  it('deletes only the release ConfigMaps no ReplicaSet references', () => {
+    const [a, b, old] = ['aaaaaaaaaaaa', 'bbbbbbbbbbbb', '0123456789ab'].map((h) => `cashight-env-${h}`);
+    kubectlWith([a, b], [a, b, old, 'kube-root-ca.crt', 'cashight-env']);
+    const result = run(scripts.pruneConfig, []);
+    expect(result.status).toBe(0);
+    const deletes = recorded().filter((l) => l.includes('delete'));
+    expect(deletes).toEqual([`kubectl delete configmap ${old} -n cashight --ignore-not-found`]);
+  });
+
+  it('deletes nothing when it cannot see any referenced ConfigMap', () => {
+    kubectlWith([], ['cashight-env-aaaaaaaaaaaa', 'cashight-env-0123456789ab']);
+    const result = run(scripts.pruneConfig, []);
+    expect(result.status).toBe(0);
+    expect(recorded().filter((l) => l.includes('delete'))).toEqual([]);
   });
 });

@@ -173,14 +173,15 @@ jobs:
       - name: Deploy the worker Lambdas
         run: bash scripts/v2-minimal/deploy-workers.sh dist/lambdas "${RUNNER_TEMP}/rollback-state"
 
-      # The app-version annotation changes on every commit, so even a
-      # ConfigMap-only release makes a new ReplicaSet and a pod with fresh env.
-      - name: Pin the image and the app version
+      # version-release.sh stamps the app-version annotation (every commit
+      # makes a new ReplicaSet, so even a config-only release rolls a pod with
+      # fresh env) and gives the ConfigMap a per-release name (so a rollout
+      # undo restores the old config too).
+      - name: Pin the image and version the release
         run: |
           set -euo pipefail
           bash scripts/platform/pin-image.sh "${OVERLAY}" "${REPOSITORY}" "${DIGEST}" "${SHA}"
-          yq -i '.spec.template.metadata.annotations."cashight.nghuy.link/app-version" = strenv(SHA)' \
-            "${OVERLAY}/deployment.yaml"
+          bash scripts/v2-minimal/version-release.sh "${OVERLAY}" "${SHA}"
 
       - name: Apply the overlay
         run: kubectl apply -k "${OVERLAY}"
@@ -218,6 +219,12 @@ jobs:
           SMOKE_NATIVE_ACCESS_TOKEN: ${{ steps.token.outputs.token }}
           SMOKE_REQUIRE_NATIVE_AUTH: 'true'
           SMOKE_EXPECT_AI_SUMMARY_DISABLED: 'true'
+
+      # Keeps the ConfigMaps the retained ReplicaSets use; a failure here
+      # does not fail a release that already passed its checks.
+      - name: Prune unused release ConfigMaps
+        continue-on-error: true
+        run: bash scripts/v2-minimal/prune-config.sh
 
       # Any failure above: restore the recorded Deployment revision and alias
       # versions, then fail the job (rollback.sh always exits 1).

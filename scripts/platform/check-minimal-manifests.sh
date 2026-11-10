@@ -85,7 +85,11 @@ check "image is pinned by digest" "$app.image | test(\"@sha256:[0-9a-f]{64}$\")"
 check "ServiceAccount cashight-api carries the cashight-v2-min-api IRSA role" \
   '(map(select(.kind == "ServiceAccount" and .metadata.name == "cashight-api")) | first | .metadata.annotations["eks.amazonaws.com/role-arn"] // "") | test("^arn:aws:iam::[0-9]{12}:role/cashight-v2-min-api$")'
 
-env='(map(select(.kind == "ConfigMap" and .metadata.name == "cashight-env")) | first | .data)'
+# The committed name is cashight-env; a release renames it to
+# cashight-env-<sha12> (scripts/v2-minimal/version-release.sh).
+env='(map(select(.kind == "ConfigMap" and (.metadata.name | test("^cashight-env(-[0-9a-f]{12})?$")))) | first | .data)'
+check "the Deployment's envFrom names the overlay's ConfigMap" \
+  "(map(select(.kind == \"ConfigMap\")) | map(.metadata.name)) as \$cms | ($app.envFrom | map(.configMapRef.name) | all(. as \$n | \$cms | index(\$n)))"
 check "ConfigMap cashight-env sets AI_SUMMARY_ENABLED: \"false\"" "$env.AI_SUMMARY_ENABLED == \"false\""
 for key in GEMINI_PARAM OTEL_EXPORTER_OTLP_ENDPOINT PARSE_QUEUE_URL INVOICE_PARSE_QUEUE_URL; do
   check "ConfigMap cashight-env must not set $key" "$env | has(\"$key\") | not"
