@@ -1,0 +1,25 @@
+# v2 minimal (docs/v2-minimal.md): the always-on, Fargate-only variant of the
+# v2 environment (cashight-v2.nghuy.link, api.cashight-v2.nghuy.link).
+# Applied by .github/workflows/v2-minimal-release.yaml with kubectl; there is
+# no Argo CD. Self-contained: ../../base holds Rollouts, two APIs, KEDA
+# workers, NetworkPolicies and PDBs, none of which v2 minimal runs.
+#
+# The cashight Namespace and its LimitRange belong to terraform/v2-minimal
+# (CI's namespace-scoped access cannot create them). Account values below are
+# copied from `terraform output` of terraform/v2 and terraform/v2-minimal;
+# scripts/v2-minimal/check-overlay.sh compares them.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: cashight
+resources:
+  - serviceaccount.yaml
+  - env.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+# Rewritten in the runner by scripts/platform/pin-image.sh on every release;
+# the committed digest is only a placeholder that renders.
+images:
+  - name: cashight-backend
+    newName: 010382427026.dkr.ecr.ap-southeast-1.amazonaws.com/cashight-backend
+    digest: sha256:d325c3ef47f9a44f6bf2f9c6a1fa860dad93334559378744e17e368d957a188a

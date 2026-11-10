@@ -1,0 +1,95 @@
+# The merged API (/app/api-all/index.js): every route on one Fargate pod.
+# A plain Deployment, not a Rollout: the release workflow gates on rollout
+# status, the /health revision and the smoke suite, and runs
+# `kubectl rollout undo` on failure.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cashight-api
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cashight-api
+  strategy:
+    # The new pod must be Ready before the old one goes: no gap with 1 replica.
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cashight-api
+        cashight.nghuy.link/role: api
+      annotations:
+        # Set to the commit SHA on every release, so even a config-only change
+        # makes a new ReplicaSet and the pod picks up the new ConfigMap.
+        cashight.nghuy.link/app-version: 4f10a22ec2818a286cdbd6bf724dd631246087df
+    spec:
+      serviceAccountName: cashight-api
+      # IRSA projects its web identity token through the service account.
+      automountServiceAccountToken: true
+      # SHUTDOWN_DELAY_MS 5 s + SHUTDOWN_HARD_DEADLINE_MS 30 s = 35 s, plus margin.
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: cashight-backend
+          args: ["/app/api-all/index.js"]
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: cashight-env
+          env:
+            # Reported on /health; the release checks it to prove the ALB
+            # reaches the new pod (scripts/v2-minimal/wait-revision.sh).
+            - name: POD_TEMPLATE_HASH
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['pod-template-hash']
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          # Fargate bills the requests, rounded up after adding 256 MiB for
+          # the kubelet: 0.25 vCPU / 1 GB. Measured use may let this drop to
+          # 256Mi (0.5 GB); see docs/v2-minimal.md.
+          resources:
+            requests:
+              cpu: 250m
+              memory: 768Mi
+            limits:
+              cpu: 250m
+              memory: 768Mi
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
