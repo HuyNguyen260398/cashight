@@ -360,3 +360,26 @@ run "workers" {
     error_message = "invoice parser worker grants"
   }
 }
+
+# Review fix: with one replica, the old pod must not go before the ALB has a
+# healthy target on the new one. The controller's webhook injects the ALB
+# readiness gate into pods of a namespace with this label.
+run "alb_readiness_gate" {
+  command = plan
+
+  assert {
+    condition     = kubernetes_namespace_v1.cashight.metadata[0].labels["elbv2.k8s.aws/pod-readiness-gate-inject"] == "enabled"
+    error_message = "the cashight namespace must enable the ALB pod readiness gate"
+  }
+}
+
+# Review fix: the controller-created ALB must carry the Environment tag, or the
+# v2-minimal tag budget misses it.
+run "alb_carries_cost_tags" {
+  command = plan
+
+  assert {
+    condition     = lookup(local.lbc_values, "defaultTags", {}) == { Environment = "v2-minimal", ManagedBy = "Terraform", Project = "cashight" }
+    error_message = "the controller tags what it creates with the root's tags"
+  }
+}

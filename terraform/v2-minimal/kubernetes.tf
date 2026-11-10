@@ -5,6 +5,10 @@
 resource "kubernetes_namespace_v1" "cashight" {
   metadata {
     name = "cashight"
+    # The load balancer controller injects its readiness gate into pods here:
+    # a new pod counts as Ready only once its ALB target is healthy, so with
+    # one replica the old pod keeps serving until the ALB can reach the new one.
+    labels = { "elbv2.k8s.aws/pod-readiness-gate-inject" = "enabled" }
   }
 
   depends_on = [module.cluster]
@@ -74,15 +78,9 @@ resource "kubernetes_config_map_v1" "aws_logging" {
   }
 }
 
-resource "helm_release" "aws_load_balancer_controller" {
-  name       = "aws-load-balancer-controller"
-  namespace  = "kube-system"
-  repository = "https://aws.github.io/eks-charts"
-  chart      = "aws-load-balancer-controller"
-  version    = var.lbc_chart_version
-
+locals {
   # vpcId and region are explicit: Fargate has no IMDS to discover them.
-  values = [yamlencode({
+  lbc_values = {
     clusterName  = module.cluster.cluster_name
     region       = var.aws_region
     vpcId        = module.cluster.vpc_id
@@ -91,6 +89,9 @@ resource "helm_release" "aws_load_balancer_controller" {
       name        = "aws-load-balancer-controller"
       annotations = { "eks.amazonaws.com/role-arn" = module.cluster.load_balancer_controller_role_arn }
     }
+    # Tags every AWS resource the controller creates (the ALB, its target
+    # group and security groups), so the v2-minimal tag budget sees them.
+    defaultTags  = local.tags
     enableShield = false
     enableWaf    = false
     enableWafv2  = false
@@ -98,7 +99,17 @@ resource "helm_release" "aws_load_balancer_controller" {
       requests = { cpu = "250m", memory = "256Mi" }
       limits   = { memory = "256Mi" }
     }
-  })]
+  }
+}
+
+resource "helm_release" "aws_load_balancer_controller" {
+  name       = "aws-load-balancer-controller"
+  namespace  = "kube-system"
+  repository = "https://aws.github.io/eks-charts"
+  chart      = "aws-load-balancer-controller"
+  version    = var.lbc_chart_version
+
+  values = [yamlencode(local.lbc_values)]
 
   depends_on = [module.cluster]
 }
