@@ -1,0 +1,3 @@
+# Copy to terraform.tfvars (gitignored). The workstation admin role(s) that
+# get cluster-admin through access entries.
+admin_principal_arns = ["arn:aws:iam::<account-id>:role/<admin-role>"]

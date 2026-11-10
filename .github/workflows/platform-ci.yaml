@@ -10,6 +10,7 @@ on:
     paths:
       - 'terraform/platform/**'
       - 'terraform/platform-base/**'
+      - 'terraform/v2-minimal/**'
       - 'terraform/modules/platform_*/**'
       - 'deploy/**'
       - 'scripts/platform/**'
@@ -30,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        root: [platform-base, platform]
+        root: [platform-base, platform, v2-minimal]
     defaults:
       run:
         working-directory: terraform/${{ matrix.root }}
@@ -74,6 +75,13 @@ jobs:
           pip install --disable-pip-version-check checkov==3.2.471
           checkov -d . --config-file .checkov.yml
           checkov -d ../modules/platform_cluster --config-file .checkov.yml
+
+      - name: Checkov (v2-minimal)
+        if: matrix.root == 'v2-minimal'
+        run: |
+          pip install --disable-pip-version-check checkov==3.2.471
+          checkov -d . --config-file .checkov.yml
+          checkov -d ../modules/platform_cluster_fargate --config-file .checkov.yml
 
       # The platform publishes no SSM identifiers for other repositories
       # (docs/superpowers/specs/2026-11-05-eks-plan-4-open-points.md, 1c).
