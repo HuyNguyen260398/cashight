@@ -14,6 +14,8 @@
  * Optional environment variables:
  *   SMOKE_NATIVE_ACCESS_TOKEN — short-lived Cognito-native access token
  *   SMOKE_REQUIRE_NATIVE_AUTH — set to true for production verification
+ *   SMOKE_EXPECT_AI_SUMMARY_DISABLED — set to true where AI summaries are off
+ *     (v2 minimal); with a native token, asserts both summary routes answer 404
  *
  * Exit 0 = all checks passed
  * Exit 1 = one or more checks failed
@@ -31,6 +33,7 @@ const API_URL = (process.env.API_URL ?? '').replace(/\/$/, '');
 const NATIVE_ACCESS_TOKEN = process.env.SMOKE_NATIVE_ACCESS_TOKEN ?? '';
 const REQUIRE_NATIVE_AUTH = process.env.SMOKE_REQUIRE_NATIVE_AUTH === 'true';
 const AWS_INVOICE_FIXTURE = process.env.AWS_INVOICE_FIXTURE ?? '';
+const EXPECT_AI_SUMMARY_DISABLED = process.env.SMOKE_EXPECT_AI_SUMMARY_DISABLED === 'true';
 
 // ── HTTP client ───────────────────────────────────────────────────────────────
 
@@ -410,6 +413,23 @@ async function main() {
         );
       },
     );
+
+    if (EXPECT_AI_SUMMARY_DISABLED) {
+      // Authenticated, so a 404 means "route not registered", not "rejected".
+      for (const route of ['/summaries', '/aws/invoices/summary']) {
+        await check(`POST ${route} returns 404 (AI summary disabled)`, async () => {
+          const res = await request(`${API_URL}${route}`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${NATIVE_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+            body: '{}',
+          });
+          assert(res.status === 404, `Expected 404, got ${res.status}`);
+        });
+      }
+    }
   } else {
     console.log(
       '  - authenticated capabilities check skipped (SMOKE_NATIVE_ACCESS_TOKEN not set)',
