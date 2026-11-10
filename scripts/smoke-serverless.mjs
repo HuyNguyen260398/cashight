@@ -14,6 +14,9 @@
  * Optional environment variables:
  *   SMOKE_NATIVE_ACCESS_TOKEN — short-lived Cognito-native access token
  *   SMOKE_REQUIRE_NATIVE_AUTH — set to true for production verification
+ *   SMOKE_API_CONNECT_TO — connect to this host (e.g. the ALB) for API_URL's
+ *     hostname, which still names the server for TLS and the Host header; for
+ *     a first deploy, before the API's DNS record exists
  *   SMOKE_EXPECT_AI_SUMMARY_DISABLED — set to true where AI summaries are off
  *     (v2 minimal); with a native token, asserts both summary routes answer 404
  *
@@ -24,6 +27,7 @@
 import https from 'node:https';
 import http from 'node:http';
 import { createHash } from 'node:crypto';
+import dns from 'node:dns';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -34,6 +38,7 @@ const NATIVE_ACCESS_TOKEN = process.env.SMOKE_NATIVE_ACCESS_TOKEN ?? '';
 const REQUIRE_NATIVE_AUTH = process.env.SMOKE_REQUIRE_NATIVE_AUTH === 'true';
 const AWS_INVOICE_FIXTURE = process.env.AWS_INVOICE_FIXTURE ?? '';
 const EXPECT_AI_SUMMARY_DISABLED = process.env.SMOKE_EXPECT_AI_SUMMARY_DISABLED === 'true';
+const API_CONNECT_TO = process.env.SMOKE_API_CONNECT_TO ?? '';
 
 // ── HTTP client ───────────────────────────────────────────────────────────────
 
@@ -49,6 +54,11 @@ function request(url, options = {}) {
         // keeps the smoke request useful if an edge filter is reintroduced.
         headers: { 'User-Agent': 'cashight-smoke-tests/1.0', ...(options.headers ?? {}) },
         timeout: 15000,
+        // Resolve the API hostname to SMOKE_API_CONNECT_TO; TLS SNI and the
+        // Host header still carry the API hostname.
+        ...(API_CONNECT_TO && API_URL && parsed.hostname === new URL(API_URL).hostname
+          ? { lookup: (_host, lookupOptions, callback) => dns.lookup(API_CONNECT_TO, lookupOptions, callback) }
+          : {}),
       },
       (res) => {
         let body = '';

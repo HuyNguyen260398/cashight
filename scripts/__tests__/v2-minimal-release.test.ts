@@ -16,6 +16,7 @@ const scripts = {
   rollback: path.join(root, 'scripts/v2-minimal/rollback.sh'),
   versionRelease: path.join(root, 'scripts/v2-minimal/version-release.sh'),
   pruneConfig: path.join(root, 'scripts/v2-minimal/prune-config.sh'),
+  apiEndpoint: path.join(root, 'scripts/v2-minimal/api-endpoint.sh'),
   mintToken: path.join(root, 'scripts/platform/mint-smoke-token.sh'),
 };
 
@@ -155,6 +156,18 @@ describe('v2-minimal-release workflow', () => {
     expect(steps[prune]['continue-on-error']).toBe(true);
   });
 
+  it('checks through the ALB directly while the API hostname has no DNS record (first deploy)', () => {
+    const steps = workflow().jobs.deploy.steps as (Step & { id?: string })[];
+    const endpoint = steps.findIndex((s) => s.run?.includes('api-endpoint.sh'));
+    const wait = steps.findIndex((s) => s.run?.includes('wait-revision.sh'));
+    const smoke = steps.findIndex((s) => s.run?.includes('smoke-serverless.mjs'));
+    expect(endpoint).toBeGreaterThan(-1);
+    expect(endpoint).toBeLessThan(wait);
+    const output = `steps.${steps[endpoint].id}.outputs.connect_to`;
+    expect(steps[wait].env?.CONNECT_TO).toContain(output);
+    expect(steps[smoke].env?.SMOKE_API_CONNECT_TO).toContain(output);
+  });
+
   it('asserts the summary routes are off in the smoke step', () => {
     const steps = workflow().jobs.deploy.steps;
     const smoke = steps.find((s) => s.run?.includes('smoke-serverless.mjs'));
@@ -190,6 +203,16 @@ if [ "$n" -lt 2 ]; then echo '{"status":"ok","revision":"old1234"}'; else echo '
     const result = run(scripts.waitRevision, ['https://api.example.test', 'new5678', '1']);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('last revision seen: old1234');
+  });
+
+  it('connects to CONNECT_TO while keeping the API hostname', () => {
+    stub('curl', `echo '{"status":"ok","revision":"new5678"}'`);
+    const result = run(scripts.waitRevision, ['https://api.example.test', 'new5678', '5'], {
+      CONNECT_TO: 'k8s-cashight-1.elb.example',
+    });
+    expect(result.status).toBe(0);
+    expect(recorded()[0]).toContain('--connect-to api.example.test:443:k8s-cashight-1.elb.example:443');
+    expect(recorded()[0]).toContain('https://api.example.test/health');
   });
 
   it('rejects a malformed expected hash', () => {
@@ -493,5 +516,51 @@ exit 0`,
     const result = run(scripts.pruneConfig, []);
     expect(result.status).toBe(0);
     expect(recorded().filter((l) => l.includes('delete'))).toEqual([]);
+  });
+});
+
+// ── api-endpoint.sh ──────────────────────────────────────────────────────────
+
+describe('api-endpoint.sh', () => {
+  const ALB = 'k8s-cashight-0123456789-111111111.ap-southeast-1.elb.amazonaws.com';
+
+  function stubs({ apiResolves, albResolves = true, ingress = ALB }: { apiResolves: boolean; albResolves?: boolean; ingress?: string }) {
+    stub('kubectl', `echo '${ingress}'`);
+    stub(
+      'getent',
+      `case "$*" in
+  *api.cashight-v2.nghuy.link*) ${apiResolves ? "echo '203.0.113.7 api.cashight-v2.nghuy.link'" : 'exit 2'} ;;
+  *${ALB}*) ${albResolves ? `echo '203.0.113.9 ${ALB}'` : 'exit 2'} ;;
+  *) exit 2 ;;
+esac`,
+    );
+  }
+
+  it('prints nothing once the API hostname resolves', () => {
+    stubs({ apiResolves: true });
+    const result = run(scripts.apiEndpoint, ['api.cashight-v2.nghuy.link', '5']);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('');
+  });
+
+  it('prints the ALB hostname while the API hostname has no record', () => {
+    stubs({ apiResolves: false });
+    const result = run(scripts.apiEndpoint, ['api.cashight-v2.nghuy.link', '5']);
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe(ALB);
+    expect(result.stderr).toContain('apply.sh');
+  });
+
+  it('fails when the Ingress never gets an ALB', () => {
+    stubs({ apiResolves: false, ingress: '' });
+    const result = run(scripts.apiEndpoint, ['api.cashight-v2.nghuy.link', '1']);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe('');
+  });
+
+  it('fails when the ALB hostname never resolves', () => {
+    stubs({ apiResolves: false, albResolves: false });
+    const result = run(scripts.apiEndpoint, ['api.cashight-v2.nghuy.link', '1']);
+    expect(result.status).toBe(1);
   });
 });

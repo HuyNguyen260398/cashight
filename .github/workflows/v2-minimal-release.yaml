@@ -189,9 +189,24 @@ jobs:
       - name: Wait for the rollout
         run: kubectl rollout status deployment/cashight-api -n cashight --timeout=5m
 
+      # The first deploy creates the ALB, but its DNS record only appears on
+      # the next terraform/v2-minimal apply; until then the checks below
+      # connect to the ALB directly (connect_to), keeping the API hostname.
+      - name: Find the API endpoint
+        id: endpoint
+        run: |
+          set -euo pipefail
+          connect_to=$(bash scripts/v2-minimal/api-endpoint.sh "${API_URL#https://}")
+          echo "connect_to=${connect_to}" >> "${GITHUB_OUTPUT}"
+          if [ -n "${connect_to}" ]; then
+            echo "::notice::${API_URL#https://} has no DNS record yet; checked through ${connect_to}. Run scripts/v2-minimal/apply.sh to create it."
+          fi
+
       # The newest ReplicaSet's pod-template hash; /health must report it,
       # which proves the ALB routes to the new pod and not the draining one.
       - name: Wait for /health to report the new revision
+        env:
+          CONNECT_TO: ${{ steps.endpoint.outputs.connect_to }}
         run: |
           set -euo pipefail
           hash=$(kubectl get rs -n cashight -l app.kubernetes.io/name=cashight-api -o json |
@@ -219,6 +234,7 @@ jobs:
           SMOKE_NATIVE_ACCESS_TOKEN: ${{ steps.token.outputs.token }}
           SMOKE_REQUIRE_NATIVE_AUTH: 'true'
           SMOKE_EXPECT_AI_SUMMARY_DISABLED: 'true'
+          SMOKE_API_CONNECT_TO: ${{ steps.endpoint.outputs.connect_to }}
 
       # Keeps the ConfigMaps the retained ReplicaSets use; a failure here
       # does not fail a release that already passed its checks.

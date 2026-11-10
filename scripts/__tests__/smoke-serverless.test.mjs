@@ -247,12 +247,13 @@ describe('AI summary disabled checks', () => {
   const SUMMARY_PATHS = ['/summaries', '/aws/invoices/summary'];
 
   /** Runs the whole smoke script against a local stub of both hostnames. */
-  async function runSmoke({ summaryStatus, env }) {
+  async function runSmoke({ summaryStatus, env, apiHost }) {
     const { createServer } = await import('node:http');
     const { execFile } = await import('node:child_process');
     const seen = [];
     const server = createServer((req, res) => {
       seen.push(`${req.method} ${req.url}`);
+      seen.push(`host ${req.headers.host}`);
       req.resume();
       req.on('end', () => {
         if (req.method === 'POST' && SUMMARY_PATHS.includes(req.url)) {
@@ -275,7 +276,7 @@ describe('AI summary disabled checks', () => {
             env: {
               PATH: process.env.PATH,
               APP_URL: base,
-              API_URL: base,
+              API_URL: apiHost ? `http://${apiHost}:${server.address().port}` : base,
               SMOKE_NATIVE_ACCESS_TOKEN: 'short-lived-native-token',
               ...env,
             },
@@ -313,5 +314,15 @@ describe('AI summary disabled checks', () => {
     const { output, seen } = await runSmoke({ summaryStatus: 404, env: {} });
     expect(seen.filter((line) => SUMMARY_PATHS.some((p) => line.endsWith(p)))).toEqual([]);
     expect(output).not.toContain('AI summary disabled');
+  }, 30_000);
+
+  it('reaches the API through SMOKE_API_CONNECT_TO while keeping its hostname', async () => {
+    const { output, seen } = await runSmoke({
+      summaryStatus: 404,
+      apiHost: 'api.cashight-v2.invalid',
+      env: { SMOKE_EXPECT_AI_SUMMARY_DISABLED: 'true', SMOKE_API_CONNECT_TO: '127.0.0.1' },
+    });
+    expect(output).toContain('✓ POST /summaries returns 404 (AI summary disabled)');
+    expect(seen.some((line) => line.startsWith('host api.cashight-v2.invalid:'))).toBe(true);
   }, 30_000);
 });

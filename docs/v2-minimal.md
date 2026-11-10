@@ -61,7 +61,7 @@ bash scripts/v2-minimal/apply.sh
 
 It refuses while the full cluster `cashight-v2` exists, creates the cluster with a targeted apply (15–20 minutes), applies everything else, checks the committed overlay against the Terraform outputs (`scripts/v2-minimal/check-overlay.sh`), and sets `V2_TARGET=minimal`. Then:
 
-1. `gh workflow run v2-minimal-release.yaml --ref cashight-v2`, and watch it go green. The first run deploys the API and creates the ALB.
+1. `gh workflow run v2-minimal-release.yaml --ref cashight-v2`, and watch it go green. The first run deploys the API and creates the ALB. The API hostname has no DNS record yet, so the release checks `/health` and runs the smoke suite through the ALB directly (keeping the hostname for TLS) and leaves a notice saying so.
 2. `bash scripts/v2-minimal/apply.sh` again: the ALB now exists, so `api.cashight-v2.nghuy.link` gets its A/AAAA records. There is no flag; the record appears whenever exactly one ALB carries the `cashight` Ingress-group tags of this cluster.
 3. `terraform -chdir=terraform/grafana apply -var api_live=true -var collector_live=false` for the uptime check (there is no collector).
 
@@ -75,11 +75,12 @@ Every push to `cashight-v2` that touches the app, the overlay or the workflow (a
 2. **deploy**:
    1. `pnpm build:lambdas`; record the rollback state: the Deployment's current revision (`record-revision.sh`) and both `live` alias versions.
    2. `deploy-workers.sh`: for each worker, upload the zip, publish a version, wait, move `live`.
-   3. Pin the digest and `APP_VERSION` (`pin-image.sh`) and stamp the pod-template annotation `cashight.nghuy.link/app-version: <sha>`. The annotation changes on every commit, so a ConfigMap-only release still rolls a new pod with fresh env.
-   4. `kubectl apply -k`, then `kubectl rollout status --timeout=5m`. The rollout is `maxSurge 1, maxUnavailable 0`: the new pod is Ready before the old one goes.
-   5. `wait-revision.sh`: poll `/health` for up to 180 s until it reports the newest ReplicaSet's `pod-template-hash`. Until the ALB registers the new target and drains the old one, the old pod still answers; a single check would pass against it.
+   3. Pin the digest and `APP_VERSION` (`pin-image.sh`), then `version-release.sh`: stamp the pod-template annotation `cashight.nghuy.link/app-version: <sha>` and rename the ConfigMap to `cashight-env-<sha12>`. The annotation changes on every commit, so a ConfigMap-only release still rolls a new pod with fresh env; the per-release name means a rollback brings back the old config with the old pod.
+   4. `kubectl apply -k`, then `kubectl rollout status --timeout=5m`. The rollout is `maxSurge 1, maxUnavailable 0`, and the `cashight` namespace enables the load balancer controller's **pod readiness gate**: the new pod counts as Ready only once its ALB target is healthy, so the old pod keeps serving until then.
+   5. `api-endpoint.sh` waits for the ALB, then `wait-revision.sh` polls `/health` for up to 180 s until it reports the newest ReplicaSet's `pod-template-hash`. While the old target drains it can still answer, so a single check could pass against it.
    6. Smoke suite against both hostnames with a freshly minted token (`mint-smoke-token.sh`), including `SMOKE_EXPECT_AI_SUMMARY_DISABLED=true`: both summary routes must answer 404.
-   7. On any failure: `rollback.sh` (below), and the job fails.
+   7. After the smoke suite passes, `prune-config.sh` deletes release ConfigMaps no retained ReplicaSet uses (a failure there does not fail the release).
+   8. On any failure: `rollback.sh` (below), and the job fails.
 3. **spa**: only after **deploy** passes, build the SPA with `NEXT_PUBLIC_ENABLE_AI_SUMMARY=false` and deploy it.
 
 ## 5. Rollback
@@ -89,6 +90,7 @@ Every push to `cashight-v2` that touches the app, the overlay or the workflow (a
 - If the Deployment moved, `kubectl rollout undo --to-revision=<recorded>` back to exactly the revision recorded before the release, then waits for it. A release that failed before `kubectl apply` leaves the Deployment alone. On the first deploy there is nothing to roll back to, and the log says `no previous revision`.
 - Each worker's `live` alias goes back to the version recorded before the release, even if only one had moved.
 - Every step runs even if an earlier one errors, and the job always fails.
+- The undo restores the pod template, which includes the image and (through the per-release ConfigMap name) the environment. It does **not** revert changes to the Service, Ingress or ServiceAccount; those change rarely, and a bad one still fails the job. Revert them by re-running the release of the previous good commit.
 
 **Manual.**
 
@@ -142,6 +144,8 @@ Singapore, USD per month. "Estimate" is the spec's figure; the other two columns
 | Fargate: `cashight-api` (0.25 vCPU / 1 GB), LBC and CoreDNS (0.25 / 0.5 each) | 25–30 | | |
 | Lambda workers, SQS, DynamoDB, S3, CloudFront, ECR, CloudWatch Logs | 2–5 | | |
 | **Total** | **≈ 165–175** | | |
+
+Not everything is visible to the tag budget (§11): EKS, the NAT gateway, the Lambdas, the log groups and (through the controller's `defaultTags`) the ALB carry `Environment = v2-minimal`, but **Fargate pod compute (≈ $25–30) is not attributed to tags** unless EKS split cost allocation is enabled. Read it from Cost Explorer by service (Fargate) instead.
 
 Extended support would add ≈ $365/month, which is why the root only accepts versions in standard support (`terraform/v2-minimal/variables.tf`; refresh the list before an upgrade) and sets `upgrade_policy = STANDARD`.
 
