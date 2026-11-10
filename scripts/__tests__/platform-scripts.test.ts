@@ -32,6 +32,7 @@ exit 0`,
     'aws',
     `case "$*" in
   *"eks describe-capability"*) echo ACTIVE ;;
+  *"eks describe-cluster"*) echo "An error occurred (ResourceNotFoundException) when calling the DescribeCluster operation" >&2; exit 254 ;;
   *"elbv2 describe-load-balancers"*) echo "${loadBalancers}" ;;
   *"describe-user-pool-client"*) echo stub-secret ;;
 esac
@@ -111,6 +112,36 @@ describe('bring-up.sh', () => {
     const result = run(bringUp, [], { OVERLAY: overlayWithDigest(`sha256:${'0'.repeat(64)}`) });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('not built yet');
+    expect(recorded().filter((l) => l.startsWith('terraform'))).toEqual([]);
+  });
+
+  it('refuses while v2 minimal (cashight-v2-min) exists, before touching Terraform', () => {
+    stubAll();
+    stub(
+      'aws',
+      `case "$*" in
+  *"eks describe-cluster"*"cashight-v2-min"*) echo '{"cluster":{"status":"ACTIVE"}}' ;;
+esac
+exit 0`,
+    );
+    const result = run(bringUp, [], { OVERLAY: overlayWithDigest(`sha256:${'ab'.repeat(32)}`) });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('bring-up: cashight-v2-min exists; run scripts/v2-minimal/teardown.sh first');
+    expect(recorded().filter((l) => l.startsWith('terraform'))).toEqual([]);
+  });
+
+  it('stops when it cannot tell whether v2 minimal exists', () => {
+    stubAll();
+    stub(
+      'aws',
+      `case "$*" in
+  *"eks describe-cluster"*) echo "An error occurred (AccessDeniedException)" >&2; exit 254 ;;
+esac
+exit 0`,
+    );
+    const result = run(bringUp, [], { OVERLAY: overlayWithDigest(`sha256:${'ab'.repeat(32)}`) });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('cashight-v2-min');
     expect(recorded().filter((l) => l.startsWith('terraform'))).toEqual([]);
   });
 

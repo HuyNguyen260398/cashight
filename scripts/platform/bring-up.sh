@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Brings the v2 test environment up from nothing, end to end:
-#   1. refuse an overlay whose image was never built (all-zero digest);
+#   1. refuse an overlay whose image was never built (all-zero digest), and
+#      refuse while v2 minimal (cluster cashight-v2-min) exists;
 #   2. copy the AUTHZ records into the v2 table (dry run first);
 #   3. create the cluster (targeted apply), wait for the Argo CD capability;
 #   4. apply the bootstrap, wait for the cashight Application to be Healthy;
@@ -62,6 +63,14 @@ digest=$(yq -r '.images[] | select(.name == "cashight-backend") | .digest' "$OVE
   die "the cashight-backend image is not built yet (all-zero digest in $OVERLAY). Push to cashight-v2 and let the v2 Release workflow pin it."
 
 aws sts get-caller-identity >/dev/null || die "no AWS credentials (eval \"\$(aws configure export-credentials --format env)\")"
+
+# v2 minimal (terraform/v2-minimal) points the same API hostname at its own ALB
+# and consumes the same queues, so the two never run together (spec §4.1).
+if minimal=$(aws eks describe-cluster --name cashight-v2-min --region "$AWS_REGION" 2>&1); then
+  die "cashight-v2-min exists; run scripts/v2-minimal/teardown.sh first"
+elif ! grep -q ResourceNotFoundException <<<"$minimal"; then
+  die "could not check whether cashight-v2-min exists: $minimal"
+fi
 
 # check-overlay.sh reads terraform/v2's outputs at step 5; initialise it now so
 # a fresh checkout fails here, not after the cluster has been created.

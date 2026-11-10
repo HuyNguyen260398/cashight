@@ -2,6 +2,8 @@
 
 The v2 parallel stack (`cashight-v2.nghuy.link`) keeps everything that must outlive a test cluster in its own Terraform root, `terraform/v2/`. The cluster itself is ephemeral and lives in `terraform/platform/` ([platform runbook](platform.md)).
 
+The same resources also back the always-on [v2 minimal](v2-minimal.md) (`terraform/v2-minimal/`), which adds two grants to the CI role here (`EksDescribeMinimal`, `DeployMinimalWorkers`).
+
 Decision record: [`docs/superpowers/specs/2026-11-05-eks-plan-4-open-points.md`](superpowers/specs/2026-11-05-eks-plan-4-open-points.md) (F4, F7, and the 2026-11-07 revision).
 
 ## 1. What the root holds, and why it is separate
