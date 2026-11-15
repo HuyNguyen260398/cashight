@@ -61,7 +61,7 @@ export async function startApiService(
       capacity: config.rateLimitBurst,
       refillPerSecond: config.rateLimitPerSecond,
     }),
-    isReady: () => ready,
+    isReady: () => false, // TEMP: v2-minimal rollback test; reverted next commit
     requestTimeoutMs: config.requestTimeoutMs,
     revision: config.revision,
   });
