@@ -467,7 +467,11 @@ describe('version-release.sh', () => {
     expect(deployment.spec!.template.metadata.annotations['cashight.nghuy.link/app-version']).toBe(SHA);
   });
 
-  it('leaves an overlay the manifest check still accepts', () => {
+  // The check needs kubeconform, which the unit-test job does not install; the
+  // "YAML and Kubernetes manifests" CI job runs the same check with it.
+  const hasKubeconform = spawnSync('kubeconform', ['-v']).status === 0;
+
+  it.skipIf(!hasKubeconform)('leaves an overlay the manifest check still accepts', () => {
     const overlay = overlayCopy();
     expect(run(scripts.versionRelease, [overlay, SHA]).status).toBe(0);
     const check = spawnSync('bash', [path.join(root, 'scripts/platform/check-minimal-manifests.sh')], {
