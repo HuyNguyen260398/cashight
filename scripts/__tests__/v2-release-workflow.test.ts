@@ -30,4 +30,13 @@ describe('v2-release workflow', () => {
   it('runs only for the cashight-v2 branch', () => {
     expect(workflow().on.push.branches).toEqual(['cashight-v2']);
   });
+
+  // With V2_TARGET=minimal, v2-minimal-release.yaml owns the image and the SPA;
+  // this workflow would otherwise redeploy the SPA with AI summaries on.
+  it('skips every job when V2_TARGET is minimal', () => {
+    const jobs = Object.entries(workflow().jobs as Record<string, { if?: string }>);
+    for (const [name, job] of jobs) {
+      expect(job.if ?? '', name).toContain("vars.V2_TARGET != 'minimal'");
+    }
+  });
 });

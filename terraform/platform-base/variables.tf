@@ -42,3 +42,9 @@ variable "monthly_budget_usd" {
     error_message = "monthly_budget_usd must be greater than zero."
   }
 }
+
+variable "enable_v2_minimal_budget" {
+  description = "Create the v2-minimal tag budget and activate the Environment cost allocation tag. Set true only after go-live (docs/v2-minimal.md): the tag becomes filterable about a day after its first billed usage."
+  type        = bool
+  default     = false
+}

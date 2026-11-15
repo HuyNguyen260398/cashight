@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Brings the v2 test environment up from nothing, end to end:
-#   1. refuse an overlay whose image was never built (all-zero digest);
+#   1. refuse an overlay whose image was never built (all-zero digest), and
+#      refuse while v2 minimal (cluster cashight-v2-min) exists;
 #   2. copy the AUTHZ records into the v2 table (dry run first);
 #   3. create the cluster (targeted apply), wait for the Argo CD capability;
 #   4. apply the bootstrap, wait for the cashight Application to be Healthy;
@@ -63,6 +64,14 @@ digest=$(yq -r '.images[] | select(.name == "cashight-backend") | .digest' "$OVE
 
 aws sts get-caller-identity >/dev/null || die "no AWS credentials (eval \"\$(aws configure export-credentials --format env)\")"
 
+# v2 minimal (terraform/v2-minimal) points the same API hostname at its own ALB
+# and consumes the same queues, so the two never run together (spec §4.1).
+if minimal=$(aws eks describe-cluster --name cashight-v2-min --region "$AWS_REGION" 2>&1); then
+  die "cashight-v2-min exists; run scripts/v2-minimal/teardown.sh first"
+elif ! grep -q ResourceNotFoundException <<<"$minimal"; then
+  die "could not check whether cashight-v2-min exists: $minimal"
+fi
+
 # check-overlay.sh reads terraform/v2's outputs at step 5; initialise it now so
 # a fresh checkout fails here, not after the cluster has been created.
 terraform -chdir=terraform/v2 init -input=false >/dev/null
@@ -118,24 +127,8 @@ wait_for 300 "$API_HOST to resolve" dns_resolves
 wait_for 300 "https://$API_HOST/health to answer 200" health_ok
 
 log "Smoke tests"
-repo_var() {
-  local value=${!1:-}
-  [ -n "$value" ] || value=$(gh variable get "$1")
-  printf '%s' "$value"
-}
-pool_id=$(repo_var COGNITO_USER_POOL_ID)
-client_id=$(repo_var COGNITO_SMOKE_CLIENT_ID)
-hosted_ui=$(repo_var COGNITO_HOSTED_UI_DOMAIN)
-# Client credentials on the smoke client, as in application-deploy.yaml: the
-# API requires the cashight/* scopes. Neither the secret nor the token is printed.
-secret=$(aws cognito-idp describe-user-pool-client --user-pool-id "$pool_id" --client-id "$client_id" \
-  --query 'UserPoolClient.ClientSecret' --output text)
-response=$(curl -sS -X POST "$hosted_ui/oauth2/token" \
-  -H 'Content-Type: application/x-www-form-urlencoded' \
-  -u "$client_id:$secret" \
-  -d 'grant_type=client_credentials&scope=cashight/read cashight/write')
-token=$(jq -r '.access_token // empty' <<<"$response")
-[ -n "$token" ] || die "could not mint a smoke token: $(jq -r '.error // "unknown_error"' <<<"$response")"
+# Neither the client secret nor the token is printed.
+token=$(bash scripts/platform/mint-smoke-token.sh) || die "could not mint a smoke token"
 APP_URL=$APP_URL API_URL="https://$API_HOST" SMOKE_NATIVE_ACCESS_TOKEN=$token SMOKE_REQUIRE_NATIVE_AUTH=true \
   node scripts/smoke-serverless.mjs
 

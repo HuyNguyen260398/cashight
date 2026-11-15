@@ -10,6 +10,7 @@ const defaultProjectRoot = path.resolve(scriptDirectory, '..');
 /** Container entrypoints. The two workers load pdfjs and need its worker file. */
 const SERVERS = [
   { name: 'api', needsPdfWorker: false },
+  { name: 'api-all', needsPdfWorker: false },
   { name: 'aws-api', needsPdfWorker: false },
   { name: 'invoice-parser-worker', needsPdfWorker: true },
   { name: 'parser-worker', needsPdfWorker: true },

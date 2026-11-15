@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight, Cloud, FileQuestion } from 'lucide-react';
 import { RevealPanel } from '@/app/components/reveal-panel';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { isAiSummaryEnabled } from '@/frontend/config/features';
 import { AWS_INVOICES_CHANGED_EVENT } from '@/frontend/hooks/use-aws-invoice-upload';
 import { useAwsInvoices } from '@/frontend/hooks/use-aws-invoices';
 import { AwsInvoiceUpload } from './aws-invoice-upload';
@@ -135,7 +136,7 @@ export function AwsInvoiceDashboard() {
       ) : (
         <div className="grid grid-cols-12 gap-4 md:gap-6">
           <RevealPanel delayIndex={0} className="col-span-12"><div data-dashboard-panel="kpis"><InvoiceKpiCards dashboard={dashboard} /></div></RevealPanel>
-          <RevealPanel delayIndex={1} className="col-span-12"><div data-dashboard-panel="ai"><AwsInvoiceAiSummary yearMonth={requestedMonth} /></div></RevealPanel>
+          {isAiSummaryEnabled() && <RevealPanel delayIndex={1} className="col-span-12"><div data-dashboard-panel="ai"><AwsInvoiceAiSummary yearMonth={requestedMonth} /></div></RevealPanel>}
           <RevealPanel delayIndex={2} className="col-span-12"><div data-dashboard-panel="trend"><InvoiceMonthlyTrend dashboard={dashboard} /></div></RevealPanel>
           <RevealPanel delayIndex={3} className="col-span-12"><div data-dashboard-panel="cost-usage"><InvoiceCostUsageGraph yearMonth={requestedMonth} /></div></RevealPanel>
           <RevealPanel delayIndex={4} className="col-span-12"><div data-dashboard-panel="table"><InvoiceServicesTable services={dashboard.serviceDetails} currency={dashboard.selected.currency} /></div></RevealPanel>

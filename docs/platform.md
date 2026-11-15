@@ -4,6 +4,8 @@ The v2 platform is a **repeatable, on-demand test environment**: an EKS cluster 
 
 Background and decisions: [`docs/superpowers/specs/2026-11-05-eks-plan-4-open-points.md`](superpowers/specs/2026-11-05-eks-plan-4-open-points.md).
 
+An always-on, Fargate-only variant runs the same app between test days: [v2 minimal](v2-minimal.md). **The two never exist together**: `bring-up.sh` refuses while the `cashight-v2-min` cluster exists, so tear it down first.
+
 Every command runs from the repository root. If you sign in with `aws login`, export the session for Terraform first:
 
 ```bash

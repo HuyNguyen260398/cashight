@@ -39,8 +39,9 @@ export interface ApiServerOptions {
   /** Per-request deadline; the request is answered 504 when it passes. */
   requestTimeoutMs?: number;
   /**
-   * This pod's Argo Rollouts pod-template hash, reported on /health so the
-   * canary smoke Job can prove it reached the new pods.
+   * This pod's pod-template hash (Argo Rollouts' in full v2, the Deployment's
+   * in v2 minimal), reported on /health so a smoke check can prove it reached
+   * the new pods.
    */
   revision?: string;
 }

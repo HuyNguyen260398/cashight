@@ -40,8 +40,9 @@ A personal Next.js 16 (App Router, React 19) web app that:
 | Terraform (from `terraform/`) | `terraform init` / `terraform plan` / `terraform apply` |
 | v2 test day: bring-up | `bash scripts/platform/bring-up.sh` — see [`docs/platform.md`](./docs/platform.md) |
 | v2 test day: teardown | `bash scripts/platform/teardown.sh "destroy cashight-v2"` |
-| Platform checks | `bash scripts/platform/check-deploy-paths.sh && bash scripts/platform/check-collector.sh && bash scripts/platform/check-cashight-manifests.sh` |
+| Platform checks | `bash scripts/platform/check-deploy-paths.sh && bash scripts/platform/check-collector.sh && bash scripts/platform/check-cashight-manifests.sh && bash scripts/platform/check-minimal-manifests.sh` |
 | v2 persistent resources | see [`docs/v2-resources.md`](./docs/v2-resources.md) |
+| v2 minimal: apply / deploy / teardown | `bash scripts/v2-minimal/apply.sh` · `v2-minimal-release.yaml` · `bash scripts/v2-minimal/teardown.sh "destroy cashight-v2-min"` — see [`docs/v2-minimal.md`](./docs/v2-minimal.md) |
 
 `pnpm` is pinned to `11.2.2` via `packageManager` in `package.json` so Amplify uses the same version — keep it in sync.
 

@@ -151,6 +151,38 @@ data "aws_iam_policy_document" "github_ci" {
     actions   = ["cognito-idp:DescribeUserPoolClient"]
     resources = [local.user_pool_arn]
   }
+
+  # v2 minimal (terraform/v2-minimal, docs/v2-minimal.md): aws eks
+  # update-kubeconfig on its cluster. Kubernetes access itself comes from the
+  # cluster's access entry (edit, cashight namespace only).
+  statement {
+    sid       = "EksDescribeMinimal"
+    effect    = "Allow"
+    actions   = ["eks:DescribeCluster"]
+    resources = ["arn:aws:eks:${var.region}:${local.account_id}:cluster/cashight-v2-min"]
+  }
+
+  # v2 minimal's release deploys the worker Lambdas' code, publishes a version
+  # and moves (or, on rollback, restores) the live alias. These two functions
+  # only; the bare ARN covers the function, :* its versions and aliases.
+  statement {
+    sid    = "DeployMinimalWorkers"
+    effect = "Allow"
+    actions = [
+      "lambda:UpdateFunctionCode",
+      "lambda:PublishVersion",
+      "lambda:GetFunction",
+      "lambda:GetFunctionConfiguration",
+      "lambda:GetAlias",
+      "lambda:UpdateAlias",
+    ]
+    resources = flatten([
+      for name in ["cashight-v2-parser-worker", "cashight-v2-invoice-parser-worker"] : [
+        "arn:aws:lambda:${var.region}:${local.account_id}:function:${name}",
+        "arn:aws:lambda:${var.region}:${local.account_id}:function:${name}:*",
+      ]
+    ])
+  }
 }
 
 resource "aws_iam_role_policy" "github_ci" {

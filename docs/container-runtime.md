@@ -10,11 +10,13 @@ containers. `pnpm build:servers` bundles four container entrypoints into
 |---|---|---|
 | `cashight-api` | `/app/api/index.js` (default) | `/uploads`, `/statements`, `/dashboard`, `/session/capabilities`, `/summaries` |
 | `cashight-aws-api` | `/app/aws-api/index.js` | `/aws/cost-explorer/*`, `/aws/invoices/*` |
+| `cashight-api` (v2 minimal) | `/app/api-all/index.js` | both route sets above, in one process; with `AI_SUMMARY_ENABLED=false`, `/summaries` and `/aws/invoices/summary` answer 404 ([v2-minimal.md](./v2-minimal.md)) |
 | `cashight-parser-worker` | `/app/parser-worker/index.js` | the statement parse queue |
 | `cashight-invoice-parser-worker` | `/app/invoice-parser-worker/index.js` | the invoice parse queue |
 
 An ingress must send `/aws/*` to `cashight-aws-api` and everything else to
-`cashight-api`. Each API answers 404 for the other's routes.
+`cashight-api`. Each API answers 404 for the other's routes. The merged
+`api-all` entrypoint needs no path split: a single `/` rule is enough.
 
 ## Probes (API workloads)
 
@@ -48,13 +50,14 @@ Workers expose no port. A worker that cannot make progress exits and is restarte
 | `RATE_LIMIT_BURST`, `RATE_LIMIT_PER_SECOND` | no | Defaults `50` and `100`, per pod |
 | `SHUTDOWN_DELAY_MS` | no | Default `5000`. Drain time after readiness fails. |
 | `SHUTDOWN_HARD_DEADLINE_MS` | no | Default `30000`, above `REQUEST_TIMEOUT_MS` so a request still within its deadline finishes. After the drain, how long in-flight requests may hold the pod; then every connection is closed and the process exits 1. Idle keep-alive connections are closed as soon as their request finishes. |
-| `POD_TEMPLATE_HASH` | no | Set by the Rollout from the `rollouts-pod-template-hash` label (Downward API) and reported on `/health`. Anything other than 1–16 lowercase letters or digits is ignored. |
+| `POD_TEMPLATE_HASH` | no | Set from the `rollouts-pod-template-hash` label (full v2 Rollout) or the `pod-template-hash` label (v2 minimal Deployment) through the Downward API, and reported on `/health`. Anything other than 1–16 lowercase letters or digits is ignored. |
 | `REQUEST_TIMEOUT_MS` | no | Default `29000` (API Gateway's integration limit). A request still running at the deadline answers `504 GATEWAY_TIMEOUT`; the handler's late result is dropped. |
 
 | Workload | Also requires |
 |---|---|
 | `cashight-api` | `TABLE_NAME`, `STATEMENTS_BUCKET`, `UPLOAD_BUCKET`, `GEMINI_PARAM` |
 | `cashight-aws-api` | `TABLE_NAME`, `STATEMENTS_BUCKET`, `UPLOAD_BUCKET`, `EXPORT_BUCKET`, `GEMINI_PARAM`; optional `GRANULAR_DATA_ENABLED` |
+| `api-all` (v2 minimal) | `TABLE_NAME`, `STATEMENTS_BUCKET`, `UPLOAD_BUCKET`, `EXPORT_BUCKET`, plus `GEMINI_PARAM` unless `AI_SUMMARY_ENABLED` is exactly `false`; optional `GRANULAR_DATA_ENABLED` |
 
 The variables in that table are checked at startup: a workload missing one
 exits 1 with `Missing required configuration: <NAME>` instead of failing every

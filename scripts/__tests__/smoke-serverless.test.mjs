@@ -242,3 +242,87 @@ describe('serverless AWS invoice smoke validation', () => {
     }
   });
 });
+
+describe('AI summary disabled checks', () => {
+  const SUMMARY_PATHS = ['/summaries', '/aws/invoices/summary'];
+
+  /** Runs the whole smoke script against a local stub of both hostnames. */
+  async function runSmoke({ summaryStatus, env, apiHost }) {
+    const { createServer } = await import('node:http');
+    const { execFile } = await import('node:child_process');
+    const seen = [];
+    const server = createServer((req, res) => {
+      seen.push(`${req.method} ${req.url}`);
+      seen.push(`host ${req.headers.host}`);
+      req.resume();
+      req.on('end', () => {
+        if (req.method === 'POST' && SUMMARY_PATHS.includes(req.url)) {
+          res.writeHead(summaryStatus, { 'Content-Type': 'application/json' });
+          res.end('{}');
+          return;
+        }
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end('{}');
+      });
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const base = `http://127.0.0.1:${server.address().port}`;
+    try {
+      const output = await new Promise((resolve) => {
+        execFile(
+          process.execPath,
+          ['scripts/smoke-serverless.mjs'],
+          {
+            env: {
+              PATH: process.env.PATH,
+              APP_URL: base,
+              API_URL: apiHost ? `http://${apiHost}:${server.address().port}` : base,
+              SMOKE_NATIVE_ACCESS_TOKEN: 'short-lived-native-token',
+              ...env,
+            },
+          },
+          (_error, stdout, stderr) => resolve(`${stdout}${stderr}`),
+        );
+      });
+      return { output, seen };
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  }
+
+  it('passes when both summary routes answer 404', async () => {
+    const { output, seen } = await runSmoke({
+      summaryStatus: 404,
+      env: { SMOKE_EXPECT_AI_SUMMARY_DISABLED: 'true' },
+    });
+    expect(output).toContain('✓ POST /summaries returns 404 (AI summary disabled)');
+    expect(output).toContain('✓ POST /aws/invoices/summary returns 404 (AI summary disabled)');
+    expect(seen).toContain('POST /summaries');
+    expect(seen).toContain('POST /aws/invoices/summary');
+  }, 30_000);
+
+  it('fails, naming the check, when a summary route still answers', async () => {
+    const { output } = await runSmoke({
+      summaryStatus: 200,
+      env: { SMOKE_EXPECT_AI_SUMMARY_DISABLED: 'true' },
+    });
+    expect(output).toContain('✗ POST /summaries returns 404 (AI summary disabled): Expected 404, got 200');
+    expect(output).toContain('✗ POST /aws/invoices/summary returns 404 (AI summary disabled)');
+  }, 30_000);
+
+  it('sends nothing to the summary routes without the flag', async () => {
+    const { output, seen } = await runSmoke({ summaryStatus: 404, env: {} });
+    expect(seen.filter((line) => SUMMARY_PATHS.some((p) => line.endsWith(p)))).toEqual([]);
+    expect(output).not.toContain('AI summary disabled');
+  }, 30_000);
+
+  it('reaches the API through SMOKE_API_CONNECT_TO while keeping its hostname', async () => {
+    const { output, seen } = await runSmoke({
+      summaryStatus: 404,
+      apiHost: 'api.cashight-v2.invalid',
+      env: { SMOKE_EXPECT_AI_SUMMARY_DISABLED: 'true', SMOKE_API_CONNECT_TO: '127.0.0.1' },
+    });
+    expect(output).toContain('✓ POST /summaries returns 404 (AI summary disabled)');
+    expect(seen.some((line) => line.startsWith('host api.cashight-v2.invalid:'))).toBe(true);
+  }, 30_000);
+});

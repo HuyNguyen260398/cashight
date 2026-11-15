@@ -110,3 +110,49 @@ run "ci_role_trusts_only_cashight_v2" {
     error_message = "trust is limited to the cashight-v2 branch"
   }
 }
+
+# v2 minimal (terraform/v2-minimal): CI describes its cluster and deploys its
+# two worker Lambdas. Asserted on the policy document's arguments, which the
+# mock leaves intact.
+run "ci_role_deploys_v2_minimal" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for sid in ["EksDescribeMinimal", "DeployMinimalWorkers"] :
+      contains([for s in data.aws_iam_policy_document.github_ci.statement : s.sid], sid)
+    ])
+    error_message = "EksDescribeMinimal and DeployMinimalWorkers statements"
+  }
+
+  assert {
+    condition = one([
+      for s in data.aws_iam_policy_document.github_ci.statement : s.resources if s.sid == "EksDescribeMinimal"
+      ]) == toset(["arn:aws:eks:ap-southeast-1:111122223333:cluster/cashight-v2-min"]) && one([
+      for s in data.aws_iam_policy_document.github_ci.statement : s.actions if s.sid == "EksDescribeMinimal"
+    ]) == toset(["eks:DescribeCluster"])
+    error_message = "describe only, on cashight-v2-min only"
+  }
+
+  assert {
+    condition = one([
+      for s in data.aws_iam_policy_document.github_ci.statement : s.resources if s.sid == "DeployMinimalWorkers"
+      ]) == toset([
+      "arn:aws:lambda:ap-southeast-1:111122223333:function:cashight-v2-parser-worker",
+      "arn:aws:lambda:ap-southeast-1:111122223333:function:cashight-v2-parser-worker:*",
+      "arn:aws:lambda:ap-southeast-1:111122223333:function:cashight-v2-invoice-parser-worker",
+      "arn:aws:lambda:ap-southeast-1:111122223333:function:cashight-v2-invoice-parser-worker:*",
+    ])
+    error_message = "worker deploys are limited to the two v2-minimal functions"
+  }
+
+  assert {
+    condition = one([
+      for s in data.aws_iam_policy_document.github_ci.statement : s.actions if s.sid == "DeployMinimalWorkers"
+      ]) == toset([
+      "lambda:UpdateFunctionCode", "lambda:PublishVersion", "lambda:GetFunction",
+      "lambda:GetFunctionConfiguration", "lambda:GetAlias", "lambda:UpdateAlias",
+    ])
+    error_message = "worker deploy actions"
+  }
+}

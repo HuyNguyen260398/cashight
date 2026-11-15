@@ -10,9 +10,11 @@ on:
     paths:
       - 'terraform/platform/**'
       - 'terraform/platform-base/**'
+      - 'terraform/v2-minimal/**'
       - 'terraform/modules/platform_*/**'
       - 'deploy/**'
       - 'scripts/platform/**'
+      - 'scripts/v2-minimal/**'
       - '.yamllint.yml'
       - '.github/workflows/platform-ci.yaml'
 
@@ -30,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        root: [platform-base, platform]
+        root: [platform-base, platform, v2-minimal]
     defaults:
       run:
         working-directory: terraform/${{ matrix.root }}
@@ -74,6 +76,13 @@ jobs:
           pip install --disable-pip-version-check checkov==3.2.471
           checkov -d . --config-file .checkov.yml
           checkov -d ../modules/platform_cluster --config-file .checkov.yml
+
+      - name: Checkov (v2-minimal)
+        if: matrix.root == 'v2-minimal'
+        run: |
+          pip install --disable-pip-version-check checkov==3.2.471
+          checkov -d . --config-file .checkov.yml
+          checkov -d ../modules/platform_cluster_fargate --config-file .checkov.yml
 
       # The platform publishes no SSM identifiers for other repositories
       # (docs/superpowers/specs/2026-11-05-eks-plan-4-open-points.md, 1c).
@@ -125,6 +134,11 @@ jobs:
       # pins, quota at max scale, NetworkPolicies, grace periods.
       - name: Cashight manifests
         run: bash scripts/platform/check-cashight-manifests.sh
+
+      # v2 minimal's self-contained overlay: kinds, Fargate sizing, rollout
+      # shape, AI-summary-off config (docs/v2-minimal.md).
+      - name: v2-minimal manifests
+        run: bash scripts/platform/check-minimal-manifests.sh
 
       - name: yamllint
         run: yamllint -c .yamllint.yml deploy
@@ -204,4 +218,4 @@ jobs:
           sudo install /tmp/shellcheck-v0.11.0/shellcheck /usr/local/bin/shellcheck
 
       - name: shellcheck
-        run: shellcheck scripts/platform/*.sh
+        run: shellcheck scripts/platform/*.sh scripts/v2-minimal/*.sh
