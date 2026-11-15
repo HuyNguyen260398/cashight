@@ -16,7 +16,7 @@
 - **The full ephemeral v2 is untouched in behaviour.** Do not edit `terraform/platform`, `terraform/modules/platform_cluster`, `deploy/platform` or `deploy/cashight/{base,overlays/v2}`. `terraform -chdir=terraform/platform test` must pass unchanged. Allowed edits there: `scripts/platform/bring-up.sh` (mutual-exclusion guard and the shared token script) and `.github/workflows/v2-release.yaml` (`V2_TARGET` gate).
 - **Branching:** branch from `cashight-v2`, PR into `cashight-v2`.
 - **Roots are applied from the workstation only.** CI runs `fmt`, `validate`, `test`, TFLint and Checkov, never `plan` or `apply`. State: bucket `cashight-tfstate`, key `cashight/v2-minimal/terraform.tfstate`, KMS `alias/cashight-tfstate`, `use_lockfile = true`.
-- **Region `ap-southeast-1`.** All images and Lambdas are arm64.
+- **Region `ap-southeast-1`.** Lambdas are arm64; the API image is amd64 because EKS on Fargate has no Graviton (corrected 2026-11-15).
 - **Names:** cluster `cashight-v2-min`. Namespace `cashight`. Deployment, ServiceAccount and Service `cashight-api`. Ingress `cashight` with ALB group `cashight`. Log group `/cashight/v2-min/app`. Lambdas `cashight-v2-parser-worker` and `cashight-v2-invoice-parser-worker`, each with alias `live`. IAM roles are prefixed `cashight-v2-min-`.
 - **Tags:** `Environment = v2-minimal`, `Project = cashight`, `ManagedBy = Terraform`, set through the AWS provider's `default_tags`.
 - **The v2 CI role trusts exactly `repo:HuyNguyen260398/cashight:ref:refs/heads/cashight-v2`.** No job that assumes it may set `environment:`.
@@ -349,7 +349,7 @@
 
 This task changes no code unless a step fails. Record every result in `docs/v2-minimal.md`, in an "Acceptance record (date)" section.
 
-- [ ] **Step 1: Prices.** Run `aws pricing get-products --region us-east-1` for EKS (`AmazonEKS`, standard support), Fargate arm64 vCPU-hour and GB-hour, NAT gateway hour and GB, ALB hour and LCU, and public IPv4 hour, all filtered to `location = Asia Pacific (Singapore)`. Recompute the spec §8 table. Expected: a total of ≈ $165–175. If it is over $185, stop and report before applying.
+- [ ] **Step 1: Prices.** Run `aws pricing get-products --region us-east-1` for EKS (`AmazonEKS`, standard support), Fargate x86 vCPU-hour and GB-hour, NAT gateway hour and GB, ALB hour and LCU, and public IPv4 hour, all filtered to `location = Asia Pacific (Singapore)`. Recompute the spec §8 table. Expected: a total of ≈ $187–193 at x86 Fargate prices (originally ≈ $165–175, assuming arm64). If it is over $200, stop and report before applying.
 - [ ] **Step 2: Apply.** With the full cluster down (`aws eks describe-cluster --name cashight-v2` → `ResourceNotFoundException`), run `bash scripts/v2-minimal/apply.sh`. Then:
   - `kubectl get pods -A -o wide`. Expected: `coredns` ×1 and `aws-load-balancer-controller` ×1 Running on `fargate-*` nodes.
   - Check DNS from a debug pod in `cashight` (`kubectl run -n cashight dns --rm -it --image=busybox:1.36 --restart=Never -- nslookup sts.ap-southeast-1.amazonaws.com`). Expected: it resolves. If pods cannot get IPs or DNS, add the `vpc-cni`/`kube-proxy` add-ons in Task 4 and record why.

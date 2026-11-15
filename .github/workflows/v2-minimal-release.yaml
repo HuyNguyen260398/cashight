@@ -2,7 +2,7 @@ name: v2 minimal Release
 
 # Releases v2 minimal (docs/v2-minimal.md) from the cashight-v2 branch. There
 # is no Argo CD: this workflow pushes the release and proves it worked.
-#   image  - builds the arm64 backend image and resolves its digest.
+#   image  - builds the amd64 backend image and resolves its digest.
 #   deploy - deploys both worker Lambdas, applies the overlay pinned to the
 #            digest, then gates on rollout status, the /health revision and
 #            the smoke suite. On any failure it rolls the Deployment and the
@@ -58,16 +58,20 @@ env:
 
 jobs:
   image:
-    name: Backend image (arm64)
+    name: Backend image (amd64)
     if: vars.V2_TARGET == 'minimal'
-    # Fargate runs the arm64 image; build natively instead of under QEMU.
-    runs-on: ubuntu-24.04-arm
+    # EKS on Fargate runs x86_64 only (no Graviton; that is ECS-only), so this
+    # image is amd64, unlike the full platform's arm64 one. Build natively.
+    runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
     env:
       REPOSITORY: ${{ vars.V2_ECR_REPOSITORY_URL }}
       SHA: ${{ github.sha }}
+      # Suffixed: v2-release.yaml pushes an arm64 image as the bare <sha>, and
+      # tags are immutable, so a shared tag could hand this job the wrong arch.
+      TAG: ${{ github.sha }}-amd64
     outputs:
       digest: ${{ steps.digest.outputs.digest }}
 
@@ -89,11 +93,11 @@ jobs:
         run: |
           set -euo pipefail
           if aws ecr describe-images --repository-name "${REPOSITORY#*/}" \
-            --image-ids imageTag="${SHA}" >/dev/null 2>&1; then
-            echo "cashight-backend:${SHA} already exists; reusing it"
+            --image-ids imageTag="${TAG}" >/dev/null 2>&1; then
+            echo "cashight-backend:${TAG} already exists; reusing it"
           else
-            docker build --platform linux/arm64 -t "${REPOSITORY}:${SHA}" .
-            docker push "${REPOSITORY}:${SHA}"
+            docker build --platform linux/amd64 -t "${REPOSITORY}:${TAG}" .
+            docker push "${REPOSITORY}:${TAG}"
           fi
 
       # No pin commit: the digest is applied in the runner and recorded in the
@@ -103,7 +107,7 @@ jobs:
         run: |
           set -euo pipefail
           digest=$(aws ecr describe-images --repository-name "${REPOSITORY#*/}" \
-            --image-ids imageTag="${SHA}" --query 'imageDetails[0].imageDigest' --output text)
+            --image-ids imageTag="${TAG}" --query 'imageDetails[0].imageDigest' --output text)
           echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
           echo "cashight-backend@${digest} (commit ${SHA})" >> "${GITHUB_STEP_SUMMARY}"
 

@@ -38,7 +38,8 @@ Decided with the user:
   serve the app continuously: uploads, parsing (TPBank and VIB), dashboard,
   statements and the AWS cost/invoice views. The AI summaries are the only
   exception.
-- Steady-state cost of roughly **$165–175/month**, verified against real prices
+- Steady-state cost of roughly **$187–193/month** (originally $165–175, before
+  the x86 correction), verified against real prices
   (§8).
 - A GitHub Actions deploy that waits for rollout health, runs the existing smoke
   suite, and rolls back automatically on failure.
@@ -66,7 +67,9 @@ Decided with the user:
 
 ## 3. Constraints
 
-- Region `ap-southeast-1`. Graviton/arm64 image, which Fargate supports.
+- Region `ap-southeast-1`. **x86_64 (amd64) image**: EKS on Fargate does not
+  support Graviton (that is ECS-only). Corrected 2026-11-15; the original text
+  assumed arm64. The worker Lambdas stay arm64.
 - EKS Fargate pods must run in **private subnets** and cannot get public IPs.
   Outbound access to ECR, STS, SQS, SSM, CloudWatch Logs, Cognito's public JWKS
   and Cost Explorer / invoice APIs still needs a path out. One NAT gateway is
@@ -289,7 +292,8 @@ Trigger: push to `cashight-v2` touching backend, frontend, the minimal overlay,
 or the workflow itself, plus `workflow_dispatch`. Jobs **must not** set
 `environment:` (the v2 CI role trusts only `ref:refs/heads/cashight-v2`). Steps:
 
-1. Build and push the arm64 image (reuse the v2 Release build). Deploy **by
+1. Build and push the amd64 image, tagged `<sha>-amd64` so it never collides
+   with the full platform's arm64 `<sha>`. Deploy **by
    digest**.
 2. Build the Lambda artifacts and update both worker functions, publishing a
    version so a rollback can point at the previous one.
@@ -357,12 +361,12 @@ Estimate, in USD/month, at Singapore list prices. **To be verified**:
 | ALB, 2 public IPv4, low LCU | 27 |
 | Fargate: `cashight-api` (0.25 vCPU / 1 GB), LBC and CoreDNS (0.25 / 0.5 each) | 25–30 |
 | Lambda workers, SQS, DynamoDB, S3, CloudFront, ECR, CloudWatch Logs | 2–5 |
-| **Total** | **≈ 165–175** |
+| **Total** | **≈ 165–175** (arm64; ≈ 187–193 at x86 Fargate prices, see `docs/v2-minimal.md` §10) |
 
 Verification, part of the acceptance criteria:
 
 - Before apply: recompute the table from the AWS Price List API for
-  `ap-southeast-1` (EKS, Fargate arm64, NAT, ALB, public IPv4) and record it in
+  `ap-southeast-1` (EKS, Fargate x86, NAT, ALB, public IPv4) and record it in
   `docs/v2-minimal.md`.
 - About 7 days after go-live: Cost Explorer grouped by the `Environment`
   tag (and by service for untagged items such as public IPv4). Record the

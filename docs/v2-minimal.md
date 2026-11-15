@@ -71,7 +71,7 @@ Re-running `apply.sh` is always safe.
 
 Every push to `cashight-v2` that touches the app, the overlay or the workflow (and `workflow_dispatch`) runs `v2-minimal-release.yaml`, **only when `V2_TARGET=minimal`**:
 
-1. **image**: build and push `cashight-backend:<sha>` (arm64), resolve the digest, write it to the job summary. No pin commit.
+1. **image**: build and push `cashight-backend:<sha>-amd64` (x86_64: EKS on Fargate has no Graviton), resolve the digest, write it to the job summary. No pin commit.
 2. **deploy**:
    1. `pnpm build:lambdas`; record the rollback state: the Deployment's current revision (`record-revision.sh`) and both `live` alias versions.
    2. `deploy-workers.sh`: for each worker, upload the zip, publish a version, wait, move `live`.
@@ -134,24 +134,26 @@ The EKS public endpoint is open to **`0.0.0.0/0`**. GitHub-hosted runners have n
 
 ## 10. Cost
 
-Singapore, USD per month. "Estimate" is the spec's figure; the other two columns are filled in at go-live (Price List API) and a week later (Cost Explorer).
+Singapore, USD per month (730 h). "Estimate" is the spec's original figure, which assumed arm64 Fargate; "List price" is recomputed from the Price List API at x86 Fargate rates; the last column is filled in a week after go-live (Cost Explorer).
 
-| Item | Estimate | List price (date) | Actual run rate |
+| Item | Estimate | List price (2026-11-15) | Actual run rate |
 |---|---:|---:|---:|
-| EKS control plane (standard support) | 73 | | |
-| NAT gateway, 1 AZ, plus its public IPv4 and low data | 47 | | |
-| ALB, 2 public IPv4, low LCU | 27 | | |
-| Fargate: `cashight-api` (0.25 vCPU / 1 GB), LBC and CoreDNS (0.25 / 0.5 each) | 25–30 | | |
-| Lambda workers, SQS, DynamoDB, S3, CloudFront, ECR, CloudWatch Logs | 2–5 | | |
-| **Total** | **≈ 165–175** | | |
+| EKS control plane (standard support), $0.10/h | 73 | 73.00 | |
+| NAT gateway, 1 AZ ($0.059/h, $0.059/GB), plus its public IPv4 ($0.005/h) and low data | 47 | ≈ 47.7 | |
+| ALB ($0.0252/h), 2 public IPv4, 0.5–1 LCU ($0.008/LCU-h) | 27 | ≈ 28.6–31.5 | |
+| Fargate x86 ($0.05056/vCPU-h, $0.00553/GB-h): `cashight-api` (0.25 vCPU / 1 GB), LBC and CoreDNS (0.25 / 0.5 each) | 25–30 | 35.75 | |
+| Lambda workers, SQS, DynamoDB, S3, CloudFront, ECR, CloudWatch Logs | 2–5 | 2–5 | |
+| **Total** | **≈ 165–175** | **≈ 187–193** | |
 
-Not everything is visible to the tag budget (§11): EKS, the NAT gateway, the Lambdas, the log groups and (through the controller's `defaultTags`) the ALB carry `Environment = v2-minimal`, but **Fargate pod compute (≈ $25–30) is not attributed to tags** unless EKS split cost allocation is enabled. Read it from Cost Explorer by service (Fargate) instead.
+**EKS on Fargate runs x86_64 only** (Graviton on Fargate is ECS-only; the Price List has no `AmazonEKS` ARM Fargate usage type). The spec's arm64 assumption was wrong, so the API image is amd64 and Fargate costs ≈ $7 more than estimated. The go-live stop line was raised from $185 to $200 accordingly. The worker Lambdas stay arm64.
+
+Not everything is visible to the tag budget (§11): EKS, the NAT gateway, the Lambdas, the log groups and (through the controller's `defaultTags`) the ALB carry `Environment = v2-minimal`, but **Fargate pod compute (≈ $36) and public IPv4 (≈ $11) are not attributed to tags** unless EKS split cost allocation is enabled. Read it from Cost Explorer by service (Fargate) instead.
 
 Extended support would add ≈ $365/month, which is why the root only accepts versions in standard support (`terraform/v2-minimal/variables.tf`; refresh the list before an upgrade) and sets `upgrade_policy = STANDARD`.
 
 ## 11. Enabling the tag budget
 
-`terraform/platform-base` holds a $200/month budget filtered on `Environment = v2-minimal` (ACTUAL 80 % and 100 % alerts to the budget emails), off by default. A tag only becomes a usable filter about a day after its first billed usage, so after go-live:
+`terraform/platform-base` holds a $200/month budget filtered on `Environment = v2-minimal` (ACTUAL 80 % and 100 % alerts to the budget emails), off by default. It stays at $200 although the full run rate is ≈ $190: the tag filter misses Fargate and public IPv4 (§10), so the spend it sees is ≈ $140–146, under the $160 alert. A tag only becomes a usable filter about a day after its first billed usage, so after go-live:
 
 1. Wait at least a day after the first apply.
 2. Set `enable_v2_minimal_budget = true` in `terraform/platform-base/terraform.tfvars`.
