@@ -141,9 +141,9 @@ Singapore, USD per month (730 h). "Estimate" is the spec's original figure, whic
 | EKS control plane (standard support), $0.10/h | 73 | 73.00 | |
 | NAT gateway, 1 AZ ($0.059/h, $0.059/GB), plus its public IPv4 ($0.005/h) and low data | 47 | ≈ 47.7 | |
 | ALB ($0.0252/h), 2 public IPv4, 0.5–1 LCU ($0.008/LCU-h) | 27 | ≈ 28.6–31.5 | |
-| Fargate x86 ($0.05056/vCPU-h, $0.00553/GB-h): `cashight-api` (0.25 vCPU / 1 GB), LBC and CoreDNS (0.25 / 0.5 each) | 25–30 | 35.75 | |
+| Fargate x86 ($0.05056/vCPU-h, $0.00553/GB-h): `cashight-api` (0.25 vCPU / 0.5 GB since go-live; 1 GB before), LBC and CoreDNS (0.25 / 0.5 each) | 25–30 | 33.74 | |
 | Lambda workers, SQS, DynamoDB, S3, CloudFront, ECR, CloudWatch Logs | 2–5 | 2–5 | |
-| **Total** | **≈ 165–175** | **≈ 187–193** | |
+| **Total** | **≈ 165–175** | **≈ 185–191** | |
 
 **EKS on Fargate runs x86_64 only** (Graviton on Fargate is ECS-only; the Price List has no `AmazonEKS` ARM Fargate usage type). The spec's arm64 assumption was wrong, so the API image is amd64 and Fargate costs ≈ $7 more than estimated. The go-live stop line was raised from $185 to $200 accordingly. The worker Lambdas stay arm64.
 

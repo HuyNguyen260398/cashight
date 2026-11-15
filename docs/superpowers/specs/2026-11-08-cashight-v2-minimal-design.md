@@ -190,7 +190,8 @@ Contents:
 - **`Deployment cashight-api`** (not a Rollout), 1 replica, rolling update
   `maxSurge: 1, maxUnavailable: 0`, `revisionHistoryLimit: 3`. It runs the
   merged entrypoint (§5.1).
-  - Requests: **0.25 vCPU / 768 MiB**, memory limit 768 MiB. With Fargate's
+  - Requests: **0.25 vCPU / 768 MiB**, memory limit 768 MiB (lowered to
+    256 MiB at go-live, 2026-11-15, after a measured 122 MiB peak RSS). With Fargate's
     256 MiB, that is 1 GB, which fits the larger of the two current APIs
     (`aws-api` requests 512 MiB). The builder should check real memory use on
     the first deploy and may lower it to fit 0.5 GB.

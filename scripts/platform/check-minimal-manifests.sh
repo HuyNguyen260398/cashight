@@ -59,10 +59,10 @@ check "pod template carries the cashight.nghuy.link/app-version annotation" \
   "($deployment.spec.template.metadata.annotations[\"cashight.nghuy.link/app-version\"] // \"\") != \"\""
 check "container runs the merged entrypoint /app/api-all/index.js" \
   "$app.args == [\"/app/api-all/index.js\"]"
-check "requests are cpu 250m, memory 768Mi" \
-  "$app.resources.requests == {\"cpu\": \"250m\", \"memory\": \"768Mi\"}"
-check "limits are cpu 250m, memory 768Mi" \
-  "$app.resources.limits == {\"cpu\": \"250m\", \"memory\": \"768Mi\"}"
+check "requests are cpu 250m, memory 256Mi" \
+  "$app.resources.requests == {\"cpu\": \"250m\", \"memory\": \"256Mi\"}"
+check "limits are cpu 250m, memory 256Mi" \
+  "$app.resources.limits == {\"cpu\": \"250m\", \"memory\": \"256Mi\"}"
 check "liveness probe is /healthz" "$app.livenessProbe.httpGet.path == \"/healthz\""
 check "readiness probe is /readyz" "$app.readinessProbe.httpGet.path == \"/readyz\""
 check "POD_TEMPLATE_HASH comes from the pod-template-hash label" \

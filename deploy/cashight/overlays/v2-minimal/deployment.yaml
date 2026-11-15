@@ -69,15 +69,15 @@ spec:
             periodSeconds: 10
             failureThreshold: 3
           # Fargate bills the requests, rounded up after adding 256 MiB for
-          # the kubelet: 0.25 vCPU / 1 GB. Measured use may let this drop to
-          # 256Mi (0.5 GB); see docs/v2-minimal.md.
+          # the kubelet: 0.25 vCPU / 0.5 GB. Peak RSS at go-live was 122 MiB
+          # (PDFs go straight to S3 and parse in Lambda); see docs/v2-minimal.md.
           resources:
             requests:
               cpu: 250m
-              memory: 768Mi
+              memory: 256Mi
             limits:
               cpu: 250m
-              memory: 768Mi
+              memory: 256Mi
           securityContext:
             runAsNonRoot: true
             allowPrivilegeEscalation: false
