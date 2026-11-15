@@ -147,7 +147,7 @@ Singapore, USD per month (730 h). "Estimate" is the spec's original figure, whic
 
 **EKS on Fargate runs x86_64 only** (Graviton on Fargate is ECS-only; the Price List has no `AmazonEKS` ARM Fargate usage type). The spec's arm64 assumption was wrong, so the API image is amd64 and Fargate costs ≈ $7 more than estimated. The go-live stop line was raised from $185 to $200 accordingly. The worker Lambdas stay arm64.
 
-Not everything is visible to the tag budget (§11): EKS, the NAT gateway, the Lambdas, the log groups and (through the controller's `defaultTags`) the ALB carry `Environment = v2-minimal`, but **Fargate pod compute (≈ $36) and public IPv4 (≈ $11) are not attributed to tags** unless EKS split cost allocation is enabled. Read it from Cost Explorer by service (Fargate) instead.
+Not everything is visible to the tag budget (§11): EKS, the NAT gateway, the Lambdas, the log groups and (through the controller's `defaultTags`) the ALB carry `Environment = v2-minimal`, but **Fargate pod compute (≈ $34) and public IPv4 (≈ $11) are not attributed to tags** unless EKS split cost allocation is enabled. Read it from Cost Explorer by service (Fargate) instead.
 
 Extended support would add ≈ $365/month, which is why the root only accepts versions in standard support (`terraform/v2-minimal/variables.tf`; refresh the list before an upgrade) and sets `upgrade_policy = STANDARD`.
 
@@ -158,3 +158,26 @@ Extended support would add ≈ $365/month, which is why the root only accepts ve
 1. Wait at least a day after the first apply.
 2. Set `enable_v2_minimal_budget = true` in `terraform/platform-base/terraform.tfvars`.
 3. `terraform -chdir=terraform/platform-base apply`. This also activates `Environment` as a cost allocation tag.
+
+## 12. Acceptance record (2026-11-15)
+
+Go-live from the workstation, following plan Task 11. All steps passed except the ones marked open.
+
+| Step | Result |
+|---|---|
+| 1. Prices | Price List API, Singapore: ≈ $187–193/month at x86 Fargate prices (§10). **Found that EKS on Fargate has no Graviton**; the API image was switched to amd64 (`71f7083`) and the stop line raised to $200 before applying. |
+| 2. Apply | `apply.sh`: 45 + 19 resources. `coredns` ×1 and `aws-load-balancer-controller` ×1 Running on `fargate-*` nodes. DNS from a `cashight` pod resolves `sts.ap-southeast-1.amazonaws.com`, so no `vpc-cni`/`kube-proxy` add-ons were needed. Kubernetes 1.35, `upgradePolicy` `STANDARD`. |
+| 3. First deploy | Merge of PR #158 released through the ALB before DNS existed (run `43673542828`, green). Second `apply.sh` added the `api.cashight-v2.nghuy.link` A/AAAA records. Exactly three pods. `/health` → `ok`; `POST /api/summarize` → 404. |
+| 3. Memory | `cashight-api` peak RSS (VmHWM) 122 MiB, cgroup max usage 80 MiB, after both uploads and dashboard loads. Request and limit lowered from 768Mi to 256Mi (`5da91c2`, run `43677502613`); Fargate now provisions 0.25 vCPU / 0.5 GB. |
+| 4. Rollback | `c7466c0` made `isReady` return false (run `43674783158`): `rollout status` timed out, `rollback.sh` undid the Deployment to the recorded revision and pointed both `live` aliases back at version 2, then failed the job. `/health` kept serving `76db7989d4` throughout. The revert `230b03d` released green (run `43675422835`; aliases at version 4). |
+| 5. Parsing | Uploaded both samples in the SPA. TPBank: card `9674`, `statementBalance 37978402`, `totalSpend 26986712`, `totalCashback 519020`, 41 transactions (read from the stored JSON). VIB: card `4550`, 2026-07-25, `statementBalance 5591567`, `totalInstallments 5581667`, fees 9900, spend 0, 3 transactions. Both ran in `cashight-v2-parser-worker` with no errors. No AI summary in the dashboard. |
+| 5. DLQs | **One message each, not from go-live**: the `s3:TestEvent` S3 sent on 2026-11-08 when the upload bucket notification was created. The uploads added none. They expire around 2026-11-22 (14-day retention). |
+| 6. Mutual exclusion | `bring-up.sh` refused: `cashight-v2-min exists; run scripts/v2-minimal/teardown.sh first` (exit 1). |
+| 7. Logs and Grafana | `/cashight/v2-min/app` holds only `fargate-*` streams from `cashight` pods. Grafana applied with `api_live=true collector_live=false` (2 changed). **Open:** confirm the uptime check is green in the Grafana UI. |
+| 8. Cost Explorer | **Open:** on or after 2026-11-22, record the run rate in §10, then enable the tag budget (§11). |
+
+Observed, not blocking:
+
+- The parser worker logs a pdf.js warning, `Cannot access the require function`, on each invocation. Parsing is unaffected.
+- The workers send S3's `s3:TestEvent` to the DLQ after three attempts instead of ignoring it.
+
