@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowUp } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import Button from '@cloudscape-design/components/button';
 
 export function ScrollToTop() {
   const [visible, setVisible] = useState(false);
@@ -17,13 +16,13 @@ export function ScrollToTop() {
   if (!visible) return null;
 
   return (
-    <Button
-      size="icon"
-      aria-label="Scroll to top"
-      onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-      className="fixed bottom-6 right-6 z-50 rounded-full shadow-lg"
-    >
-      <ArrowUp className="h-5 w-5" />
-    </Button>
+    <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 1001 }}>
+      <Button
+        variant="primary"
+        iconName="arrow-up"
+        ariaLabel="Scroll to top"
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+      />
+    </div>
   );
 }

@@ -1,30 +1,37 @@
 import type { Metadata } from "next";
-import localFont from "next/font/local";
+import {
+  colorBackgroundLayoutMain,
+  colorTextBodyDefault,
+  fontFamilyBase,
+  fontSizeBodyM,
+  lineHeightBodyM,
+} from "@cloudscape-design/design-tokens";
 import { AuthProvider } from "@/frontend/auth/auth-provider";
 import { Nav } from "./components/nav";
 import { ScrollToTop } from "./components/scroll-to-top";
 import { CloudscapeProvider } from "./components/console/cloudscape-provider";
 import { VisualSettingsScript } from "./components/console/visual-settings-script";
+// Cloudscape's global styles bundle Open Sans locally, so the static export
+// has no web-font network dependency.
 import "@cloudscape-design/global-styles/index.css";
 import "./globals.css";
-
-// Use locally bundled variable fonts (geist npm package) so the static export
-// build has no Google Fonts network dependency.
-const geistSans = localFont({
-  src: "../node_modules/geist/dist/fonts/geist-sans/Geist-Variable.woff2",
-  variable: "--font-geist-sans",
-  weight: "100 900",
-});
-
-const geistMono = localFont({
-  src: "../node_modules/geist/dist/fonts/geist-mono/GeistMono-Variable.woff2",
-  variable: "--font-geist-mono",
-  weight: "100 900",
-});
 
 export const metadata: Metadata = {
   title: "Cashight",
   description: "Cashight — parse, categorize, and track spending from your credit card statements.",
+};
+
+/**
+ * Cloudscape themes its own components but not <body>. Tokens resolve per
+ * light/dark mode, so pages without the console shell (sign-in) follow too.
+ */
+const bodyStyle = {
+  minHeight: "100dvh",
+  background: colorBackgroundLayoutMain,
+  color: colorTextBodyDefault,
+  fontFamily: fontFamilyBase,
+  fontSize: fontSizeBodyM,
+  lineHeight: lineHeightBodyM,
 };
 
 export default function RootLayout({
@@ -33,14 +40,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
+    <html lang="en" suppressHydrationWarning>
       {/* suppressHydrationWarning: VisualSettingsScript adds Cloudscape's
           dark/compact classes to <body> before React hydrates. */}
-      <body className="min-h-dvh bg-background text-foreground" suppressHydrationWarning>
+      <body style={bodyStyle} suppressHydrationWarning>
         <VisualSettingsScript />
         <CloudscapeProvider>
           <AuthProvider>

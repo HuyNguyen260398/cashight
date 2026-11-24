@@ -23,13 +23,10 @@
 | `@aws-sdk/client-s3` | ^3.1055.0 | Statement persistence to S3 | `package.json:16`, `lib/storage.ts` |
 | `@google/genai` | ^2.6.0 | Gemini 2.5 Flash streaming summaries | `package.json:17`, `lib/gemini.ts` |
 | `zod` | ^4.4.3 | Boundary validation of parser output and S3 reads | `package.json:35`, `lib/schemas.ts` |
-| `recharts` | ^3.8.1 | Dashboard charts (pie, bar, trend, area) | `package.json:31`, `app/components/*-chart.tsx` |
-| `radix-ui` | ^1.4.3 | Headless UI primitives behind shadcn/ui components | `package.json:27`, `components/ui/` |
-| `react-dropzone` | ^15.0.0 | Upload drag-and-drop | `package.json:30`, `app/components/upload-dropzone.tsx` |
+| `@cloudscape-design/components` | ^3 | All UI: AWS-console layout, tables, forms, alerts, modals, file upload | `package.json`, `app/components/console/` |
+| `@cloudscape-design/global-styles` / `design-tokens` / `collection-hooks` | various | Base styles + Open Sans, light/dark/compact modes, design tokens, table sorting/pagination | `app/layout.tsx`, `app/components/console/visual-settings.ts` |
+| `@cloudscape-design/chart-components` + `highcharts` | ^1 / ^12 (pinned to the peer range) | Charts (donut, bar, line, area); Highcharts loaded lazily | `app/components/charts/` |
 | `date-fns` | ^4.3.0 | Date math (`getDaysInMonth`) in aggregations | `package.json:21`, `lib/aggregations.ts:9` |
-| `next-themes` | ^0.4.6 | Dark-mode toggle | `package.json:24`, `app/components/theme-provider.tsx` |
-| `sonner` | ^2.0.7 | Toast notifications | `package.json:32` |
-| `lucide-react` / `clsx` / `tailwind-merge` / `class-variance-authority` / `tw-animate-css` | various | Icons + Tailwind class composition | `package.json` |
 
 ### 3) Development Toolchain
 
@@ -38,7 +35,6 @@
 | `vitest` 4.1.7 | Unit test runner | `package.json:48`, `vitest.config.ts` |
 | `eslint` 9 + `eslint-config-next` | Lint | `package.json:43-44`, `eslint.config.mjs` |
 | `typescript` 5 | Type checking | `package.json:47`, `tsconfig.json` |
-| `tailwindcss` 4 + `@tailwindcss/postcss` | Styling | `package.json:45-46`, `postcss.config.mjs` |
 | `tsx` 4.22.3 | Run TS scripts (`scripts/*.ts`) | `package.json:46`, `scripts/test-parser.ts` |
 | Terraform (~> 5.0 AWS provider, TF >= 1.10) | Provision S3, Cognito, Amplify, IAM | `terraform/main.tf` |
 

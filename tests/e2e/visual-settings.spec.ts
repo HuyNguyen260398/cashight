@@ -39,4 +39,17 @@ test.describe('visual settings', () => {
     await page.getByRole('menuitemcheckbox', { name: 'Compact' }).click();
     await expect.poll(() => page.evaluate(() => document.body.classList.contains('awsui-compact-mode'))).toBe(true);
   });
+
+  test('pages without the console shell follow dark mode too', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('cashight.visual-settings', JSON.stringify({ mode: 'dark', density: 'comfortable' }));
+    });
+    await page.goto('/signin/');
+    await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible();
+    const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    expect(background).not.toBe('rgb(255, 255, 255)');
+    expect(background).not.toBe('rgba(0, 0, 0, 0)');
+    const font = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
+    expect(font).toContain('Open Sans');
+  });
 });
