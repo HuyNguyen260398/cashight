@@ -23,17 +23,17 @@ function memoryStorage(): Storage {
 vi.stubGlobal('localStorage', memoryStorage());
 
 function runScript(stored: string | null, prefersDark = false) {
-  const html = document.documentElement;
-  html.className = '';
+  const body = document.body;
+  body.className = '';
   localStorage.clear();
   if (stored !== null) localStorage.setItem(VISUAL_SETTINGS_KEY, stored);
   window.matchMedia = vi.fn(() => ({ matches: prefersDark })) as unknown as typeof window.matchMedia;
   new Function(VISUAL_SETTINGS_SCRIPT)();
-  return html.classList;
+  return body.classList;
 }
 
 afterEach(() => {
-  document.documentElement.className = '';
+  document.body.className = '';
   localStorage.clear();
 });
 

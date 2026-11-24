@@ -1,54 +1,33 @@
 'use client';
 
-import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts';
-import { categoryColor } from '@/lib/category-colors';
-import { ChartTooltip } from '@/app/components/chart-tooltip';
+import { PieChart } from '@cloudscape-design/chart-components';
+import { formatVND } from '@/lib/format';
+import { categoryPieSeries } from '@/app/components/charts/category-series';
+import { ChartEmpty, ChartLoading } from '@/app/components/charts/chart-states';
+import { useHighcharts } from '@/app/components/charts/use-highcharts';
 
-export function CategoryPie({
-  data,
-}: {
-  data: Array<{ category: string; value: number }>;
-}) {
+const HEIGHT = 320;
+
+export function CategoryPie({ data }: { data: Array<{ category: string; value: number }> }) {
+  const highcharts = useHighcharts();
+  const series = categoryPieSeries(data);
+  if (!highcharts) return <ChartLoading height={HEIGHT} />;
+  if (!series) return <ChartEmpty height={HEIGHT} />;
   return (
-    <ResponsiveContainer width="100%" height={320}>
-      <PieChart>
-        <Pie
-          data={data}
-          dataKey="value"
-          nameKey="category"
-          cx="50%"
-          cy="45%"
-          innerRadius={55}
-          outerRadius={85}
-        >
-          {data.map((d) => (
-            <Cell key={d.category} fill={categoryColor(d.category)} />
-          ))}
-        </Pie>
-        <Tooltip
-          content={
-            <ChartTooltip
-              titleOf={(item) => String(item.payload?.category ?? item.name ?? '')}
-              colorOf={(item) =>
-                categoryColor(String(item.payload?.category ?? ''))
-              }
-            />
-          }
-        />
-        <Legend
-          verticalAlign="bottom"
-          height={40}
-          iconType="circle"
-          wrapperStyle={{ fontSize: 12 }}
-        />
-      </PieChart>
-    </ResponsiveContainer>
+    <PieChart
+      highcharts={highcharts}
+      chartHeight={HEIGHT}
+      ariaLabel="Spending by category"
+      series={series}
+      segmentDescription={({ segmentValue, totalValue }) =>
+        `${formatVND(segmentValue)} · ${((segmentValue / totalValue) * 100).toFixed(0)}%`
+      }
+      tooltip={{
+        details: ({ segmentValue, totalValue }) => [
+          { key: 'Spend', value: formatVND(segmentValue) },
+          { key: 'Share', value: `${((segmentValue / totalValue) * 100).toFixed(1)}%` },
+        ],
+      }}
+    />
   );
 }

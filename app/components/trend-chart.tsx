@@ -1,54 +1,27 @@
 'use client';
 
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-} from 'recharts';
+import { CartesianChart } from '@cloudscape-design/chart-components';
 import type { AggregatedView } from '@/lib/aggregations';
-import { CHART_AXIS_COLOR, CHART_COLORS } from '@/lib/chart-colors';
-import { formatVNDCompact } from '@/lib/format';
-import { ChartTooltip } from '@/app/components/chart-tooltip';
+import { formatVND, formatVNDCompact } from '@/lib/format';
+import { trendSeries } from '@/app/components/charts/trend-series';
+import { CHART_HEIGHT, ChartEmpty, ChartLoading } from '@/app/components/charts/chart-states';
+import { useHighcharts } from '@/app/components/charts/use-highcharts';
 
 export function TrendChart({ view }: { view: AggregatedView }) {
-  // Use a numeric height (not height="100%") so calculatedHeight is positive on
-  // the first render — before ResponsiveContainer's ResizeObserver reports a
-  // size — which avoids recharts' "width(-1) and height(-1)" warning. This
-  // matches the fixed-height pattern used by the category/merchant charts.
+  const highcharts = useHighcharts();
+  const { categories, series } = trendSeries(view);
+  if (!highcharts) return <ChartLoading />;
+  if (series.length === 0) return <ChartEmpty />;
   return (
-    <ResponsiveContainer width="100%" height={280}>
-      <BarChart
-        data={view.subPeriods}
-        margin={{ top: 8, right: 8, left: 0, bottom: 8 }}
-      >
-        <XAxis
-          dataKey="label"
-          tick={{ fontSize: 11, fill: CHART_AXIS_COLOR }}
-          interval="preserveStartEnd"
-          textAnchor="middle"
-          height={28}
-        />
-        <YAxis
-          tick={{ fontSize: 12, fill: CHART_AXIS_COLOR }}
-          tickFormatter={(v) => formatVNDCompact(Number(v))}
-        />
-        {/* The bar is filled with a gradient url, which is not a usable text
-            colour, so the tooltip is told the brand hex directly. */}
-        <Tooltip
-          cursor={{ fill: 'rgba(148, 163, 184, 0.12)' }}
-          content={<ChartTooltip colorOf={() => CHART_COLORS.brand} />}
-        />
-        <defs>
-          <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={CHART_COLORS.brand} />
-            <stop offset="100%" stopColor={CHART_COLORS.brandLight} />
-          </linearGradient>
-        </defs>
-        <Bar dataKey="value" fill="url(#trendGradient)" radius={[4, 4, 0, 0]} />
-      </BarChart>
-    </ResponsiveContainer>
+    <CartesianChart
+      highcharts={highcharts}
+      chartHeight={CHART_HEIGHT}
+      ariaLabel="Spending trend"
+      legend={{ enabled: false }}
+      series={series}
+      xAxis={{ type: 'category', title: 'Period', categories }}
+      yAxis={{ title: 'Spend', valueFormatter: (v) => formatVNDCompact(v ?? 0) }}
+      tooltip={{ point: ({ item }) => ({ key: item.series.name, value: formatVND(item.y ?? 0) }) }}
+    />
   );
 }

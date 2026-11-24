@@ -68,17 +68,17 @@ describe('visual settings', () => {
   it('applies explicit settings to the document element', () => {
     mockMatchMedia(false);
     applyVisualSettings({ mode: 'dark', density: 'compact' });
-    expect(applyMode).toHaveBeenLastCalledWith('dark', document.documentElement);
-    expect(applyDensity).toHaveBeenLastCalledWith('compact', document.documentElement);
+    expect(applyMode).toHaveBeenLastCalledWith('dark', document.body);
+    expect(applyDensity).toHaveBeenLastCalledWith('compact', document.body);
   });
 
   it('follows system changes until unsubscribed', () => {
     const media = mockMatchMedia(true);
     const stop = applyVisualSettings({ mode: 'system', density: 'comfortable' });
-    expect(applyMode).toHaveBeenLastCalledWith('dark', document.documentElement);
+    expect(applyMode).toHaveBeenLastCalledWith('dark', document.body);
 
     media.flip(false);
-    expect(applyMode).toHaveBeenLastCalledWith('light', document.documentElement);
+    expect(applyMode).toHaveBeenLastCalledWith('light', document.body);
 
     stop();
     vi.mocked(applyMode).mockClear();

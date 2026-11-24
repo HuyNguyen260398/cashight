@@ -58,12 +58,12 @@ export function resolveMode(mode: ModePreference, prefersDark: boolean): 'light'
 }
 
 /**
- * Applies mode and density to <html> (the pre-paint script in <head> uses the
- * same element, before <body> exists). Returns an unsubscribe that stops
+ * Applies mode and density to <body>, where Cloudscape defines its theme
+ * tokens (a class on <html> would be overridden). Returns an unsubscribe that stops
  * following the OS colour scheme when the mode is 'system'.
  */
 export function applyVisualSettings(settings: VisualSettings): () => void {
-  const target = document.documentElement;
+  const target = document.body;
   const toMode = (dark: boolean) => (resolveMode(settings.mode, dark) === 'dark' ? Mode.Dark : Mode.Light);
 
   applyDensity(settings.density === 'compact' ? Density.Compact : Density.Comfortable, target);

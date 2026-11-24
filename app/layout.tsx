@@ -38,10 +38,10 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <head>
+      {/* suppressHydrationWarning: VisualSettingsScript adds Cloudscape's
+          dark/compact classes to <body> before React hydrates. */}
+      <body className="min-h-dvh bg-background text-foreground" suppressHydrationWarning>
         <VisualSettingsScript />
-      </head>
-      <body className="min-h-dvh bg-background text-foreground">
         <CloudscapeProvider>
           <AuthProvider>
             <Nav>{children}</Nav>
