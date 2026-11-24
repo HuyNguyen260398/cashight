@@ -1,10 +1,13 @@
 'use client';
 
 import type { CostExplorerReportRequest } from '@cashight/domain/aws-cost-explorer';
-import { ArrowDownRight, ArrowUpRight, Clock3, Database, Radio } from 'lucide-react';
-
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import Badge from '@cloudscape-design/components/badge';
+import Box from '@cloudscape-design/components/box';
+import ColumnLayout from '@cloudscape-design/components/column-layout';
+import Container from '@cloudscape-design/components/container';
+import Header from '@cloudscape-design/components/header';
+import Icon from '@cloudscape-design/components/icon';
+import SpaceBetween from '@cloudscape-design/components/space-between';
 import type {
   CostExplorerComparison,
   CostExplorerCompleteResult,
@@ -65,17 +68,13 @@ function OverviewMetric({
   detail?: React.ReactNode;
 }) {
   return (
-    <div className="min-w-0 rounded-xl border border-gray-100 bg-gray-50 p-4 dark:border-gray-800 dark:bg-white/[0.03]">
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-        {label}
-      </p>
-      <p className="mt-2 truncate text-xl font-semibold tabular-nums text-gray-900 dark:text-white/90">
-        {value}
-      </p>
+    <div>
+      <Box variant="awsui-key-label">{label}</Box>
+      <Box variant="awsui-value-large">{value}</Box>
       {detail ? (
-        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+        <Box variant="small" display="block" color="text-body-secondary">
           {detail}
-        </div>
+        </Box>
       ) : null}
     </div>
   );
@@ -93,39 +92,34 @@ export function CostOverview({
   const services = serviceCount(request, result);
 
   return (
-    <Card className="min-w-0">
-      <CardHeader className="border-b border-gray-100 dark:border-gray-800">
-        <CardTitle>
-          <h2>Cost and usage overview</h2>
-        </CardTitle>
+    <Container
+      header={
+        <Header
+          variant="h2"
+          description={
+            result ? (
+              // Header descriptions render in a <p>, so keep this inline.
+              <>
+                <Badge color={result.source === 'CACHE' ? 'grey' : 'blue'}>
+                  {result.source === 'CACHE' ? 'Cached AWS data' : 'Live AWS data'}
+                </Badge>{' '}
+                <Badge color={result.estimated ? 'severity-medium' : 'green'}>
+                  {result.estimated ? 'Estimated' : 'Final'}
+                </Badge>{' '}
+                <Icon name="status-pending" size="small" /> Updated {formatFreshness(result.asOf)} UTC
+              </>
+            ) : comparison ? (
+              'Comparison values returned by AWS Cost Explorer.'
+            ) : undefined
+          }
+        >
+          Cost and usage overview
+        </Header>
+      }
+    >
         {result ? (
-          <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-            <Badge variant="secondary" className="gap-1.5">
-              {result.source === 'CACHE' ? (
-                <Database className="size-3.5" aria-hidden />
-              ) : (
-                <Radio className="size-3.5" aria-hidden />
-              )}
-              {result.source === 'CACHE' ? 'Cached AWS data' : 'Live AWS data'}
-            </Badge>
-            <Badge variant={result.estimated ? 'outline' : 'secondary'}>
-              {result.estimated ? 'Estimated' : 'Final'}
-            </Badge>
-            <span className="inline-flex items-center gap-1">
-              <Clock3 className="size-3.5" aria-hidden />
-              Updated {formatFreshness(result.asOf)} UTC
-            </span>
-          </div>
-        ) : comparison ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Comparison values returned by AWS Cost Explorer.
-          </p>
-        ) : null}
-      </CardHeader>
-      <CardContent>
-        {result ? (
-          <div className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-3">
+          <SpaceBetween size="l">
+            <ColumnLayout columns={3} variant="text-grid">
               <OverviewMetric
                 label="Total cost"
                 value={formatCostValue(result.overview.total, result.currencyOrUnit)}
@@ -147,12 +141,12 @@ export function CostOverview({
                     : 'Distinct services in range'
                 }
               />
-            </div>
+            </ColumnLayout>
             {result.overview.currentMonthToDate !== undefined ||
             forecast ||
             result.overview.forecastTotal !== undefined ||
             result.overview.absoluteChange !== undefined ? (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <ColumnLayout columns={3} variant="text-grid">
                 {result.overview.currentMonthToDate !== undefined ? (
                   <OverviewMetric
                     label="Month to date"
@@ -187,12 +181,11 @@ export function CostOverview({
                       { signDisplay: 'exceptZero' },
                     )}
                     detail={
-                      <span className="inline-flex items-center gap-1">
-                        {decimalNumber(result.overview.absoluteChange) >= 0 ? (
-                          <ArrowUpRight className="size-3.5" aria-hidden />
-                        ) : (
-                          <ArrowDownRight className="size-3.5" aria-hidden />
-                        )}
+                      <span>
+                        <Icon
+                          name={decimalNumber(result.overview.absoluteChange) >= 0 ? 'arrow-up' : 'arrow-down'}
+                          size="small"
+                        />{' '}
                         {result.overview.percentageChange !== undefined
                           ? `${decimalNumber(result.overview.percentageChange).toFixed(1)}%`
                           : 'Compared with previous period'}
@@ -200,11 +193,11 @@ export function CostOverview({
                     }
                   />
                 ) : null}
-              </div>
+              </ColumnLayout>
             ) : null}
-          </div>
+          </SpaceBetween>
         ) : comparisonMetric ? (
-          <div className="grid gap-3 sm:grid-cols-3">
+          <ColumnLayout columns={3} variant="text-grid">
             <OverviewMetric
               label="Baseline"
               value={formatCostValue(comparisonMetric.baseline, comparisonMetric.unit)}
@@ -225,13 +218,12 @@ export function CostOverview({
                 ) ?? 'No baseline percentage'
               }
             />
-          </div>
+          </ColumnLayout>
         ) : (
-          <p className="rounded-xl bg-gray-50 px-4 py-8 text-center text-sm text-gray-500 dark:bg-white/[0.03] dark:text-gray-400">
+          <Box textAlign="center" color="text-body-secondary" padding={{ vertical: 'l' }}>
             No cost data for this report.
-          </p>
+          </Box>
         )}
-      </CardContent>
-    </Card>
+    </Container>
   );
 }

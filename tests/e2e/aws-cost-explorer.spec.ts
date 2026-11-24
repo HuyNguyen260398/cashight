@@ -36,6 +36,29 @@ async function chooseFirstFilterValue(page: Page, label: string) {
   await page.getByRole('button', { name: `Close ${label} values` }).click();
 }
 
+
+// Cloudscape selects: the SelectField's data-testid is its label; options carry data-value.
+async function chooseOption(page: Page, label: string, value: string) {
+  await page.getByTestId(label).getByRole('button').first().click();
+  await page.locator(`[data-testid="${label}"] [data-value="${value}"]`).first().click();
+}
+
+async function chooseOptionByLabel(page: Page, label: string, text: string) {
+  await page.getByTestId(label).getByRole('button').first().click();
+  // An already-selected option is announced as "Selected <name>", so match its text.
+  await page.getByTestId(label).getByRole('option').filter({ hasText: text }).first().click();
+}
+
+async function expectSelected(page: Page, label: string, text: string) {
+  await expect(page.getByTestId(label).getByRole('button').first()).toContainText(text);
+}
+
+async function fillDate(page: Page, label: string, iso: string) {
+  const input = page.getByTestId(label).locator('input');
+  await input.fill(iso.replaceAll('-', '/'));
+  await input.blur();
+}
+
 test.describe('AWS Cost Explorer browser parity', () => {
   test.describe.configure({ mode: 'serial' });
 
@@ -94,7 +117,7 @@ test.describe('AWS Cost Explorer browser parity', () => {
     expect(widenedGraph!.width).toBeGreaterThan(narrowedGraph!.width);
 
     // The graph's own toggle restyles the chart with no further AWS query.
-    const chartType = page.getByRole('group', { name: 'Chart type' });
+    const chartType = page.getByRole('toolbar', { name: 'Chart type' });
     let queried = false;
     const countQuery = () => {
       queried = true;
@@ -111,34 +134,31 @@ test.describe('AWS Cost Explorer browser parity', () => {
     await expect(page.getByRole('img', { name: /stacked bar chart/i })).toBeVisible();
     expect(queried).toBe(false);
     // The parameters select follows the toggle.
-    await expect(page.getByLabel('Chart style')).toHaveValue('STACK');
-    await expect(
-      page
-        .getByLabel('Report mode', { exact: true })
-        .locator('option[value="RESOURCE"]'),
-    ).toHaveAttribute('disabled', '');
+    await expectSelected(page, 'Chart style', 'Stacked bar');
+    await page.getByTestId('Report mode').getByRole('button').first().click();
+    await expect(page.getByTestId('Report mode').getByRole('option', { name: 'Resource' })).toBeDisabled();
+    await page.keyboard.press('Escape');
 
-    await page.getByLabel('Date range').selectOption('CUSTOM');
-    await page.getByLabel('Start date').fill('2026-04-01');
-    await page.getByLabel('End date').fill('2026-07-01');
-    await page.getByLabel('Billing view').focus();
-    await page.getByLabel('Billing view').selectOption({ label: 'Local primary' });
-    await page.getByLabel('Metric').selectOption('AmortizedCost');
-    await page.getByLabel('Granularity').selectOption('DAILY');
-    await page.getByLabel('Chart style').selectOption('BAR');
-    await page.getByLabel('Group 1 type').selectOption('DIMENSION');
-    await page.getByLabel('Group 1 key').selectOption('REGION');
-    await page.getByLabel('Group 2 type').selectOption('TAG');
+    await chooseOption(page, 'Date range', 'CUSTOM');
+    await fillDate(page, 'Start date', '2026-04-01');
+    await fillDate(page, 'End date', '2026-07-01');
+    await chooseOptionByLabel(page, 'Billing view', 'Local primary');
+    await chooseOption(page, 'Metric', 'AmortizedCost');
+    await chooseOption(page, 'Granularity', 'DAILY');
+    await chooseOption(page, 'Chart style', 'BAR');
+    await chooseOption(page, 'Group 1 type', 'DIMENSION');
+    await chooseOption(page, 'Group 1 key', 'REGION');
+    await chooseOption(page, 'Group 2 type', 'TAG');
     await page.getByLabel('Group 2 key').fill('Environment');
 
     await page.getByRole('button', { name: 'Add filter' }).click();
     await chooseFirstFilterValue(page, 'Service');
     await page.getByRole('button', { name: 'Add filter' }).click();
-    await page.getByLabel('Filter 2 category').selectOption('TAG');
+    await chooseOption(page, 'Filter 2 category', 'TAG');
     await page.getByLabel('Filter 2 key').fill('Owner');
     await chooseFirstFilterValue(page, 'Owner');
     await page.getByRole('button', { name: 'Add filter' }).click();
-    await page.getByLabel('Filter 3 category').selectOption('COST_CATEGORY');
+    await chooseOption(page, 'Filter 3 category', 'COST_CATEGORY');
     await page.getByLabel('Filter 3 key').fill('Team');
     await chooseFirstFilterValue(page, 'Team');
     await page.getByLabel('Show only untagged').click();
@@ -187,36 +207,32 @@ test.describe('AWS Cost Explorer browser parity', () => {
     });
     await expect(page.getByRole('img', { name: /^Bar chart/i })).toBeVisible();
 
-    await page.getByLabel('Chart style').selectOption('STACK');
+    await chooseOption(page, 'Chart style', 'STACK');
     await applyReport(page);
     await expect(page.getByRole('img', { name: /stacked bar chart/i })).toBeVisible();
-    await page.getByLabel('Chart style').selectOption('LINE');
+    await chooseOption(page, 'Chart style', 'LINE');
     await applyReport(page);
     await expect(page.getByRole('img', { name: /line chart/i })).toBeVisible();
 
     const reportUrl = page.url();
     await page.reload();
-    await expect(page.getByLabel('Metric')).toHaveValue('AmortizedCost');
-    await expect(page.getByLabel('Chart style')).toHaveValue('LINE');
-    await expect(page.getByLabel('Group 1 type')).toHaveValue('DIMENSION');
-    await expect(page.getByLabel('Group 1 key')).toHaveValue('REGION');
-    await expect(page.getByLabel('Group 2 type')).toHaveValue('TAG');
+    await expectSelected(page, 'Metric', 'Amortized cost');
+    await expectSelected(page, 'Chart style', 'Line');
+    await expectSelected(page, 'Group 1 type', 'Dimension');
+    await expectSelected(page, 'Group 1 key', 'Region');
+    await expectSelected(page, 'Group 2 type', 'Tag');
     await expect(page.getByLabel('Group 2 key')).toHaveValue('Environment');
-    await expect(page.getByLabel('Filter 1 category')).toHaveValue(
-      'DIMENSION',
-    );
-    await expect(page.getByLabel('Filter 1 dimension')).toHaveValue('SERVICE');
+    await expectSelected(page, 'Filter 1 category', 'Dimension');
+    await expectSelected(page, 'Filter 1 dimension', 'Service');
     await expect(
       page.getByRole('button', { name: 'Choose Service values' }),
     ).toContainText('1 selected');
-    await expect(page.getByLabel('Filter 2 category')).toHaveValue('TAG');
+    await expectSelected(page, 'Filter 2 category', 'Tag');
     await expect(page.getByLabel('Filter 2 key')).toHaveValue('Owner');
     await expect(
       page.getByRole('button', { name: 'Choose Owner values' }),
     ).toContainText('1 selected');
-    await expect(page.getByLabel('Filter 3 category')).toHaveValue(
-      'COST_CATEGORY',
-    );
+    await expectSelected(page, 'Filter 3 category', 'Cost category');
     await expect(page.getByLabel('Filter 3 key')).toHaveValue('Team');
     await expect(
       page.getByRole('button', { name: 'Choose Team values' }),
@@ -224,20 +240,16 @@ test.describe('AWS Cost Explorer browser parity', () => {
     await expect(page).toHaveURL(reportUrl);
 
     await page.getByRole('button', { name: 'Reset report' }).click();
-    await page.getByLabel('Group 1 type').selectOption('NONE');
-    await page.getByLabel('Chart style').selectOption('BAR');
+    await chooseOption(page, 'Group 1 type', 'NONE');
+    await chooseOption(page, 'Chart style', 'BAR');
     await page.getByLabel('Show forecast').click();
     const forecastPromise = costApiRequest(page, 'forecast');
     await applyReport(page);
     await forecastPromise;
-    await expect(
-      page.getByRole('button', { name: 'Hide Forecast series' }),
-    ).toBeVisible();
+    await expect(page.locator('button[data-itemid="forecast"]')).toBeVisible();
 
-    await page
-      .getByLabel('Report mode', { exact: true })
-      .selectOption('COMPARISON');
-    await page.getByLabel('Comparison range').selectOption('MONTH_TO_MONTH');
+    await chooseOption(page, 'Report mode', 'COMPARISON');
+    await chooseOption(page, 'Comparison range', 'MONTH_TO_MONTH');
     const comparisonRequest = await applyReport(page, 'comparisons');
     expect(comparisonRequest.request).toMatchObject({
       mode: 'COMPARISON',
@@ -277,11 +289,9 @@ test.describe('AWS Cost Explorer browser parity', () => {
     await expect(page.getByText('Report renamed.')).toBeVisible();
 
     await page.reload();
-    await page.getByLabel('Saved report', { exact: true }).selectOption({
-      label: `${reportName} renamed`,
-    });
+    await chooseOptionByLabel(page, 'Saved report', `${reportName} renamed`);
     await page.getByRole('button', { name: 'Load report' }).click();
-    await expect(page.getByLabel('Metric')).toHaveValue('UnblendedCost');
+    await expectSelected(page, 'Metric', 'Unblended cost');
 
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Export CSV' }).click();
@@ -309,22 +319,24 @@ test.describe('AWS Cost Explorer browser parity', () => {
     await page.keyboard.press('Shift+Tab');
     await expect(reportNameInput).toBeFocused();
 
-    const legend = page.locator('[aria-label="Chart legend"] button').first();
-    await legend.focus();
+    // Cloudscape legend: activating an item isolates that series.
+    const legendItems = page.locator('button[data-itemid]');
+    await legendItems.first().focus();
     await page.keyboard.press('Space');
-    await expect(legend).toHaveAttribute('aria-pressed', 'false');
+    await expect(legendItems.first()).toHaveAttribute('aria-pressed', 'true');
+    await expect(legendItems.nth(1)).toHaveAttribute('aria-pressed', 'false');
 
+    // On a phone the breakdown table scrolls inside its container instead of
+    // widening the page.
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.getByTestId('desktop-cost-breakdown')).toBeHidden();
-    await expect(
-      page.getByRole('article').filter({ hasText: 'Example Compute' }).first(),
-    ).toBeVisible();
+    await expect(page.getByTestId('desktop-cost-breakdown')).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1))
+      .toBe(true);
     await page.setViewportSize({ width: 1440, height: 1000 });
     await expect(page.getByTestId('desktop-cost-breakdown')).toBeVisible();
 
-    await page.getByLabel('Saved report', { exact: true }).selectOption({
-      label: `${reportName} renamed`,
-    });
+    await chooseOptionByLabel(page, 'Saved report', `${reportName} renamed`);
     await page.getByRole('button', { name: 'Delete report' }).click();
     await page.getByRole('button', { name: 'Confirm delete report' }).click();
     await expect(page.getByText('Report deleted.')).toBeVisible();

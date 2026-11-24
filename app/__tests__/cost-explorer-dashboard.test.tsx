@@ -3,7 +3,6 @@
 import '@testing-library/jest-dom/vitest';
 import {
   cleanup,
-  fireEvent,
   render,
   screen,
   waitFor,
@@ -18,10 +17,25 @@ import { CostBreakdown } from '@/app/components/aws-cost-explorer/cost-breakdown
 import { CostExplorerDashboard } from '@/app/components/aws-cost-explorer/cost-explorer-dashboard';
 import { CostOverview } from '@/app/components/aws-cost-explorer/cost-overview';
 import { FilterBuilder } from '@/app/components/aws-cost-explorer/filter-builder';
-import {
-  CostGraphTooltip,
-  CostUsageGraph,
-} from '@/app/components/aws-cost-explorer/cost-usage-graph';
+import { chooseOption, selectedLabel } from './helpers/cloudscape-fields';
+import { CostUsageGraph } from '@/app/components/aws-cost-explorer/cost-usage-graph';
+import createWrapper from '@cloudscape-design/components/test-utils/dom';
+import createChartWrapper from '@cloudscape-design/chart-components/test-utils/dom';
+
+// Render real Highcharts synchronously; jsdom draws enough for the legend.
+vi.mock('@/app/components/charts/use-highcharts', async () => {
+  const Highcharts = (await import('highcharts')).default;
+  return { useHighcharts: () => Highcharts };
+});
+
+function legendItems() {
+  return createChartWrapper(document.body).findCartesianHighcharts()!.findLegend()!.findItems();
+}
+function legendItem(name: string) {
+  const item = legendItems().find((i) => i.getElement().textContent === name);
+  if (!item) throw new Error(`No legend item ${name}`);
+  return item.getElement();
+}
 import type {
   CostExplorerComparison,
   CostExplorerCompleteResult,
@@ -326,9 +340,7 @@ describe('Cost Explorer panel states', () => {
     ).toBeInTheDocument();
 
     // An unapplied edit must survive the collapse.
-    fireEvent.change(screen.getByLabelText('Metric'), {
-      target: { value: 'AmortizedCost' },
-    });
+    chooseOption('Metric', 'AmortizedCost');
 
     await userEvent.click(toggle());
     expect(toggle()).toHaveAttribute('aria-expanded', 'false');
@@ -346,7 +358,7 @@ describe('Cost Explorer panel states', () => {
     expect(
       screen.getByRole('heading', { name: 'Report parameters' }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText('Metric')).toHaveValue('AmortizedCost');
+    expect(selectedLabel('Metric')).toBe('Amortized cost');
   });
 
   it('summarises the range as total cost, average, and distinct service count', () => {
@@ -394,7 +406,7 @@ describe('Cost Explorer panel states', () => {
     render(<CostExplorerDashboard />);
     await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
 
-    const toggle = within(screen.getByRole('group', { name: 'Chart type' }));
+    const toggle = within(screen.getByRole('toolbar', { name: 'Chart type' }));
     expect(toggle.getByRole('button', { name: 'Stacked bar' })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -416,10 +428,10 @@ describe('Cost Explorer panel states', () => {
     // Presentational only: no extra AWS round trip.
     expect(mockRun).toHaveBeenCalledTimes(1);
     // The parameters select follows the toggle, so Apply cannot revert it.
-    expect(screen.getByLabelText('Chart style')).toHaveValue('BAR');
+    expect(selectedLabel('Chart style')).toBe('Bar');
   });
 
-  it('renders graph styles, top-nine-plus-Other, legend toggles, and exact tooltips', async () => {
+  it('renders graph styles, top-nine-plus-Other, and legend toggles', async () => {
     const view = render(
       <CostUsageGraph request={request} result={result} forecast={null} comparison={null} />,
     );
@@ -427,15 +439,13 @@ describe('Cost Explorer panel states', () => {
     expect(
       screen.getByRole('img', { name: /stacked bar chart/i }),
     ).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /Hide .* series/ })).toHaveLength(10);
-    expect(screen.getByText('Other')).toBeInTheDocument();
+    expect(legendItems()).toHaveLength(10);
+    expect(legendItem('Other')).toBeInTheDocument();
 
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Hide Amazon EC2 series' }),
-    );
-    expect(
-      screen.getByRole('button', { name: 'Show Amazon EC2 series' }),
-    ).toHaveAttribute('aria-pressed', 'false');
+    // Cloudscape legend: clicking an item isolates that series.
+    await userEvent.click(legendItem('Amazon EC2'));
+    expect(legendItem('Amazon EC2')).toHaveAttribute('aria-pressed', 'true');
+    expect(legendItem('Other')).toHaveAttribute('aria-pressed', 'false');
 
     view.rerender(
       <CostUsageGraph
@@ -446,9 +456,8 @@ describe('Cost Explorer panel states', () => {
       />,
     );
     expect(screen.getByRole('img', { name: /line chart/i })).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Show Amazon EC2 series' }),
-    ).toHaveAttribute('aria-pressed', 'false');
+    // A presentational style change keeps the hidden series hidden.
+    expect(legendItem('Other')).toHaveAttribute('aria-pressed', 'false');
     view.rerender(
       <CostUsageGraph
         request={{
@@ -461,9 +470,8 @@ describe('Cost Explorer panel states', () => {
         comparison={null}
       />,
     );
-    expect(
-      screen.getByRole('button', { name: 'Hide Amazon EC2 series' }),
-    ).toHaveAttribute('aria-pressed', 'true');
+    // A different report resets legend visibility.
+    expect(legendItem('Other')).toHaveAttribute('aria-pressed', 'true');
     view.rerender(
       <CostUsageGraph
         request={{ ...request, chartStyle: 'LINE' }}
@@ -482,18 +490,7 @@ describe('Cost Explorer panel states', () => {
         comparison={null}
       />,
     );
-    expect(
-      screen.getByRole('button', { name: 'Hide Amazon RDS series' }),
-    ).toHaveAttribute('aria-pressed', 'true');
-    render(
-      <CostGraphTooltip
-        active
-        label="May 2026"
-        payload={[{ name: 'Amazon EC2', value: 1, color: '#465fff' }]}
-        unit="USD"
-      />,
-    );
-    expect(screen.getByRole('tooltip')).toHaveTextContent('$1.00');
+    expect(legendItem('Amazon RDS')).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('shows empty and unavailable forecast states instead of blank panels', () => {
@@ -549,9 +546,7 @@ describe('Cost Explorer panel states', () => {
       />,
     );
 
-    expect(
-      screen.getByRole('button', { name: 'Hide Forecast series' }),
-    ).toHaveAttribute('aria-pressed', 'true');
+    expect(legendItem('Forecast')).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('keeps the complete breakdown sortable and paginated', async () => {
@@ -565,8 +560,8 @@ describe('Cost Explorer panel states', () => {
       'descending',
     );
     expect(table.getAllByRole('row')[1]).toHaveTextContent('Service 12');
-    await userEvent.click(screen.getByRole('button', { name: /Next/ }));
-    expect(screen.getByText('Page 2 of 2')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(screen.getByRole('button', { name: 'Page 2' })).toHaveAttribute('aria-current', 'true');
     expect(table.getAllByRole('row')).toHaveLength(3);
   });
 
@@ -691,10 +686,11 @@ describe('Cost Explorer panel states', () => {
 
     // Export belongs to the breakdown panel, not the page header.
     const exportButton = screen.getByRole('button', { name: 'Export CSV' });
-    const breakdownCard = screen
-      .getByRole('heading', { name: 'Cost and usage breakdown' })
-      .closest('[data-slot="card"]');
-    expect(breakdownCard).toContainElement(exportButton);
+    const breakdownPanel = screen.getByTestId('desktop-cost-breakdown');
+    expect(breakdownPanel).toContainElement(
+      screen.getByRole('heading', { name: 'Cost and usage breakdown' }),
+    );
+    expect(breakdownPanel).toContainElement(exportButton);
 
     await userEvent.click(exportButton);
     await waitFor(() => expect(mockExportCsv).toHaveBeenCalledWith(request));
@@ -702,6 +698,12 @@ describe('Cost Explorer panel states', () => {
 });
 
 describe('Cognito re-auth return state', () => {
+  it('renders as a Cloudscape warning alert with a heading', () => {
+    const { container } = render(<CognitoReauthWarning />);
+    expect(createWrapper(container).findAlert()).not.toBeNull();
+    expect(screen.getByRole('heading', { name: 'Continue with Cognito to view AWS costs' })).toBeInTheDocument();
+  });
+
   it('starts native managed login with the exact allowlisted Cost Explorer route', async () => {
     render(<CognitoReauthWarning />);
     await userEvent.click(
