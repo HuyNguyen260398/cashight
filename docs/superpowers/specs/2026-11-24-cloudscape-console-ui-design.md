@@ -57,8 +57,19 @@ like a modern AWS console page.
 - Shell: `app/components/nav.tsx` → `admin-shell.tsx` (sidebar + header),
   `dashboard-nav.tsx`, `mobile-nav.tsx`, `nav-links.tsx`, `theme-toggle.tsx`
   (`next-themes`).
-- Routes: `/` (bank statement dashboard), `/statements`, `/upload`,
-  `/aws/cost-explorer`, `/aws/billing-invoice`, `/signin`, `/auth/callback`.
+- Routes: `/` renders the bank statement dashboard when it has bank/period
+  params (`hasBankDashboardContext`), otherwise redirects to
+  `DEFAULT_DASHBOARD_HREF` = `/aws/cost-explorer/`. `/statements` and
+  `/upload` are legacy redirects (`LegacyStatementRedirect`) to
+  `/?bank=…#statement-history` / `#statement-upload` — upload and history are
+  sections of `bank-statement-dashboard.tsx`, sharing its bank/period state.
+  Also `/aws/cost-explorer`, `/aws/billing-invoice`, `/signin`, `/auth/callback`.
+- Shipped nav (`dashboard-nav.tsx`): group *AWS budget* → Cost Explorer,
+  Billing Invoice; group *Bank statements* → **TPB** (`/?bank=TPBank`),
+  **VIB** (`/?bank=VIB`). Active state for bank leaves reads `?bank=` as well
+  as the path. Sidebar has a collapsed icon-rail mode with a keyboard flyout.
+  `tests/e2e/dashboard-navigation.spec.ts` asserts the link texts, group
+  `aria-expanded`, and `?bank=`-aware active state.
 - Primitives: shadcn/ui in `components/ui/` (button ×25 imports, card ×14,
   table, skeleton, alert-dialog, pagination ×4–5, input, badge, checkbox, tabs,
   select, collapsible), `sonner` toasts, `lucide-react` icons (29 files),
@@ -95,9 +106,17 @@ Charts, sub-decision:
   - `TopNavigation`: identity = "Cashight" + existing `app/icon.svg`; utilities
     = theme (light/dark/system) menu, density (comfortable/compact) menu, user
     menu with the email and "Sign out".
-  - `AppLayout` with `SideNavigation` (sections: *Bank statements* →
-    Dashboard, Statements, Upload; *AWS costs* → Cost Explorer, Billing
-    invoice), `BreadcrumbGroup`, and `Flashbar` slot for notifications.
+  - `AppLayout` with `SideNavigation` mirroring today's nav exactly:
+    expandable section *AWS budget* → Cost Explorer, Billing Invoice;
+    expandable section *Bank statements* → TPB (`/?bank=TPBank`), VIB
+    (`/?bank=VIB`). Link labels unchanged. `activeHref` is computed with the
+    same pathname + `?bank=` logic as today. Plus `BreadcrumbGroup` and a
+    `Flashbar` slot for notifications.
+  - Routing is unchanged: `/` default redirect, legacy `/statements` and
+    `/upload` redirects, and the `#statement-upload` / `#statement-history`
+    anchors on the bank dashboard all keep working.
+  - The collapsed icon-rail + flyout is replaced by AppLayout's standard
+    open/close navigation (Cloudscape has no icon rail).
   - Mobile: AppLayout's built-in collapsible navigation replaces `mobile-nav`.
 - Navigation uses Next's router (`onFollow` → `preventDefault` +
   `router.push`) so links stay client-side, and `activeHref` reflects the
@@ -155,12 +174,14 @@ other's params.
 
 ### Migration order
 
-1. Spike: install packages, shell + one page (`/` dashboard incl. one chart)
-   on Cloudscape, confirm static export build, dark mode, Highcharts theming.
+1. Spike: install packages, shell + one chart on Cloudscape, confirm static
+   export build, dark mode, Highcharts theming.
 2. Shell + navigation for all routes; sign-in page.
-3. Bank statement dashboard (KPIs, charts, transactions table, AI summary).
-4. Statements history and upload.
-5. AWS Cost Explorer and Billing invoice dashboards.
+3. Bank statement dashboard as one page: KPIs, charts, transactions table, AI
+   summary, upload section and statement history section (anchors kept).
+4. AWS Cost Explorer dashboard (incl. filter builder, report parameters, saved
+   reports).
+5. AWS Billing invoice dashboard.
 6. Remove old stack, clean `globals.css`, update docs (`docs/codebase/STACK.md`,
    CLAUDE.md UI mentions).
 
@@ -174,7 +195,12 @@ Each step is its own commit and leaves the app building and tests passing.
   selection, period switching, chart data mapping).
 - Chart tests assert the series/data passed to chart components rather than
   rendered SVG (Highcharts rendering in jsdom is unreliable).
-- Update Playwright selectors; e2e flows unchanged.
+- Update Playwright selectors in the same commit as each UI step; e2e flows
+  unchanged. `dashboard-navigation.spec.ts` is rewritten for SideNavigation
+  (same link texts and active-state rules; flyout assertions replaced by
+  nav open/close). `current-production.spec.ts` keeps its `/upload` and
+  `/statements` deep-link assertions, which stay valid because routing is
+  unchanged; its selectors will match production again once this ships.
 - `pnpm tsc --noEmit`, `pnpm lint`, `pnpm test`, `pnpm build` (static export)
   green at the end of every step.
 
@@ -199,5 +225,6 @@ Each step is its own commit and leaves the app building and tests passing.
 - Add a comfortable/compact density toggle next to the theme toggle.
 - Flashbar replaces toast notifications.
 - Remove Tailwind and shadcn entirely at the end.
-- Side navigation grouped into "Bank statements" and "AWS costs".
+- Collapsed icon-rail/flyout dropped in favour of AppLayout's nav toggle.
+- Bank dashboard stays one page (upload + history sections included).
 - Incremental migration on one feature branch, one commit per step.
