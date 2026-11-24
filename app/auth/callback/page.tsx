@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import { getOidcManager } from '@/frontend/auth/oidc';
 import { resolveOidcCallbackReturn } from '@/frontend/auth/return-to';
 
@@ -39,8 +40,8 @@ export default function AuthCallbackPage() {
   }, []);
 
   return (
-    <main className="flex min-h-dvh items-center justify-center">
-      <p className="text-gray-500 dark:text-gray-400">Completing sign-in…</p>
+    <main style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center' }}>
+      <StatusIndicator type="loading">Completing sign-in…</StatusIndicator>
     </main>
   );
 }
