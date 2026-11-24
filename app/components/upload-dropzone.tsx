@@ -1,26 +1,28 @@
 'use client';
 
-import { useDropzone } from 'react-dropzone';
 import { useEffect } from 'react';
-import { FileUp, Loader2, ShieldCheck } from 'lucide-react';
+import Alert from '@cloudscape-design/components/alert';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import Container from '@cloudscape-design/components/container';
+import FileDropzone from '@cloudscape-design/components/file-dropzone';
+import FileInput from '@cloudscape-design/components/file-input';
+import Modal from '@cloudscape-design/components/modal';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import { notify } from '@/app/components/console/notifications';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { buttonVariants } from '@/components/ui/button';
 import { bankShortName, type BankCode } from '@/lib/banks';
 import type { UploadJob } from '@/frontend/api/contracts';
 import { useUploadJob } from '@/frontend/hooks/use-upload-job';
 
+const MAX_BYTES = 5 * 1024 * 1024;
+
+function isPdf(file: File): boolean {
+  return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+}
+
 /**
- * Drag-and-drop PDF uploader. Implements the presigned-upload flow:
+ * Drag-and-drop PDF uploader (Cloudscape FileDropzone + FileInput). Implements the presigned-upload flow:
  *   1. Hash the file with SHA-256
  *   2. POST /uploads → get presigned S3 URL
  *   3. PUT the PDF directly to S3 (plain fetch, no auth header)
@@ -37,147 +39,94 @@ export function UploadDropzone({ bank, onSucceeded }: {
 
   const isWorking = state.phase === 'working';
 
-  // Show a toast when the upload succeeds and automatically reset to idle
-  // so the dropzone is ready for the next file.
   useEffect(() => {
     if (state.phase === 'succeeded') {
-      // Toast is already shown inside the hook; just reset the UI.
       const timer = setTimeout(() => reset(), 1500);
       return () => clearTimeout(timer);
     }
   }, [state.phase, reset]);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    disabled: isWorking,
-    accept: { 'application/pdf': ['.pdf'] },
-    maxFiles: 1,
-    maxSize: 5 * 1024 * 1024,
-    onDrop: (acceptedFiles) => {
-      if (acceptedFiles.length === 0) return;
-      start(acceptedFiles[0]);
-    },
-    onDropRejected: (fileRejections) => {
-      const firstError = fileRejections[0]?.errors[0];
-      if (!firstError) {
-        notify({ type: 'error', content: 'File rejected.' });
-        return;
-      }
-      switch (firstError.code) {
-        case 'file-invalid-type':
-          notify({ type: 'error', content: 'Only PDF files are accepted.' });
-          break;
-        case 'file-too-large':
-          notify({ type: 'error', content: 'File is too large (max 5 MB).' });
-          break;
-        default:
-          notify({ type: 'error', content: firstError.message });
-      }
-    },
-  });
+  function accept(files: readonly File[]) {
+    if (isWorking) return;
+    const file = files[0];
+    if (!file) return;
+    if (files.length > 1) {
+      notify({ type: 'error', content: 'Upload one PDF at a time.' });
+      return;
+    }
+    if (!isPdf(file)) {
+      notify({ type: 'error', content: 'Only PDF files are accepted.' });
+      return;
+    }
+    if (file.size > MAX_BYTES) {
+      notify({ type: 'error', content: 'File is too large (max 5 MB).' });
+      return;
+    }
+    start(file);
+  }
 
   const pendingConflict = state.phase === 'conflict' ? state : null;
 
   const monthYearLabel = pendingConflict
-    ? new Intl.DateTimeFormat('en-US', {
-        month: 'long',
-        year: 'numeric',
-      }).format(
-        new Date(
-          pendingConflict.conflict.year,
-          pendingConflict.conflict.month - 1,
-        ),
+    ? new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(
+        new Date(pendingConflict.conflict.year, pendingConflict.conflict.month - 1),
       )
     : '';
 
-  // Working step label shown while busy.
-  const workingMessage =
-    state.phase === 'working' ? state.message : 'Processing…';
+  const workingMessage = state.phase === 'working' ? state.message : 'Processing…';
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
-      <div
-        {...getRootProps()}
-        className="cursor-pointer rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 p-8 text-center transition hover:border-brand-300 hover:bg-brand-25 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:border-brand-800 dark:hover:bg-brand-500/10 md:p-12"
-      >
-        <input {...getInputProps()} aria-label="Statement PDF" />
-        {isWorking ? (
-          <div className="flex flex-col items-center gap-3 text-gray-500 dark:text-gray-400">
-            <Loader2 className="size-9 animate-spin text-brand-500" />
-            <p className="text-sm font-medium">{workingMessage}</p>
-          </div>
-        ) : isDragActive ? (
-          <div className="flex flex-col items-center gap-3">
-            <FileUp className="size-10 text-brand-500" aria-hidden />
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Drop the PDF here
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center">
-            <div className="mb-5 flex size-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-500 dark:bg-brand-500/15 dark:text-brand-400">
-              <FileUp className="size-7" aria-hidden />
-            </div>
-            <p className="text-base font-semibold text-gray-900 dark:text-white/90">
-              Drag a {bank ? bankShortName(bank) : 'TPB or VIB'} statement PDF here
-            </p>
-            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-              or click to select a PDF file up to 5 MB. The bank is detected automatically.
-            </p>
-            <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-success-50 px-3 py-1 text-xs font-medium text-success-700 dark:bg-success-500/10 dark:text-success-500">
-              <ShieldCheck className="size-3.5" aria-hidden />
-              Card data is masked before storage
-            </div>
-          </div>
-        )}
-      </div>
+    <Container>
+      <SpaceBetween size="s">
+        <FileDropzone onChange={({ detail }) => accept(detail.value)}>
+          <Box textAlign="center" padding={{ vertical: 'l' }}>
+            {isWorking ? (
+              <StatusIndicator type="loading">{workingMessage}</StatusIndicator>
+            ) : (
+              <SpaceBetween size="s" alignItems="center">
+                <Box variant="h3" tagOverride="p">
+                  Drag a {bank ? bankShortName(bank) : 'TPB or VIB'} statement PDF here
+                </Box>
+                <Box color="text-body-secondary">
+                  or choose a PDF file up to 5 MB. The bank is detected automatically.
+                </Box>
+                <FileInput ariaLabel="Statement PDF" accept="application/pdf,.pdf" value={[]} onChange={({ detail }) => accept(detail.value)}>
+                  Choose file
+                </FileInput>
+                <StatusIndicator type="success">Card data is masked before storage</StatusIndicator>
+              </SpaceBetween>
+            )}
+          </Box>
+        </FileDropzone>
 
-      {state.phase === 'failed' && (
-        <p className="mt-3 rounded-lg bg-error-50 px-3 py-2 text-sm text-error-700 dark:bg-error-500/10 dark:text-error-500">
-          {state.error}
-        </p>
-      )}
+        {state.phase === 'failed' && <Alert type="error">{state.error}</Alert>}
+      </SpaceBetween>
 
-      <AlertDialog
-        open={pendingConflict !== null}
-        onOpenChange={(open) => {
-          if (!open) reset();
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Replace existing statement?</AlertDialogTitle>
-            <AlertDialogDescription>
-              A statement for {monthYearLabel} (****
-              {pendingConflict?.conflict.cardLast4}) already exists. Replacing
-              it keeps the previous version for 90 days.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isWorking} onClick={() => reset()}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              className={buttonVariants({ variant: 'destructive' })}
-              disabled={isWorking}
-              onClick={(e) => {
-                e.preventDefault();
-                if (pendingConflict) {
-                  start(pendingConflict.file, true);
-                }
-              }}
-            >
-              {isWorking ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Replacing…
-                </>
-              ) : (
-                'Replace'
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+      {pendingConflict ? (
+        <Modal
+          visible
+          onDismiss={() => {
+            if (!isWorking) reset();
+          }}
+          closeAriaLabel="Close"
+          header="Replace existing statement?"
+          footer={
+            <Box float="right">
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button variant="link" disabled={isWorking} onClick={() => reset()}>
+                  Cancel
+                </Button>
+                <Button variant="primary" loading={isWorking} onClick={() => start(pendingConflict.file, true)}>
+                  {isWorking ? 'Replacing…' : 'Replace'}
+                </Button>
+              </SpaceBetween>
+            </Box>
+          }
+        >
+          A statement for {monthYearLabel} (****{pendingConflict.conflict.cardLast4}) already exists. Replacing it
+          keeps the previous version for 90 days.
+        </Modal>
+      ) : null}
+    </Container>
   );
 }

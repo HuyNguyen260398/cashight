@@ -1,30 +1,42 @@
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
+'use client';
+
+import { useRouter } from 'next/navigation';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import Container from '@cloudscape-design/components/container';
+import SpaceBetween from '@cloudscape-design/components/space-between';
 import { periodLabel, type PeriodSpec } from '@/lib/period';
 import type { BankCode } from '@/lib/banks';
-import { CalendarX } from 'lucide-react';
+import { shouldHandleClientSide } from '@/app/components/console/follow';
 
 export function EmptyPeriodState({ spec, bank }: { spec: PeriodSpec; bank: BankCode }) {
+  const router = useRouter();
+  const latestHref = `/?bank=${bank}`;
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white px-6 py-16 text-center shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03]">
-      <div className="mx-auto mb-5 flex size-14 items-center justify-center rounded-2xl bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">
-        <CalendarX className="size-7" aria-hidden />
-      </div>
-      <h2 className="mb-2 text-xl font-semibold text-gray-900 dark:text-white/90">
-        No statements for {periodLabel(spec)}
-      </h2>
-      <p className="mx-auto mb-6 max-w-lg text-sm text-gray-500 dark:text-gray-400">
-        There&apos;s no spending data for this period. Upload a statement, or
-        jump back to your most recent data.
-      </p>
-      <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
-        <Button asChild>
-          <Link href="#statement-upload">Upload statement</Link>
-        </Button>
-        <Button asChild variant="outline">
-          <Link href={`/?bank=${bank}`}>Go to latest</Link>
-        </Button>
-      </div>
-    </div>
+    <Container>
+      <Box textAlign="center" padding={{ vertical: 'xl' }}>
+        <SpaceBetween size="s" alignItems="center">
+          <Box variant="h2">No statements for {periodLabel(spec)}</Box>
+          <Box color="text-body-secondary">
+            There&apos;s no spending data for this period. Upload a statement, or jump back to your most recent data.
+          </Box>
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button variant="primary" href="#statement-upload">
+              Upload statement
+            </Button>
+            <Button
+              href={latestHref}
+              onFollow={(event) => {
+                if (!shouldHandleClientSide({ detail: event.detail })) return;
+                event.preventDefault();
+                router.push(latestHref);
+              }}
+            >
+              Go to latest
+            </Button>
+          </SpaceBetween>
+        </SpaceBetween>
+      </Box>
+    </Container>
   );
 }

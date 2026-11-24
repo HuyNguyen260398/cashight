@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { notify } from '@/app/components/console/notifications';
-import { Button } from '@/components/ui/button';
+import Alert from '@cloudscape-design/components/alert';
+import Button from '@cloudscape-design/components/button';
+import Container from '@cloudscape-design/components/container';
+import ContentLayout from '@cloudscape-design/components/content-layout';
+import Header from '@cloudscape-design/components/header';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import { DEFAULT_BANK, bankShortName, parseBankFromSearch } from '@/lib/banks';
 import { parsePeriodFromSearch } from '@/lib/period';
 import type { UploadJob } from '@/frontend/api/contracts';
@@ -22,10 +28,11 @@ import { BankStatementHistory } from './bank-statement-history';
 
 function DashboardSkeleton() {
   return (
-    <div aria-label="Loading spending analytics" aria-busy="true" className="space-y-4 animate-pulse motion-reduce:animate-none">
-      <div className="h-40 rounded-2xl bg-gray-100 dark:bg-gray-800" />
-      <div className="h-64 rounded-2xl bg-gray-100 dark:bg-gray-800" />
-    </div>
+    <Container>
+      <div aria-label="Loading spending analytics" aria-busy="true">
+        <StatusIndicator type="loading">Loading spending analytics…</StatusIndicator>
+      </div>
+    </Container>
   );
 }
 
@@ -109,47 +116,64 @@ function BankDashboardContent() {
   }
 
   return (
-    <main className="space-y-6">
-      <header className="surface-card flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-sm font-medium text-brand-500 dark:text-brand-400">Spending overview</p>
-          <h1 className="mt-1 text-2xl font-semibold text-gray-900 dark:text-white/90">
+    <main>
+      <ContentLayout
+        header={
+          <Header
+            variant="h1"
+            description="Upload monthly statements and review your spending, installments, and merchants."
+            actions={
+              <SpaceBetween direction="horizontal" size="xs" alignItems="center">
+                <BankSelector current={effectiveBank ?? DEFAULT_BANK} available={view?.availableBanks ?? []} />
+                <PeriodSelector current={spec} />
+              </SpaceBetween>
+            }
+          >
             {effectiveBank ? `${bankShortName(effectiveBank)} bank statements` : 'Bank statements'}
-          </h1>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Upload monthly statements and review your spending, installments, and merchants.</p>
-        </div>
-        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-          <BankSelector current={effectiveBank ?? DEFAULT_BANK} available={view?.availableBanks ?? []} />
-          <PeriodSelector current={spec} />
-        </div>
-      </header>
+          </Header>
+        }
+      >
+        <SpaceBetween size="l">
+          <section id="statement-upload" aria-label="Upload statement" className="console-anchor">
+            <UploadDropzone bank={effectiveBank ?? undefined} onSucceeded={handleUploadSucceeded} />
+          </section>
+          {uploadNotice ? (
+            <div role="status">
+              <Alert
+                type="info"
+                action={
+                  <Button onClick={() => { if (pendingUpload) handleUploadSucceeded(pendingUpload.job); }}>
+                    Refresh saved statement
+                  </Button>
+                }
+              >
+                {uploadNotice}
+              </Alert>
+            </div>
+          ) : null}
 
-      <section id="statement-upload" aria-label="Upload statement" className="scroll-mt-24">
-        <UploadDropzone bank={effectiveBank ?? undefined} onSucceeded={handleUploadSucceeded} />
-      </section>
-      {uploadNotice ? (
-        <div role="status" className="surface-card space-y-3 p-5">
-          <p className="text-sm text-gray-700 dark:text-gray-300">{uploadNotice}</p>
-          <Button variant="outline" onClick={() => { if (pendingUpload) handleUploadSucceeded(pendingUpload.job); }}>Refresh saved statement</Button>
-        </div>
-      ) : null}
+          {!hasPeriod ? (
+            emptyCollection ? <EmptyState /> : history.error ? null : <DashboardSkeleton />
+          ) : dashboardLoading ? (
+            <DashboardSkeleton />
+          ) : error ? (
+            <div role="alert">
+              <Alert
+                type="error"
+                header="Couldn't load spending analytics"
+                action={<Button onClick={refreshDashboard}>Retry analytics</Button>}
+              >
+                {error}
+              </Alert>
+            </div>
+          ) : view?.statementCount === 0 ? (
+            <EmptyPeriodState spec={spec} bank={effectiveBank ?? DEFAULT_BANK} />
+          ) : view ? <Dashboard view={view} /> : <DashboardSkeleton />}
 
-      {!hasPeriod ? (
-        emptyCollection ? <EmptyState /> : history.error ? null : <DashboardSkeleton />
-      ) : dashboardLoading ? (
-        <DashboardSkeleton />
-      ) : error ? (
-        <div role="alert" className="surface-card space-y-3 p-6">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white/90">Couldn&apos;t load spending analytics</h2>
-          <p className="text-sm text-error-700 dark:text-error-400">{error}</p>
-          <Button variant="outline" onClick={refreshDashboard}>Retry analytics</Button>
-        </div>
-      ) : view?.statementCount === 0 ? (
-        <EmptyPeriodState spec={spec} bank={effectiveBank ?? DEFAULT_BANK} />
-      ) : view ? <Dashboard view={view} /> : <DashboardSkeleton />}
-
-      {history.refreshing && !history.loading ? <p role="status" className="sr-only">Refreshing statement history…</p> : null}
-      <BankStatementHistory items={history.items} bank={effectiveBank} loading={history.loading} error={history.error} onRetry={retryHistory} onDelete={handleDelete} />
+          {history.refreshing && !history.loading ? <p role="status" className="visually-hidden">Refreshing statement history…</p> : null}
+          <BankStatementHistory items={history.items} bank={effectiveBank} loading={history.loading} error={history.error} onRetry={retryHistory} onDelete={handleDelete} />
+        </SpaceBetween>
+      </ContentLayout>
     </main>
   );
 }

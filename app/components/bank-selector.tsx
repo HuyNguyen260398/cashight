@@ -2,20 +2,14 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import Select from '@cloudscape-design/components/select';
 import { bankShortName, type BankCode } from '@/lib/banks';
 
 /**
  * The banks to offer, current one first and never duplicated.
  *
  * `current` is always included, even when the period holds no statement for it:
- * Radix renders a blank trigger when the value has no matching item, and the
+ * a select renders a blank trigger when the value has no matching option, and the
  * selection has to stay switchable to get back out of an empty view.
  *
  * Exported for testing — the options live in a portal that only exists while
@@ -48,18 +42,16 @@ export function BankSelector({
     router.push(`/?${params}`);
   }
 
+  const selected = { value: current, label: bankShortName(current) };
+
   return (
-    <Select value={current} onValueChange={setBank}>
-      <SelectTrigger aria-label="Filter by bank" className="min-w-[140px]">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((code) => (
-          <SelectItem key={code} value={code}>
-            {bankShortName(code)}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <div style={{ minWidth: 140 }}>
+      <Select
+        ariaLabel="Filter by bank"
+        selectedOption={selected}
+        options={options.map((code) => ({ value: code, label: bankShortName(code) }))}
+        onChange={({ detail }) => setBank(detail.selectedOption.value!)}
+      />
+    </div>
   );
 }
