@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/frontend/auth/auth-provider";
 import { Nav } from "./components/nav";
 import { ScrollToTop } from "./components/scroll-to-top";
-import { ThemeProvider } from "./components/theme-provider";
+import { CloudscapeProvider } from "./components/console/cloudscape-provider";
 import { VisualSettingsScript } from "./components/console/visual-settings-script";
 import "@cloudscape-design/global-styles/index.css";
 import "./globals.css";
@@ -43,13 +42,12 @@ export default function RootLayout({
         <VisualSettingsScript />
       </head>
       <body className="min-h-dvh bg-background text-foreground">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <CloudscapeProvider>
           <AuthProvider>
             <Nav>{children}</Nav>
-            <Toaster />
             <ScrollToTop />
           </AuthProvider>
-        </ThemeProvider>
+        </CloudscapeProvider>
       </body>
     </html>
   );

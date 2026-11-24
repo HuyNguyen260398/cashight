@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
+import { notify } from '@/app/components/console/notifications';
 import { ArrowDown, ArrowUp, ChevronsUpDown, Trash2 } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -127,11 +127,11 @@ export function StatementsTable({
           { method: 'DELETE' },
         );
         setOpenKey(null);
-        toast.success('Statement deleted');
+        notify({ type: 'success', content: 'Statement deleted' });
         router.refresh();
       }
     } catch {
-      toast.error('Could not delete statement');
+      notify({ type: 'error', content: 'Could not delete statement' });
     } finally {
       setDeletingKey(null);
     }

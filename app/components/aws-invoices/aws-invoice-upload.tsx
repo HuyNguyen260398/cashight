@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { FileUp, Loader2, ShieldCheck } from 'lucide-react';
-import { toast } from 'sonner';
+import { notify } from '@/app/components/console/notifications';
 
 import {
   AlertDialog,
@@ -37,11 +37,10 @@ export function AwsInvoiceUpload() {
     onDrop: ([file]) => file && start(file),
     onDropRejected: (rejections) => {
       const code = rejections[0]?.errors[0]?.code;
-      toast.error(
+      notify({ type: 'error', content: 
         code === 'file-too-large'
           ? 'File is too large (max 5 MB).'
-          : 'Only PDF files are accepted.',
-      );
+          : 'Only PDF files are accepted.' });
     },
   });
   const conflict = state.phase === 'conflict' ? state : null;

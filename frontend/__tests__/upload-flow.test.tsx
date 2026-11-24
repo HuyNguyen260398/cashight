@@ -7,7 +7,7 @@ import { sleep } from '@/frontend/lib/sleep';
 import { useUploadJob } from '@/frontend/hooks/use-upload-job';
 import { useDashboard } from '@/frontend/hooks/use-dashboard';
 import { uploadErrorMessage } from '@cashight/domain/upload-error';
-import { toast } from 'sonner';
+import { notify } from '@/app/components/console/notifications';
 
 // ── module-level mocks (hoisted) ──────────────────────────────────────────────
 
@@ -40,9 +40,8 @@ vi.mock('@/frontend/lib/sleep', () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
 }));
 
-// Mock toast so it doesn't error in jsdom.
-vi.mock('sonner', () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+vi.mock('@/app/components/console/notifications', () => ({
+  notify: vi.fn(),
 }));
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -240,7 +239,7 @@ describe('useUploadJob', () => {
       2000,
       4000,
     ]);
-    expect(toast.success).toHaveBeenCalledWith('Statement saved');
+    expect(notify).toHaveBeenCalledWith({ type: 'success', content: 'Statement saved' });
   });
 
   it('cancels stale work when reset is called during hashing', async () => {

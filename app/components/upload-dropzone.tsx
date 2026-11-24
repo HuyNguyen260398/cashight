@@ -3,7 +3,7 @@
 import { useDropzone } from 'react-dropzone';
 import { useEffect } from 'react';
 import { FileUp, Loader2, ShieldCheck } from 'lucide-react';
-import { toast } from 'sonner';
+import { notify } from '@/app/components/console/notifications';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -59,18 +59,18 @@ export function UploadDropzone({ bank, onSucceeded }: {
     onDropRejected: (fileRejections) => {
       const firstError = fileRejections[0]?.errors[0];
       if (!firstError) {
-        toast.error('File rejected.');
+        notify({ type: 'error', content: 'File rejected.' });
         return;
       }
       switch (firstError.code) {
         case 'file-invalid-type':
-          toast.error('Only PDF files are accepted.');
+          notify({ type: 'error', content: 'Only PDF files are accepted.' });
           break;
         case 'file-too-large':
-          toast.error('File is too large (max 5 MB).');
+          notify({ type: 'error', content: 'File is too large (max 5 MB).' });
           break;
         default:
-          toast.error(firstError.message);
+          notify({ type: 'error', content: firstError.message });
       }
     },
   });

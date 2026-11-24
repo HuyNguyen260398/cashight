@@ -2,7 +2,7 @@
 
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { toast } from 'sonner';
+import { notify } from '@/app/components/console/notifications';
 
 import { ApiRequestError } from '@/frontend/api/client';
 import { useAwsInvoiceUpload } from '@/frontend/hooks/use-aws-invoice-upload';
@@ -28,8 +28,8 @@ vi.mock('@/frontend/lib/sleep', () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('sonner', () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+vi.mock('@/app/components/console/notifications', () => ({
+  notify: vi.fn(),
 }));
 
 afterEach(() => cleanup());
@@ -222,7 +222,7 @@ describe('useAwsInvoiceUpload', () => {
     await waitFor(() =>
       expect(second.result.current.state.phase).toBe('succeeded'),
     );
-    expect(toast.success).toHaveBeenCalledWith('Invoice saved');
+    expect(notify).toHaveBeenCalledWith({ type: 'success', content: 'Invoice saved' });
     expect(changed).toHaveBeenCalledOnce();
     expect((changed.mock.calls[0][0] as CustomEvent).detail).toEqual({
       yearMonth: '2026-07',

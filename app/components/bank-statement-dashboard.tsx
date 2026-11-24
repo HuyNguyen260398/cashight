@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { toast } from 'sonner';
+import { notify } from '@/app/components/console/notifications';
 import { Button } from '@/components/ui/button';
 import { DEFAULT_BANK, bankShortName, parseBankFromSearch } from '@/lib/banks';
 import { parsePeriodFromSearch } from '@/lib/period';
@@ -100,7 +100,7 @@ function BankDashboardContent() {
   async function handleDelete(id: string) {
     await deleteStatement(id);
     if (activeSearch.current !== search) return;
-    toast.success('Statement deleted');
+    notify({ type: 'success', content: 'Statement deleted' });
     refreshDashboard();
   }
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { notify } from '@/app/components/console/notifications';
 
 import { apiFetch } from '@/frontend/api/client';
 import type { UploadPresign } from '@/frontend/api/contracts';
@@ -162,7 +162,7 @@ export function usePdfUploadJob<
         if (isCancelled()) return;
 
         if (finalJob.state === 'SUCCEEDED') {
-          toast.success(current.labels.success);
+          notify({ type: 'success', content: current.labels.success });
           current.onSucceeded?.(finalJob);
           setState({ phase: 'succeeded' });
           return;
