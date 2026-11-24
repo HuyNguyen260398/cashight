@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Alert from '@cloudscape-design/components/alert';
 import Button from '@cloudscape-design/components/button';
 import { getOidcManager } from '@/frontend/auth/oidc';
+import { AlertHeading } from '@/app/components/console/alert-heading';
 
 export const COST_EXPLORER_RETURN_TO = '/aws/cost-explorer/' as const;
 
@@ -32,11 +33,7 @@ export function CognitoReauthWarning() {
     <div role="alert">
       <Alert
         type="warning"
-        header={
-          <span role="heading" aria-level={2}>
-            Continue with Cognito to view AWS costs
-          </span>
-        }
+        header={<AlertHeading>Continue with Cognito to view AWS costs</AlertHeading>}
         action={
           <Button loading={loading} onClick={() => void continueWithCognito()}>
             {loading ? 'Opening Cognito…' : 'Continue with Cognito'}

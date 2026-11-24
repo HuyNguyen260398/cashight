@@ -14,12 +14,7 @@ import { notify } from '@/app/components/console/notifications';
 import { bankShortName, type BankCode } from '@/lib/banks';
 import type { UploadJob } from '@/frontend/api/contracts';
 import { useUploadJob } from '@/frontend/hooks/use-upload-job';
-
-const MAX_BYTES = 5 * 1024 * 1024;
-
-function isPdf(file: File): boolean {
-  return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-}
+import { pickPdf } from './pdf-file';
 
 /**
  * Drag-and-drop PDF uploader (Cloudscape FileDropzone + FileInput). Implements the presigned-upload flow:
@@ -48,21 +43,10 @@ export function UploadDropzone({ bank, onSucceeded }: {
 
   function accept(files: readonly File[]) {
     if (isWorking) return;
-    const file = files[0];
-    if (!file) return;
-    if (files.length > 1) {
-      notify({ type: 'error', content: 'Upload one PDF at a time.' });
-      return;
-    }
-    if (!isPdf(file)) {
-      notify({ type: 'error', content: 'Only PDF files are accepted.' });
-      return;
-    }
-    if (file.size > MAX_BYTES) {
-      notify({ type: 'error', content: 'File is too large (max 5 MB).' });
-      return;
-    }
-    start(file);
+    const picked = pickPdf(files);
+    if (!picked) return;
+    if ('error' in picked) notify({ type: 'error', content: picked.error });
+    else start(picked.file);
   }
 
   const pendingConflict = state.phase === 'conflict' ? state : null;
@@ -90,12 +74,15 @@ export function UploadDropzone({ bank, onSucceeded }: {
                 <Box color="text-body-secondary">
                   or choose a PDF file up to 5 MB. The bank is detected automatically.
                 </Box>
-                <FileInput ariaLabel="Statement PDF" accept="application/pdf,.pdf" value={[]} onChange={({ detail }) => accept(detail.value)}>
-                  Choose file
-                </FileInput>
                 <StatusIndicator type="success">Card data is masked before storage</StatusIndicator>
               </SpaceBetween>
             )}
+            {/* Always mounted: a file can be chosen any time; accept() ignores picks during an upload. */}
+            <Box margin={{ top: 's' }}>
+              <FileInput ariaLabel="Statement PDF" accept="application/pdf,.pdf" value={[]} onChange={({ detail }) => accept(detail.value)}>
+                    Choose file
+                  </FileInput>
+            </Box>
           </Box>
         </FileDropzone>
 

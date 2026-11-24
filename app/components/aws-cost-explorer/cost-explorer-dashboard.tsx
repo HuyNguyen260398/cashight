@@ -26,6 +26,7 @@ import {
   serializeCostReportSearch,
 } from '@/frontend/lib/aws-cost-explorer-url';
 import styles from './cost-explorer-layout.module.css';
+import { AlertHeading } from '@/app/components/console/alert-heading';
 
 const PARAMETERS_PANEL_ID = 'cost-report-parameters';
 
@@ -270,7 +271,7 @@ function NativeCostExplorerDashboard() {
       }
     >
       {state.status === 'error' ? (
-        <Alert type="error" header="Couldn't load Cost Explorer">
+        <Alert type="error" header={<AlertHeading>Couldn&apos;t load Cost Explorer</AlertHeading>}>
           {state.error?.message ?? 'The AWS cost query failed. Adjust the report or try again.'}
         </Alert>
       ) : null}

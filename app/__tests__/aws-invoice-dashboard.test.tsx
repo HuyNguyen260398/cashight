@@ -42,9 +42,6 @@ vi.mock('@/frontend/hooks/use-aws-invoices', () => ({
   useAwsInvoices: (...args: unknown[]) => mocks.useInvoices(...args),
 }));
 
-vi.mock('@/app/components/reveal-panel', () => ({
-  RevealPanel: ({ children, className }: { children: React.ReactNode; className?: string }) => <div className={className}>{children}</div>,
-}));
 
 vi.mock('@/app/components/aws-invoices/aws-invoice-upload', () => ({
   AwsInvoiceUpload: () => <div data-testid="upload-panel">Upload panel</div>,

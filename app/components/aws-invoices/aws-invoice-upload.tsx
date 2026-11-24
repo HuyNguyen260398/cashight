@@ -1,21 +1,17 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useDropzone } from 'react-dropzone';
-import { FileUp, Loader2, ShieldCheck } from 'lucide-react';
+import Alert from '@cloudscape-design/components/alert';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import Container from '@cloudscape-design/components/container';
+import FileDropzone from '@cloudscape-design/components/file-dropzone';
+import FileInput from '@cloudscape-design/components/file-input';
+import Modal from '@cloudscape-design/components/modal';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import { notify } from '@/app/components/console/notifications';
-
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { buttonVariants } from '@/components/ui/button';
+import { pickPdf } from '@/app/components/pdf-file';
 import { useAwsInvoiceUpload } from '@/frontend/hooks/use-aws-invoice-upload';
 import { formatInvoiceMonth } from './invoice-format';
 
@@ -29,37 +25,79 @@ export function AwsInvoiceUpload() {
     return () => window.clearTimeout(timer);
   }, [reset, state.phase]);
 
-  const dropzone = useDropzone({
-    disabled: isWorking,
-    accept: { 'application/pdf': ['.pdf'] },
-    maxFiles: 1,
-    maxSize: 5 * 1024 * 1024,
-    onDrop: ([file]) => file && start(file),
-    onDropRejected: (rejections) => {
-      const code = rejections[0]?.errors[0]?.code;
-      notify({ type: 'error', content: 
-        code === 'file-too-large'
-          ? 'File is too large (max 5 MB).'
-          : 'Only PDF files are accepted.' });
-    },
-  });
+  function accept(files: readonly File[]) {
+    if (isWorking) return;
+    const picked = pickPdf(files);
+    if (!picked) return;
+    if ('error' in picked) notify({ type: 'error', content: picked.error });
+    else start(picked.file);
+  }
+
   const conflict = state.phase === 'conflict' ? state : null;
   const month = conflict
-    ? formatInvoiceMonth(
-        `${conflict.conflict.year}-${String(conflict.conflict.month).padStart(2, '0')}`,
-      )
+    ? formatInvoiceMonth(`${conflict.conflict.year}-${String(conflict.conflict.month).padStart(2, '0')}`)
     : '';
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
-      <div {...dropzone.getRootProps()} className="cursor-pointer rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 p-7 text-center transition-colors duration-200 hover:border-brand-300 hover:bg-brand-25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:border-brand-800 dark:hover:bg-brand-500/10" aria-label="Upload AWS invoice PDF">
-        <input {...dropzone.getInputProps()} />
-        {isWorking ? <div className="flex flex-col items-center gap-3 text-gray-500 dark:text-gray-400"><Loader2 className="size-9 animate-spin text-brand-500" aria-hidden /><p className="text-sm font-medium" role="status">{state.message}</p></div> : <div className="flex flex-col items-center"><div className="mb-4 flex size-12 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-400"><FileUp className="size-6" aria-hidden /></div><p className="font-semibold text-gray-900 dark:text-white/90">Upload an AWS consolidated invoice</p><p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Drop or select one PDF up to 5 MB</p><span className="mt-4 inline-flex items-center gap-2 rounded-full bg-success-50 px-3 py-1 text-xs font-medium text-success-700 dark:bg-success-500/10 dark:text-success-500"><ShieldCheck className="size-3.5" aria-hidden />Private header and account data are removed</span></div>}
-      </div>
-      {state.phase === 'failed' && <p role="alert" className="mt-3 rounded-lg bg-error-50 px-3 py-2 text-sm text-error-700 dark:bg-error-500/10 dark:text-error-500">{state.error}</p>}
-      <AlertDialog open={conflict !== null} onOpenChange={(open) => !open && reset()}>
-        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Replace existing invoice?</AlertDialogTitle><AlertDialogDescription>An invoice for {month} already exists. Replacing it preserves the previous S3 version for 90 days.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel onClick={reset}>Cancel</AlertDialogCancel><AlertDialogAction className={buttonVariants({ variant: 'destructive' })} onClick={(event) => { event.preventDefault(); if (conflict) start(conflict.file, true); }}>Replace invoice</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
-      </AlertDialog>
-    </div>
+    <Container>
+      <SpaceBetween size="s">
+        <FileDropzone onChange={({ detail }) => accept(detail.value)}>
+          <Box textAlign="center" padding={{ vertical: 'm' }}>
+            {isWorking ? (
+              <div role="status">
+                <StatusIndicator type="loading">{state.message}</StatusIndicator>
+              </div>
+            ) : (
+              <SpaceBetween size="s" alignItems="center">
+                <Box variant="h3" tagOverride="p">
+                  Upload an AWS consolidated invoice
+                </Box>
+                <Box color="text-body-secondary">Drop or select one PDF up to 5 MB</Box>
+                <StatusIndicator type="success">Private header and account data are removed</StatusIndicator>
+              </SpaceBetween>
+            )}
+            {/* Always mounted: a file can be chosen any time; accept() ignores picks during an upload. */}
+            <Box margin={{ top: 's' }}>
+              <FileInput
+                ariaLabel="Upload AWS invoice PDF"
+                accept="application/pdf,.pdf"
+                value={[]}
+                onChange={({ detail }) => accept(detail.value)}
+              >
+                Choose file
+              </FileInput>
+            </Box>
+          </Box>
+        </FileDropzone>
+        {state.phase === 'failed' && (
+          <div role="alert">
+            <Alert type="error">{state.error}</Alert>
+          </div>
+        )}
+      </SpaceBetween>
+
+      {conflict ? (
+        <Modal
+          visible
+          closeAriaLabel="Close"
+          onDismiss={reset}
+          header="Replace existing invoice?"
+          footer={
+            <Box float="right">
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button variant="link" onClick={reset}>
+                  Cancel
+                </Button>
+                <Button variant="primary" onClick={() => start(conflict.file, true)}>
+                  Replace invoice
+                </Button>
+              </SpaceBetween>
+            </Box>
+          }
+        >
+          An invoice for {month} already exists. Replacing it preserves the previous S3 version for 90 days.
+        </Modal>
+      ) : null}
+    </Container>
   );
 }

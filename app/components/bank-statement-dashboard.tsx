@@ -25,6 +25,7 @@ import { EmptyState } from './empty-state';
 import { EmptyPeriodState } from './empty-period-state';
 import { UploadDropzone } from './upload-dropzone';
 import { BankStatementHistory } from './bank-statement-history';
+import { AlertHeading } from '@/app/components/console/alert-heading';
 
 function DashboardSkeleton() {
   return (
@@ -160,7 +161,7 @@ function BankDashboardContent() {
             <div role="alert">
               <Alert
                 type="error"
-                header="Couldn't load spending analytics"
+                header={<AlertHeading>Couldn&apos;t load spending analytics</AlertHeading>}
                 action={<Button onClick={refreshDashboard}>Retry analytics</Button>}
               >
                 {error}
