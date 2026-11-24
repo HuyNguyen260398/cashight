@@ -68,7 +68,7 @@ function PanelSkeleton({ label }: { label: string }) {
 
 function PageShell({ actions, children }: { actions?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <main>
+    <div>
       <ContentLayout
         header={
           <Header variant="h1" description={PAGE_DESCRIPTION} actions={actions}>
@@ -78,7 +78,7 @@ function PageShell({ actions, children }: { actions?: React.ReactNode; children:
       >
         <SpaceBetween size="l">{children}</SpaceBetween>
       </ContentLayout>
-    </main>
+    </div>
   );
 }
 
@@ -92,7 +92,7 @@ function AccessState({
   onRetry?: () => void;
 }) {
   return (
-    <main aria-busy={!error}>
+    <div aria-busy={!error}>
       <ContentLayout header={<Header variant="h1">{PAGE_TITLE}</Header>}>
         {error ? (
           <Alert type="error" action={onRetry ? <Button onClick={onRetry}>Try again</Button> : undefined}>
@@ -102,7 +102,7 @@ function AccessState({
           <StatusIndicator type="loading">{label}</StatusIndicator>
         )}
       </ContentLayout>
-    </main>
+    </div>
   );
 }
 

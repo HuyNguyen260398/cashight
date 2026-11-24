@@ -117,7 +117,7 @@ function BankDashboardContent() {
   }
 
   return (
-    <main>
+    <div>
       <ContentLayout
         header={
           <Header
@@ -175,6 +175,6 @@ function BankDashboardContent() {
           <BankStatementHistory items={history.items} bank={effectiveBank} loading={history.loading} error={history.error} onRetry={retryHistory} onDelete={handleDelete} />
         </SpaceBetween>
       </ContentLayout>
-    </main>
+    </div>
   );
 }

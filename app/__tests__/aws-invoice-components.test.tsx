@@ -114,7 +114,7 @@ describe('AWS invoice KPI and charts', () => {
     render(<InvoiceMonthlyTrend dashboard={dashboard} />);
 
     expect(
-      screen.getByRole('img', { name: /monthly invoice trend/i }),
+      screen.getByRole('group', { name: /monthly invoice trend/i }),
     ).toHaveTextContent('2026-06: $100.00');
 
     expect(document.body.textContent).not.toMatch(/123456789012|invoiceNumber|billTo/i);

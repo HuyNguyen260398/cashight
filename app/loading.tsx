@@ -6,10 +6,10 @@ import StatusIndicator from '@cloudscape-design/components/status-indicator';
 // while the destination segment streams in.
 export default function Loading() {
   return (
-    <main aria-busy="true" aria-label="Loading page" aria-live="polite">
+    <div aria-busy="true" aria-label="Loading page" aria-live="polite">
       <Box textAlign="center" padding={{ vertical: 'xxxl' }}>
         <StatusIndicator type="loading">Loading…</StatusIndicator>
       </Box>
-    </main>
+    </div>
   );
 }

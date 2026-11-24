@@ -12,24 +12,24 @@ import { isAwsBillingInvoiceEnabled } from '@/frontend/config/features';
 
 function InvoicePageLoading() {
   return (
-    <main aria-label="Loading AWS invoice page" aria-busy="true">
+    <div aria-label="Loading AWS invoice page" aria-busy="true">
       <Container>
         <StatusIndicator type="loading">Loading AWS invoice page…</StatusIndicator>
       </Container>
-    </main>
+    </div>
   );
 }
 
 function InvoicePageUnavailable() {
   return (
-    <main>
+    <div>
       <ContentLayout header={<Header variant="h1">AWS billing invoices are not enabled</Header>}>
         <Container>
           This feature remains disabled until its parser, privacy scan, queues, alarms, and smoke checks have been
           verified by an operator.
         </Container>
       </ContentLayout>
-    </main>
+    </div>
   );
 }
 

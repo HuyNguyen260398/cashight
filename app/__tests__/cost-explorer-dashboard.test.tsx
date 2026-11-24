@@ -412,11 +412,11 @@ describe('Cost Explorer panel states', () => {
       'true',
     );
     expect(
-      screen.getByRole('img', { name: /stacked bar chart/i }),
+      screen.getByRole('group', { name: /stacked bar chart/i }),
     ).toBeInTheDocument();
 
     await userEvent.click(toggle.getByRole('button', { name: 'Line' }));
-    expect(screen.getByRole('img', { name: /line chart/i })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: /line chart/i })).toBeInTheDocument();
     expect(toggle.getByRole('button', { name: 'Line' })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -424,7 +424,7 @@ describe('Cost Explorer panel states', () => {
     expect(window.location.search).toContain('chart=LINE');
 
     await userEvent.click(toggle.getByRole('button', { name: 'Bar' }));
-    expect(screen.getByRole('img', { name: /^Bar chart/i })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: /^Bar chart/i })).toBeInTheDocument();
     // Presentational only: no extra AWS round trip.
     expect(mockRun).toHaveBeenCalledTimes(1);
     // The parameters select follows the toggle, so Apply cannot revert it.
@@ -437,9 +437,12 @@ describe('Cost Explorer panel states', () => {
     );
 
     expect(
-      screen.getByRole('img', { name: /stacked bar chart/i }),
+      screen.getByRole('group', { name: /stacked bar chart/i }),
     ).toBeInTheDocument();
     expect(legendItems()).toHaveLength(10);
+    // The legend is the only series control; it must not sit inside an img
+    // role, which removes its buttons from the accessibility tree.
+    expect(legendItem('Other').closest('[role="img"]')).toBeNull();
     expect(legendItem('Other')).toBeInTheDocument();
 
     // Cloudscape legend: clicking an item isolates that series.
@@ -455,7 +458,7 @@ describe('Cost Explorer panel states', () => {
         comparison={null}
       />,
     );
-    expect(screen.getByRole('img', { name: /line chart/i })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: /line chart/i })).toBeInTheDocument();
     // A presentational style change keeps the hidden series hidden.
     expect(legendItem('Other')).toHaveAttribute('aria-pressed', 'false');
     view.rerender(
@@ -593,7 +596,7 @@ describe('Cost Explorer panel states', () => {
     expect(screen.getByRole('heading', { name: 'Cost drivers' })).toBeInTheDocument();
     expect(screen.getByText('Amazon EC2 increase')).toBeInTheDocument();
     expect(
-      screen.getByRole('img', { name: /across 1 group$/i }),
+      screen.getByRole('group', { name: /across 1 group$/i }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Baseline: \$100\.00/)).toBeInTheDocument();
     expect(screen.getByText(/Comparison: \$125\.50/)).toBeInTheDocument();

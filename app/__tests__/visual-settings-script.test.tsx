@@ -7,7 +7,15 @@ import { VISUAL_SETTINGS_KEY } from '@/app/components/console/visual-settings';
 import { VISUAL_SETTINGS_SCRIPT, VisualSettingsScript } from '@/app/components/console/visual-settings-script';
 import { useHighcharts } from '@/app/components/charts/use-highcharts';
 
-vi.mock('highcharts', () => ({ default: { product: 'Highcharts' } }));
+const loaded: string[] = [];
+vi.mock('highcharts', () => {
+  loaded.push('highcharts');
+  return { default: { product: 'Highcharts' } };
+});
+vi.mock('highcharts/modules/accessibility', () => {
+  loaded.push('accessibility');
+  return {};
+});
 
 function memoryStorage(): Storage {
   const data = new Map<string, string>();
@@ -68,6 +76,9 @@ describe('useHighcharts', () => {
     const { result } = renderHook(() => useHighcharts());
     expect(result.current).toBeNull();
     await waitFor(() => expect(result.current).toEqual({ product: 'Highcharts' }));
+    // The accessibility module must be registered before charts render, or
+    // charts are unlabelled images to screen readers.
+    expect(loaded).toEqual(['highcharts', 'accessibility']);
     await act(async () => {});
   });
 });

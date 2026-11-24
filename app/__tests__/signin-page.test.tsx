@@ -56,6 +56,7 @@ describe('error boundary page', () => {
     const reset = vi.fn();
     const { container } = render(<ErrorPage error={new Error('Boom')} reset={reset} />);
     expect(createWrapper(container).findAlert()?.getElement()).toHaveTextContent('Boom');
+    expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(reset).toHaveBeenCalledOnce();
   });

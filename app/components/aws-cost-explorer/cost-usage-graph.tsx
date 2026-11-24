@@ -131,7 +131,9 @@ export function CostUsageGraph({
         <ChartLoading height={CHART_HEIGHT} />
       ) : (
         <SpaceBetween size="s">
-          <div role="img" aria-label={chart.ariaLabel}>
+          {/* group, not img: an img role would hide the interactive legend
+              from assistive technology. */}
+          <div role="group" aria-label={chart.ariaLabel}>
             <CartesianChart
               highcharts={highcharts}
               chartHeight={CHART_HEIGHT}

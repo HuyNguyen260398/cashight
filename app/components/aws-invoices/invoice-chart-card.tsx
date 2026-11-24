@@ -25,7 +25,9 @@ export function InvoiceChartCard({
           No {title.toLowerCase()} data
         </Box>
       ) : (
-        <div role="img" aria-label={ariaLabel}>
+        // group, not img: an img role prunes the chart and the summary list
+        // from the accessibility tree.
+        <div role="group" aria-label={ariaLabel}>
           <div className="visually-hidden">{summary}</div>
           {children}
         </div>

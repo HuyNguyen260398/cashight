@@ -107,7 +107,7 @@ export function AwsInvoiceDashboard() {
   const displayMonth = requestedMonth ?? history[0]?.yearMonth ?? currentYearMonth();
 
   return (
-    <main>
+    <div>
       <ContentLayout
         header={
           <Header
@@ -192,6 +192,6 @@ export function AwsInvoiceDashboard() {
           {deleting ? <p className="visually-hidden" role="status">Deleting invoice…</p> : null}
         </SpaceBetween>
       </ContentLayout>
-    </main>
+    </div>
   );
 }

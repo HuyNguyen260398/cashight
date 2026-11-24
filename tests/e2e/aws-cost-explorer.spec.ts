@@ -77,7 +77,7 @@ test.describe('AWS Cost Explorer browser parity', () => {
       await expect(page.getByRole('heading', { name: title })).toBeVisible();
     }
     await expect(page.getByText(/Live AWS data|Cached AWS data/)).toBeVisible();
-    await expect(page.getByRole('img', { name: /stacked bar chart/i })).toBeVisible();
+    await expect(page.getByRole('group', { name: /stacked bar chart/i })).toBeVisible();
 
     // Overview headline tiles, matching the AWS console panel.
     for (const tile of ['Total cost', 'Average monthly cost', 'Service count']) {
@@ -107,12 +107,12 @@ test.describe('AWS Cost Explorer browser parity', () => {
     await page.getByRole('button', { name: 'Hide report parameters' }).click();
     await expect(parametersPanel).toBeHidden();
     const widenedGraph = await page
-      .getByRole('img', { name: /chart/i })
+      .getByRole('group', { name: /chart/i })
       .boundingBox();
     await page.getByRole('button', { name: 'Show report parameters' }).click();
     await expect(parametersPanel).toBeVisible();
     const narrowedGraph = await page
-      .getByRole('img', { name: /chart/i })
+      .getByRole('group', { name: /chart/i })
       .boundingBox();
     expect(widenedGraph!.width).toBeGreaterThan(narrowedGraph!.width);
 
@@ -126,12 +126,12 @@ test.describe('AWS Cost Explorer browser parity', () => {
       if (request.url().includes('/aws/cost-explorer/query')) countQuery();
     });
     await chartType.getByRole('button', { name: 'Line' }).click();
-    await expect(page.getByRole('img', { name: /line chart/i })).toBeVisible();
+    await expect(page.getByRole('group', { name: /line chart/i })).toBeVisible();
     await expect(page).toHaveURL(/chart=LINE/);
     await chartType.getByRole('button', { name: 'Bar', exact: true }).click();
-    await expect(page.getByRole('img', { name: /^Bar chart/i })).toBeVisible();
+    await expect(page.getByRole('group', { name: /^Bar chart/i })).toBeVisible();
     await chartType.getByRole('button', { name: 'Stacked bar' }).click();
-    await expect(page.getByRole('img', { name: /stacked bar chart/i })).toBeVisible();
+    await expect(page.getByRole('group', { name: /stacked bar chart/i })).toBeVisible();
     expect(queried).toBe(false);
     // The parameters select follows the toggle.
     await expectSelected(page, 'Chart style', 'Stacked bar');
@@ -205,14 +205,14 @@ test.describe('AWS Cost Explorer browser parity', () => {
         },
       ],
     });
-    await expect(page.getByRole('img', { name: /^Bar chart/i })).toBeVisible();
+    await expect(page.getByRole('group', { name: /^Bar chart/i })).toBeVisible();
 
     await chooseOption(page, 'Chart style', 'STACK');
     await applyReport(page);
-    await expect(page.getByRole('img', { name: /stacked bar chart/i })).toBeVisible();
+    await expect(page.getByRole('group', { name: /stacked bar chart/i })).toBeVisible();
     await chooseOption(page, 'Chart style', 'LINE');
     await applyReport(page);
-    await expect(page.getByRole('img', { name: /line chart/i })).toBeVisible();
+    await expect(page.getByRole('group', { name: /line chart/i })).toBeVisible();
 
     const reportUrl = page.url();
     await page.reload();

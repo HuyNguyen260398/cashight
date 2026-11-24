@@ -12,24 +12,24 @@ import { isAwsCostExplorerEnabled } from '@/frontend/config/features';
 
 function CostExplorerPageLoading() {
   return (
-    <main aria-label="Loading AWS Cost Explorer" aria-busy="true">
+    <div aria-label="Loading AWS Cost Explorer" aria-busy="true">
       <Container>
         <StatusIndicator type="loading">Loading AWS Cost Explorer…</StatusIndicator>
       </Container>
-    </main>
+    </div>
   );
 }
 
 function CostExplorerUnavailable() {
   return (
-    <main>
+    <div>
       <ContentLayout header={<Header variant="h1">AWS Cost Explorer is not enabled</Header>}>
         <Container>
           This production feature remains disabled until its AWS access, cache, alarms, and smoke checks have been
           verified by an operator.
         </Container>
       </ContentLayout>
-    </main>
+    </div>
   );
 }
 
