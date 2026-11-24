@@ -5,6 +5,8 @@ import { AuthProvider } from "@/frontend/auth/auth-provider";
 import { Nav } from "./components/nav";
 import { ScrollToTop } from "./components/scroll-to-top";
 import { ThemeProvider } from "./components/theme-provider";
+import { VisualSettingsScript } from "./components/console/visual-settings-script";
+import "@cloudscape-design/global-styles/index.css";
 import "./globals.css";
 
 // Use locally bundled variable fonts (geist npm package) so the static export
@@ -37,6 +39,9 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <VisualSettingsScript />
+      </head>
       <body className="min-h-dvh bg-background text-foreground">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <AuthProvider>

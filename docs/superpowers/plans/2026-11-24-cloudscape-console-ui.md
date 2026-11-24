@@ -329,3 +329,12 @@ Mapping:
 ## API notes (filled in during Task 1, Step 2)
 
 _Empty until Task 1._
+
+Recorded from `@cloudscape-design/chart-components@1.0.167` / `global-styles@1.0.72`:
+
+- Exports: `import { PieChart, CartesianChart } from '@cloudscape-design/chart-components'`; types `PieChartProps`, `CartesianChartProps`.
+- Common props (`BaseChartOptions`): `highcharts: null | object` (pass the module from `useHighcharts()`; `null` shows `fallback`), `fallback?`, `chartHeight?`, `fitHeight?`, `ariaLabel?`, `legend?: { enabled?, title? }`, `noData?: { statusType?: 'finished'|'loading'|'error', empty?, error?, loading? }`, `filter?`.
+- PieChart: `series: null | { type: 'pie' | 'donut'; name: string; data: { name: string; y: number | null; id?: string; color?: string }[] }`; `tooltip?: { details?: ({segmentName, segmentValue, totalValue}) => {key, value}[] }`; `segmentDescription?`, `innerAreaTitle?`, `innerAreaDescription?`.
+- CartesianChart: `series: Array<{ type: 'column'|'line'|'area'|'spline'|'areaspline'|…; name: string; id?: string; color?: string; data: (number | null | { x?: number; y: number | null })[]; dashStyle?; linkedTo? }>`; `inverted?: boolean` (horizontal bars); `stacking?: 'normal'`; `xAxis?: { title?, type?: 'category'|'linear'|'datetime', categories?: string[], valueFormatter? }`; `yAxis?: same + reversedStacks?`; `tooltip?: { point?: ({ item }) => { key?, value?, description? }, header?, body?, footer? }`.
+- **No per-point colour** on cartesian points — only per series.
+- global-styles: `applyMode(Mode|null, target = document.body)`, `applyDensity(Density|null, target)`; classes `awsui-dark-mode`, `awsui-compact-mode`. The open-source components build is `ALWAYS_VISUAL_REFRESH = true`, `INCLUDE_ONE_THEME = false`.
