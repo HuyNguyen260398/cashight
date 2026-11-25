@@ -33,16 +33,15 @@ test.describe('visual settings', () => {
     expect(await page.evaluate(layoutBackground)).not.toBe('');
   });
 
-  test('applies compact density', async ({ page }) => {
+  test('offers no density toggle', async ({ page }) => {
     await page.goto('/aws/billing-invoice/');
-    await page.getByRole('button', { name: 'Density' }).click();
-    await page.getByRole('menuitemcheckbox', { name: 'Compact' }).click();
-    await expect.poll(() => page.evaluate(() => document.body.classList.contains('awsui-compact-mode'))).toBe(true);
+    await expect(page.getByRole('button', { name: 'Theme' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Density' })).toHaveCount(0);
   });
 
   test('pages without the console shell follow dark mode too', async ({ page }) => {
     await page.addInitScript(() => {
-      localStorage.setItem('cashight.visual-settings', JSON.stringify({ mode: 'dark', density: 'comfortable' }));
+      localStorage.setItem('cashight.visual-settings', JSON.stringify({ mode: 'dark' }));
     });
     await page.goto('/signin/');
     await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible();

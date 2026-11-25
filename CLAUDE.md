@@ -20,7 +20,7 @@ A personal Next.js 16 (App Router, React 19) web app that:
 3. Streams a Gemini-generated natural-language summary of the month's spending.
 4. Persists statements to S3 keyed by `statements/{cardLast4}/{year}/{year}-{mm}.json`.
 5. Aggregates across statements for month / quarter / year views, with the period in the URL (`?period=quarter&year=2026&quarter=2`).
-6. Gates all access behind single-user authentication (Auth.js v5: Google + AWS Cognito, one allowlisted email), with an AWS-console-style UI built on the Cloudscape Design System (light/dark and comfortable/compact modes).
+6. Gates all access behind single-user authentication (Auth.js v5: Google + AWS Cognito, one allowlisted email), with an AWS-console-style UI built on the Cloudscape Design System (light/dark modes).
 7. Deploys to AWS Amplify Hosting (SSR) in `ap-southeast-1`.
 
 ## Commands
@@ -62,7 +62,7 @@ These cut across multiple steps; deviating from them means rewriting later steps
 - **Storage key derivation is the dedupe mechanism.** Key = `statements/{cardLast4}/{year}/{year}-{mm}.json`. Re-uploading the same month overwrites; S3 versioning (90-day expiry) preserves the prior version. There is no separate ID generation.
 - **Aggregation functions are pure.** `lib/aggregations.ts` and `lib/dashboard-aggregations.ts` return new objects, take no I/O. The Step 08 vitest suite is the correctness baseline — update it when changing aggregation logic.
 - **Region is `ap-southeast-1` everywhere.** S3 bucket, Amplify app, and the region env var (`STORAGE_REGION` in prod, `AWS_REGION` in dev) must agree. Mismatched regions cause silent S3 GET failures in production.
-- **The UI is Cloudscape.** Pages use `@cloudscape-design/components` (imported per path, e.g. `@cloudscape-design/components/button`) inside the single `ConsoleShell` (`app/components/console/`: `AppLayout` + `TopNavigation` + `SideNavigation` + `Flashbar`). There is no Tailwind; the few app-level rules live in `app/globals.css`, colours come from `@cloudscape-design/design-tokens`. Charts use `@cloudscape-design/chart-components` with `highcharts` pinned to `^12` (the peer range) and loaded lazily via `useHighcharts()`. Light/dark and density classes go on `<body>` — Cloudscape defines its tokens there, so a class on `<html>` does nothing. Notifications go through `notify()` (Flashbar), not toasts. No AWS logo or AWS branding in the shell — Cashight's own name and icon only.
+- **The UI is Cloudscape.** Pages use `@cloudscape-design/components` (imported per path, e.g. `@cloudscape-design/components/button`) inside the single `ConsoleShell` (`app/components/console/`: `AppLayout` + `TopNavigation` + `SideNavigation` + `Flashbar`). There is no Tailwind; the few app-level rules live in `app/globals.css`, colours come from `@cloudscape-design/design-tokens`. Charts use `@cloudscape-design/chart-components` with `highcharts` pinned to `^12` (the peer range) and loaded lazily via `useHighcharts()`. The light/dark class goes on `<body>` — Cloudscape defines its tokens there, so a class on `<html>` does nothing. Notifications go through `notify()` (Flashbar), not toasts. No AWS logo or AWS branding in the shell — Cashight's own name and icon only.
 - **Installments are accounted separately.** They are a large chunk of the statement; the plan deliberately keeps `totalSpend` and `totalInstallments` distinct rather than double-counting. The dashboard decides how to display them.
 
 ## Data flow
