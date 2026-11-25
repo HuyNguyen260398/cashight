@@ -280,41 +280,41 @@ function NativeCostExplorerDashboard() {
         {/* One report column, so the sidebar starts level with the overview and
             the breakdown stays directly under its own chart. */}
         <div className={styles.report}>
-          <SpaceBetween size="l">
-            {state.status === 'loading' || state.status === 'idle' ? (
-              <>
-                <div aria-live="polite">
-                  <p className="visually-hidden">Loading cost and usage…</p>
-                  <PanelSkeleton label="Loading cost and usage overview" />
-                </div>
-                <PanelSkeleton label="Loading cost and usage graph" />
-                <PanelSkeleton label="Loading cost and usage breakdown" />
-              </>
-            ) : state.status === 'success' ? (
-              <>
-                <CostOverview
-                  request={activeRequest}
-                  result={state.result}
-                  forecast={state.forecast}
-                  comparison={state.comparison}
-                />
-                <CostUsageGraph
-                  request={activeRequest}
-                  result={state.result}
-                  forecast={state.forecast}
-                  comparison={state.comparison}
-                  chartStyle={chartStyle}
-                  onChartStyleChange={changeChartStyle}
-                />
-                <CostBreakdown
-                  request={activeRequest}
-                  result={state.result}
-                  comparison={state.comparison}
-                  onExportCsv={() => exportCsv(activeRequest)}
-                />
-              </>
-            ) : null}
-          </SpaceBetween>
+          {/* SpaceBetween spaces its direct children only — it does not look
+              inside fragments — so each panel must be a separate child. */}
+          {state.status === 'loading' || state.status === 'idle' ? (
+            <SpaceBetween size="l">
+              <div aria-live="polite">
+                <p className="visually-hidden">Loading cost and usage…</p>
+                <PanelSkeleton label="Loading cost and usage overview" />
+              </div>
+              <PanelSkeleton label="Loading cost and usage graph" />
+              <PanelSkeleton label="Loading cost and usage breakdown" />
+            </SpaceBetween>
+          ) : state.status === 'success' ? (
+            <SpaceBetween size="l">
+              <CostOverview
+                request={activeRequest}
+                result={state.result}
+                forecast={state.forecast}
+                comparison={state.comparison}
+              />
+              <CostUsageGraph
+                request={activeRequest}
+                result={state.result}
+                forecast={state.forecast}
+                comparison={state.comparison}
+                chartStyle={chartStyle}
+                onChartStyleChange={changeChartStyle}
+              />
+              <CostBreakdown
+                request={activeRequest}
+                result={state.result}
+                comparison={state.comparison}
+                onExportCsv={() => exportCsv(activeRequest)}
+              />
+            </SpaceBetween>
+          ) : null}
         </div>
 
         {/* Tap-outside scrim for the drawer; hidden at the sidebar width. */}
