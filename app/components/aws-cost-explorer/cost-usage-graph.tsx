@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import type { CostExplorerReportRequest } from '@cashight/domain/aws-cost-explorer';
 import { CartesianChart } from '@cloudscape-design/chart-components';
 import Box from '@cloudscape-design/components/box';
@@ -16,16 +16,17 @@ import type {
   CostExplorerForecast,
 } from '@/frontend/api/contracts';
 import { ChartLoading } from '@/app/components/charts/chart-states';
+import { BarChartIcon, LineChartIcon, StackedBarChartIcon } from '@/app/components/charts/chart-style-icons';
 import { costUsageSeries, seriesId, type ChartStyle } from '@/app/components/charts/cost-series';
 import { useHighcharts } from '@/app/components/charts/use-highcharts';
 import { formatCompactCost, formatCostValue } from './cost-format';
 
 const CHART_HEIGHT = 320;
 
-const CHART_STYLES: ReadonlyArray<{ id: ChartStyle; text: string; iconName: 'view-full' | 'view-vertical' | 'view-horizontal' }> = [
-  { id: 'BAR', text: 'Bar', iconName: 'view-vertical' },
-  { id: 'STACK', text: 'Stacked bar', iconName: 'view-full' },
-  { id: 'LINE', text: 'Line', iconName: 'view-horizontal' },
+const CHART_STYLES: ReadonlyArray<{ id: ChartStyle; text: string; iconSvg: ReactNode }> = [
+  { id: 'BAR', text: 'Bar', iconSvg: <BarChartIcon /> },
+  { id: 'STACK', text: 'Stacked bar', iconSvg: <StackedBarChartIcon /> },
+  { id: 'LINE', text: 'Line', iconSvg: <LineChartIcon /> },
 ];
 
 export function CostUsageGraph({
@@ -110,7 +111,7 @@ export function CostUsageGraph({
               <SegmentedControl
                 label="Chart type"
                 selectedId={activeChartStyle}
-                options={CHART_STYLES.map(({ id, text, iconName }) => ({ id, text, iconName }))}
+                options={CHART_STYLES.map(({ id, text, iconSvg }) => ({ id, text, iconSvg }))}
                 onChange={({ detail }) => onChartStyleChange(detail.selectedId as ChartStyle)}
               />
             ) : undefined

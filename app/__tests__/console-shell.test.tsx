@@ -20,7 +20,7 @@ vi.mock('@/app/components/console/visual-settings', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/app/components/console/visual-settings')>();
   return {
     ...actual,
-    loadVisualSettings: vi.fn(() => ({ mode: 'light', density: 'comfortable' })),
+    loadVisualSettings: vi.fn(() => ({ mode: 'light' })),
     saveVisualSettings: vi.fn(),
     applyVisualSettings: vi.fn(() => () => {}),
   };
@@ -91,13 +91,13 @@ describe('ConsoleShell', () => {
 
   it('applies the saved visual settings on mount', () => {
     renderShell();
-    expect(applyVisualSettings).toHaveBeenCalledWith({ mode: 'light', density: 'comfortable' });
+    expect(applyVisualSettings).toHaveBeenCalledWith({ mode: 'light' });
   });
 });
 
 describe('buildUtilities', () => {
   type MenuUtility = Extract<TopNavigationProps.Utility, { type: 'menu-dropdown' }>;
-  function setup(settings = { mode: 'light' as const, density: 'comfortable' as const }) {
+  function setup(settings = { mode: 'light' as const }) {
     const onSettingsChange = vi.fn();
     const onSignOut = vi.fn();
     const utilities = buildUtilities({ email: 'huy@example.com', settings, onSettingsChange, onSignOut }) as MenuUtility[];
@@ -122,11 +122,9 @@ describe('buildUtilities', () => {
     expect(onSettingsChange).toHaveBeenCalledWith({ mode: 'dark' });
   });
 
-  it('reports a density change', () => {
-    const { byTitle, click, onSettingsChange } = setup();
-    expect(byTitle('Density').items.map((i) => ('text' in i ? i.text : ''))).toEqual(['Comfortable', 'Compact']);
-    click(byTitle('Density'), 'compact');
-    expect(onSettingsChange).toHaveBeenCalledWith({ density: 'compact' });
+  it('offers no density toggle', () => {
+    const { utilities } = setup();
+    expect(utilities.map((u) => u.title ?? u.text)).toEqual(['Theme', 'huy@example.com']);
   });
 
   it('signs out from the user menu labelled with the email', () => {

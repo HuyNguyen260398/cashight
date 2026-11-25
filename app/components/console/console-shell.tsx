@@ -15,7 +15,6 @@ import {
   applyVisualSettings,
   loadVisualSettings,
   saveVisualSettings,
-  type DensityPreference,
   type ModePreference,
   type VisualSettings,
 } from './visual-settings';
@@ -24,10 +23,6 @@ const MODE_OPTIONS: ReadonlyArray<{ id: ModePreference; text: string }> = [
   { id: 'light', text: 'Light' },
   { id: 'dark', text: 'Dark' },
   { id: 'system', text: 'System' },
-];
-const DENSITY_OPTIONS: ReadonlyArray<{ id: DensityPreference; text: string }> = [
-  { id: 'comfortable', text: 'Comfortable' },
-  { id: 'compact', text: 'Compact' },
 ];
 
 function useVisualSettings() {
@@ -69,14 +64,6 @@ export function buildUtilities({
       ariaLabel: 'Theme',
       items: MODE_OPTIONS.map(({ id, text }) => ({ id, text, itemType: 'checkbox', checked: settings.mode === id })),
       onItemClick: ({ detail }) => onSettingsChange({ mode: detail.id as ModePreference }),
-    },
-    {
-      type: 'menu-dropdown',
-      iconName: 'view-full',
-      title: 'Density',
-      ariaLabel: 'Density',
-      items: DENSITY_OPTIONS.map(({ id, text }) => ({ id, text, itemType: 'checkbox', checked: settings.density === id })),
-      onItemClick: ({ detail }) => onSettingsChange({ density: detail.id as DensityPreference }),
     },
     {
       type: 'menu-dropdown',

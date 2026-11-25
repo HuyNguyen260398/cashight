@@ -1,18 +1,15 @@
-import { Density, Mode, applyDensity, applyMode } from '@cloudscape-design/global-styles';
+import { Mode, applyMode } from '@cloudscape-design/global-styles';
 
 export type ModePreference = 'light' | 'dark' | 'system';
-export type DensityPreference = 'comfortable' | 'compact';
 
 export interface VisualSettings {
   mode: ModePreference;
-  density: DensityPreference;
 }
 
 export const VISUAL_SETTINGS_KEY = 'cashight.visual-settings';
 
-const DEFAULT_SETTINGS: VisualSettings = { mode: 'system', density: 'comfortable' };
+const DEFAULT_SETTINGS: VisualSettings = { mode: 'system' };
 const MODES: readonly ModePreference[] = ['light', 'dark', 'system'];
-const DENSITIES: readonly DensityPreference[] = ['comfortable', 'compact'];
 const DARK_QUERY = '(prefers-color-scheme: dark)';
 
 function browserStorage(): Storage | undefined {
@@ -35,9 +32,6 @@ export function loadVisualSettings(
   const value = (raw ?? {}) as Partial<Record<keyof VisualSettings, unknown>>;
   return {
     mode: MODES.includes(value.mode as ModePreference) ? (value.mode as ModePreference) : DEFAULT_SETTINGS.mode,
-    density: DENSITIES.includes(value.density as DensityPreference)
-      ? (value.density as DensityPreference)
-      : DEFAULT_SETTINGS.density,
   };
 }
 
@@ -58,15 +52,13 @@ export function resolveMode(mode: ModePreference, prefersDark: boolean): 'light'
 }
 
 /**
- * Applies mode and density to <body>, where Cloudscape defines its theme
+ * Applies the colour mode to <body>, where Cloudscape defines its theme
  * tokens (a class on <html> would be overridden). Returns an unsubscribe that stops
  * following the OS colour scheme when the mode is 'system'.
  */
 export function applyVisualSettings(settings: VisualSettings): () => void {
   const target = document.body;
   const toMode = (dark: boolean) => (resolveMode(settings.mode, dark) === 'dark' ? Mode.Dark : Mode.Light);
-
-  applyDensity(settings.density === 'compact' ? Density.Compact : Density.Comfortable, target);
 
   const media = typeof window.matchMedia === 'function' ? window.matchMedia(DARK_QUERY) : null;
   applyMode(toMode(media?.matches ?? false), target);

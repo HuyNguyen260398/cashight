@@ -47,17 +47,17 @@ afterEach(() => {
 
 describe('pre-paint visual settings script', () => {
   it('adds the dark class for a saved dark mode', () => {
-    expect(runScript('{"mode":"dark","density":"comfortable"}').contains('awsui-dark-mode')).toBe(true);
+    expect(runScript('{"mode":"dark"}').contains('awsui-dark-mode')).toBe(true);
   });
 
   it('follows the OS for system mode', () => {
-    expect(runScript('{"mode":"system","density":"comfortable"}', true).contains('awsui-dark-mode')).toBe(true);
+    expect(runScript('{"mode":"system"}', true).contains('awsui-dark-mode')).toBe(true);
     expect(runScript(null, false).contains('awsui-dark-mode')).toBe(false);
   });
 
-  it('adds the compact class for compact density', () => {
+  it('ignores a compact density saved by older versions', () => {
     const classes = runScript('{"mode":"light","density":"compact"}', true);
-    expect(classes.contains('awsui-compact-mode')).toBe(true);
+    expect(classes.contains('awsui-compact-mode')).toBe(false);
     expect(classes.contains('awsui-dark-mode')).toBe(false);
   });
 
