@@ -11,9 +11,12 @@ import { Nav } from "./components/nav";
 import { ScrollToTop } from "./components/scroll-to-top";
 import { CloudscapeProvider } from "./components/console/cloudscape-provider";
 import { VisualSettingsScript } from "./components/console/visual-settings-script";
-// Cloudscape's global styles bundle Open Sans locally, so the static export
-// has no web-font network dependency.
+// Cloudscape's global styles; the app font (Inter) is self-hosted via
+// globals.css, so the static export has no web-font network dependency.
 import "@cloudscape-design/global-styles/index.css";
+// Cashight's console theme (square corners, near-black dark mode), generated
+// from app/components/console/console-theme.ts by `pnpm theme:generate`.
+import "./console-theme.generated.css";
 import "./globals.css";
 
 export const metadata: Metadata = {

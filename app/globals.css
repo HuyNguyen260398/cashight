@@ -1,11 +1,54 @@
-/* Cloudscape (@cloudscape-design/global-styles) supplies the base styles and
-   fonts; this file holds only the few app-level rules Cloudscape has no
-   component for. */
+/* Cloudscape (@cloudscape-design/global-styles) supplies the base styles; the
+   design tokens are themed in app/components/console/console-theme.ts. This
+   file holds only the few app-level rules Cloudscape has no token for. */
+
+/* Self-hosted Inter (variable), the fallback for the console's Amazon Ember. */
+@import '@fontsource-variable/inter/wght.css';
+
+/* ── Flat, bordered containers ───────────────────────────────────────────────
+   The refreshed AWS console draws containers as a 1px hairline on a flat
+   surface instead of a soft drop shadow. Cloudscape does not expose the
+   container shadow as a themeable token, so its internal custom properties
+   are overridden here. Cloudscape declares them inside
+   `@layer awsui-base-theme`, which unlayered rules always beat.
+   lib/__tests__/console-theme.test.ts fails if a Cloudscape upgrade renames
+   these properties. */
+body,
+body [class*='awsui-context-'] {
+  --shadow-container-quglkl: 0 0 0 1px #d4d4d4;
+  --shadow-container-active-iomjxu: 0 0 0 1px #6b6b6b;
+  --shadow-panel-8l4v80: 0 0 0 1px #e5e5e5;
+  --shadow-dropdown-ogwesf: 0 0 0 1px #d4d4d4, 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+body.awsui-dark-mode,
+body.awsui-dark-mode [class*='awsui-context-'],
+body .awsui-dark-mode {
+  --shadow-container-quglkl: 0 0 0 1px #3a3a3a;
+  --shadow-container-active-iomjxu: 0 0 0 1px #8a8a8a;
+  --shadow-panel-8l4v80: 0 0 0 1px #2b2b2b;
+  --shadow-dropdown-ogwesf: 0 0 0 1px #3a3a3a, 0 4px 12px rgba(0, 0, 0, 0.6);
+}
+
+/* Cloudscape charts set Highcharts' left spacing to 0, and Highcharts reserves
+   a few px less than the widest y-axis label actually draws, so labels such as
+   "$30" were clipped at the chart's left edge. Let them spill into the
+   container padding; series stay inside the plot via Highcharts' own
+   clip-path, and the chart-components API offers no spacing option. */
+.highcharts-container,
+.highcharts-container > svg.highcharts-root {
+  overflow: visible !important;
+}
 
 /* In-page anchors (#statement-upload, #statement-history) land below the
    sticky console top navigation. */
 .console-anchor {
   scroll-margin-top: 72px;
+}
+
+/* In dark mode the top bar shares the page canvas; a hairline separates it. */
+body.awsui-dark-mode #console-top-navigation {
+  border-block-end: 1px solid #2b2b2b;
 }
 
 .visually-hidden {
