@@ -1,28 +1,22 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Bookmark, Loader2, Save, Trash2 } from 'lucide-react';
 import type {
   CostExplorerReportRequest,
   SavedCostReport,
 } from '@cashight/domain/aws-cost-explorer';
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Button, buttonVariants } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
-
-const selectClassName =
-  'h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-theme-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-300';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import ColumnLayout from '@cloudscape-design/components/column-layout';
+import Container from '@cloudscape-design/components/container';
+import FormField from '@cloudscape-design/components/form-field';
+import Header from '@cloudscape-design/components/header';
+import Input from '@cloudscape-design/components/input';
+import Modal from '@cloudscape-design/components/modal';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
+import { SelectField } from './fields';
 
 export interface SavedReportsProps {
   reports: SavedCostReport[];
@@ -73,17 +67,6 @@ export function SavedReports({
   // field and actions do not fit there: the field collapsed to 26px and the
   // buttons overflowed the panel border. Stacking matches what every other
   // section of report-parameters.tsx already does in compact mode.
-  const fieldGrid = cn(
-    'grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]',
-    compact && 'xl:grid-cols-1',
-  );
-  const actionGroup = cn(
-    'grid gap-3 self-end grid-cols-2',
-    compact && 'xl:grid-cols-1',
-  );
-  const labelClassName =
-    'space-y-1 text-xs font-medium text-gray-700 dark:text-gray-300';
-
   const duplicate = (candidate: string, exceptId?: string) =>
     reports.some(
       (report) =>
@@ -145,157 +128,112 @@ export function SavedReports({
     }
   };
 
+  const busy = mutation !== null;
+
   return (
-    <section
-      aria-labelledby="saved-cost-reports-heading"
-      className="space-y-3 rounded-xl border border-gray-200 p-4 dark:border-gray-800"
-    >
-      <div className="flex items-center gap-2">
-        <Bookmark className="size-4 text-brand-500" aria-hidden />
-        <h3
-          id="saved-cost-reports-heading"
-          className="text-sm font-semibold text-gray-900 dark:text-white/90"
-        >
-          Saved reports
-        </h3>
-      </div>
-
-      {loading && (
-        <p className="flex items-center gap-2 text-sm text-gray-500">
-          <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden />
-          Loading saved reports…
-        </p>
-      )}
-      {error && (
-        <p role="alert" className="text-sm text-error-600 dark:text-error-400">
-          {error.message}
-        </p>
-      )}
-
-      {/* One grid for both rows, so the two fields share a column track and
-          their right edges line up. Separate grids sized their own 1fr column
-          against a different number of action columns, leaving the wider row's
-          field visibly short. */}
-      <div className={fieldGrid}>
-        <label className={labelClassName}>
-          <span>Saved report</span>
-          <select
-            aria-label="Saved report"
-            className={selectClassName}
-            value={selectedId}
-            disabled={loading || reports.length === 0}
-            onChange={(event) => {
-              setSelectedId(event.target.value);
-              setLocalError(null);
-              setMessage(null);
-            }}
-          >
-            <option value="">Select a report</option>
-            {reports.map((report) => (
-              <option key={report.reportId} value={report.reportId}>
-                {report.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <Button
-          type="button"
-          variant="outline"
-          className="min-h-11 self-end"
-          disabled={!selected || mutation !== null}
-          onClick={() => selected && onLoad(selected.request)}
-        >
-          Load report
-        </Button>
-
-        <label className={labelClassName}>
-          <span>Report name</span>
-          <Input
-            aria-label="Report name"
-            value={name}
-            maxLength={80}
-            onChange={(event) => {
-              setName(event.target.value);
-              setLocalError(null);
-              setMessage(null);
-            }}
-          />
-        </label>
-        <div className={actionGroup}>
-          <Button
-            type="button"
-            variant="secondary"
-            className="min-h-11"
-            disabled={mutation !== null}
-            onClick={() => void save(false)}
-          >
-            {mutation === 'save' ? (
-              <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden />
-            ) : (
-              <Save aria-hidden />
-            )}
-            Save as new
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11"
-            disabled={!selected || mutation !== null}
-            onClick={() => void save(true)}
-          >
-            Rename report
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div aria-live="polite" className="min-w-0 flex-1">
-          {localError && (
-            <p role="alert" className="text-sm text-error-600 dark:text-error-400">
-              {localError}
-            </p>
+    <section aria-labelledby="saved-cost-reports-heading">
+      <Container
+        variant="stacked"
+        header={
+          <Header variant="h3">
+            <span id="saved-cost-reports-heading">Saved reports</span>
+          </Header>
+        }
+      >
+        <SpaceBetween size="s">
+          {loading && <StatusIndicator type="loading">Loading saved reports…</StatusIndicator>}
+          {error && (
+            <Box color="text-status-error">
+              <span role="alert">{error.message}</span>
+            </Box>
           )}
-          {message && <p className="text-sm text-success-600">{message}</p>}
-        </div>
-        <Button
-          type="button"
-          variant="destructive"
-          className={cn('min-h-11', compact && 'xl:w-full')}
-          disabled={!selected || mutation !== null}
-          onClick={() => setDeleteOpen(true)}
-        >
-          <Trash2 aria-hidden />
-          Delete report
-        </Button>
-      </div>
 
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete saved report?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This deletes {selected?.name ?? 'the selected report'} from Cashight.
-              It does not change AWS cost data.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={mutation === 'delete'}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              aria-label="Confirm delete report"
-              className={buttonVariants({ variant: 'destructive' })}
-              disabled={mutation === 'delete'}
-              onClick={(event) => {
-                event.preventDefault();
-                void remove();
-              }}
-            >
-              {mutation === 'delete' ? 'Deleting…' : 'Delete report'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+          <ColumnLayout columns={compact ? 1 : 2}>
+            <SpaceBetween size="xs">
+              <SelectField
+                label="Saved report"
+                value={selectedId}
+                disabled={loading || reports.length === 0}
+                options={[
+                  { value: '', label: 'Select a report' },
+                  ...reports.map((report) => ({ value: report.reportId, label: report.name })),
+                ]}
+                onChange={(value) => {
+                  setSelectedId(value);
+                  setLocalError(null);
+                  setMessage(null);
+                }}
+              />
+              <Button disabled={!selected || busy} onClick={() => selected && onLoad(selected.request)}>
+                Load report
+              </Button>
+            </SpaceBetween>
+            <SpaceBetween size="xs">
+              <FormField label="Report name">
+                <Input
+                  ariaLabel="Report name"
+                  value={name}
+                  onChange={({ detail }) => {
+                    setName(detail.value.slice(0, 80));
+                    setLocalError(null);
+                    setMessage(null);
+                  }}
+                />
+              </FormField>
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button iconName="upload" loading={mutation === 'save'} disabled={busy && mutation !== 'save'} onClick={() => void save(false)}>
+                  Save as new
+                </Button>
+                <Button disabled={!selected || busy} onClick={() => void save(true)}>
+                  Rename report
+                </Button>
+                <Button iconName="remove" disabled={!selected || busy} onClick={() => setDeleteOpen(true)}>
+                  Delete report
+                </Button>
+              </SpaceBetween>
+            </SpaceBetween>
+          </ColumnLayout>
+
+          <div aria-live="polite">
+            {localError && (
+              <div role="alert">
+                <StatusIndicator type="error">{localError}</StatusIndicator>
+              </div>
+            )}
+            {message && <StatusIndicator type="success">{message}</StatusIndicator>}
+          </div>
+        </SpaceBetween>
+      </Container>
+
+      {deleteOpen ? (
+        <Modal
+          visible
+          closeAriaLabel="Close"
+          onDismiss={() => {
+            if (mutation !== 'delete') setDeleteOpen(false);
+          }}
+          header="Delete saved report?"
+          footer={
+            <Box float="right">
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button variant="link" disabled={mutation === 'delete'} onClick={() => setDeleteOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  ariaLabel="Confirm delete report"
+                  loading={mutation === 'delete'}
+                  onClick={() => void remove()}
+                >
+                  {mutation === 'delete' ? 'Deleting…' : 'Delete report'}
+                </Button>
+              </SpaceBetween>
+            </Box>
+          }
+        >
+          This deletes {selected?.name ?? 'the selected report'} from Cashight. It does not change AWS cost data.
+        </Modal>
+      ) : null}
     </section>
   );
 }

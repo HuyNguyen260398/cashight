@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Copy, Loader2, Play, RotateCcw } from 'lucide-react';
 import {
   CostExplorerReportRequestSchema,
   type CostExplorerReportRequest,
@@ -14,10 +13,17 @@ import {
 
 import { FilterBuilder, COST_FILTER_DIMENSIONS } from './filter-builder';
 import { SavedReports } from './saved-reports';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import Checkbox from '@cloudscape-design/components/checkbox';
+import ColumnLayout from '@cloudscape-design/components/column-layout';
+import Container from '@cloudscape-design/components/container';
+import FormField from '@cloudscape-design/components/form-field';
+import Header from '@cloudscape-design/components/header';
+import Input from '@cloudscape-design/components/input';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
+import { DateField, SelectField } from './fields';
 import { apiFetch } from '@/frontend/api/client';
 import { CostBillingViewsResponseSchema } from '@/frontend/api/contracts';
 import { getPublicConfig } from '@/frontend/auth/config';
@@ -25,7 +31,6 @@ import {
   createDefaultCostReportRequest,
   serializeCostReportSearch,
 } from '@/frontend/lib/aws-cost-explorer-url';
-import { cn } from '@/lib/utils';
 
 type DateRangePreset =
   | 'CURRENT_MONTH'
@@ -65,9 +70,6 @@ export interface ReportParametersProps {
   chartStyle?: CostExplorerReportRequest['chartStyle'];
   onChartStyleChange?: (style: CostExplorerReportRequest['chartStyle']) => void;
 }
-
-const selectClassName =
-  'h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-theme-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-300';
 
 const metrics = [
   ['UnblendedCost', 'Unblended cost'],
@@ -172,24 +174,6 @@ function closedMonthComparison(now: Date): {
   };
 }
 
-function Field({
-  label,
-  children,
-  hint,
-}: {
-  label: string;
-  children: React.ReactNode;
-  hint?: string;
-}) {
-  return (
-    <label className="space-y-1 text-xs font-medium text-gray-700 dark:text-gray-300">
-      <span>{label}</span>
-      {children}
-      {hint && <span className="block font-normal text-gray-500">{hint}</span>}
-    </label>
-  );
-}
-
 function GroupControl({
   index,
   group,
@@ -201,82 +185,54 @@ function GroupControl({
 }) {
   const type = group?.type ?? 'NONE';
   return (
-    <div className="grid gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-800 sm:grid-cols-2">
-      <Field label={`Group ${index + 1} type`}>
-        <select
-          aria-label={`Group ${index + 1} type`}
-          className={selectClassName}
-          value={type}
-          onChange={(event) => {
-            const nextType = event.target.value;
-            if (nextType === 'NONE') onChange(null);
-            else {
-              onChange({
-                type: nextType as GroupDefinition['type'],
-                key: nextType === 'DIMENSION' ? 'SERVICE' : '',
-              });
-            }
-          }}
-        >
-          <option value="NONE">None</option>
-          <option value="DIMENSION">Dimension</option>
-          <option value="TAG">Tag</option>
-          <option value="COST_CATEGORY">Cost category</option>
-        </select>
-      </Field>
-      <Field label={`Group ${index + 1} key`}>
-        {group?.type === 'DIMENSION' ? (
-          <select
-            aria-label={`Group ${index + 1} key`}
-            className={selectClassName}
-            value={group.key}
-            onChange={(event) => onChange({ ...group, key: event.target.value })}
-          >
-            {COST_FILTER_DIMENSIONS.map((dimension) => (
-              <option key={dimension.key} value={dimension.key}>
-                {dimension.label}
-              </option>
-            ))}
-          </select>
-        ) : (
+    <ColumnLayout columns={2}>
+      <SelectField
+        label={`Group ${index + 1} type`}
+        value={type}
+        options={[
+          { value: 'NONE', label: 'None' },
+          { value: 'DIMENSION', label: 'Dimension' },
+          { value: 'TAG', label: 'Tag' },
+          { value: 'COST_CATEGORY', label: 'Cost category' },
+        ]}
+        onChange={(nextType) => {
+          if (nextType === 'NONE') onChange(null);
+          else onChange({ type: nextType as GroupDefinition['type'], key: nextType === 'DIMENSION' ? 'SERVICE' : '' });
+        }}
+      />
+      {group?.type === 'DIMENSION' ? (
+        <SelectField
+          label={`Group ${index + 1} key`}
+          value={group.key}
+          options={COST_FILTER_DIMENSIONS.map((dimension) => ({ value: dimension.key, label: dimension.label }))}
+          onChange={(key) => onChange({ ...group, key })}
+        />
+      ) : (
+        <FormField label={`Group ${index + 1} key`}>
           <Input
-            aria-label={`Group ${index + 1} key`}
+            ariaLabel={`Group ${index + 1} key`}
             disabled={!group}
             value={group?.key ?? ''}
-            placeholder={
-              group?.type === 'TAG'
-                ? 'Tag key'
-                : group?.type === 'COST_CATEGORY'
-                  ? 'Cost category name'
-                  : 'No group'
-            }
-            onChange={(event) =>
-              group && onChange({ ...group, key: event.target.value })
-            }
+            placeholder={group?.type === 'TAG' ? 'Tag key' : group?.type === 'COST_CATEGORY' ? 'Cost category name' : 'No group'}
+            onChange={({ detail }) => group && onChange({ ...group, key: detail.value })}
           />
-        )}
-      </Field>
-    </div>
+        </FormField>
+      )}
+    </ColumnLayout>
   );
 }
 
 function IssueList({ issues }: { issues: CostExplorerValidationIssue[] }) {
   if (issues.length === 0) return null;
   return (
-    <div className="space-y-1" aria-live="polite">
-      {issues.map((issue, index) => (
-        <p
-          key={`${issue.path}:${issue.code}:${index}`}
-          role={issue.severity === 'ERROR' ? 'alert' : 'status'}
-          className={
-            issue.severity === 'ERROR'
-              ? 'text-sm text-error-600 dark:text-error-400'
-              : 'text-sm text-warning-700 dark:text-warning-400'
-          }
-        >
-          {issue.message}
-        </p>
-      ))}
+    <div aria-live="polite">
+      <SpaceBetween size="xxs">
+        {issues.map((issue, index) => (
+          <div key={`${issue.path}:${issue.code}:${index}`} role={issue.severity === 'ERROR' ? 'alert' : 'status'}>
+            <StatusIndicator type={issue.severity === 'ERROR' ? 'error' : 'warning'}>{issue.message}</StatusIndicator>
+          </div>
+        ))}
+      </SpaceBetween>
     </div>
   );
 }
@@ -414,317 +370,221 @@ export function ReportParameters({
     setCopyStatus(null);
   };
 
+  const columns = compact ? 1 : 4;
+  const setStart = (start: string) => {
+    setDatePreset('CUSTOM');
+    setDraft((current) => ({ ...current, timePeriod: { ...current.timePeriod, start } }));
+  };
+  const setEnd = (end: string) => {
+    setDatePreset('CUSTOM');
+    setDraft((current) => ({ ...current, timePeriod: { ...current.timePeriod, end } }));
+  };
+  const setComparison = (key: 'start' | 'end', value: string) => {
+    setComparisonPreset('CUSTOM');
+    setDraft((current) => ({
+      ...current,
+      comparisonTimePeriod: { ...current.comparisonTimePeriod!, [key]: value },
+    }));
+  };
+  const billingViewOptions = [
+    { value: '', label: 'All billing data' },
+    ...(draft.billingViewArn && !billingViews.some((view) => view.arn === draft.billingViewArn)
+      ? [{ value: draft.billingViewArn, label: 'Current billing view' }]
+      : []),
+    ...billingViews.map((view) => ({ value: view.arn, label: view.name })),
+  ];
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          <h2>Report parameters</h2>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <section
-          className={cn(
-            'grid gap-4',
-            compact ? 'sm:grid-cols-2 xl:grid-cols-1' : 'sm:grid-cols-2 lg:grid-cols-4',
-          )}
-          aria-label="Date and report mode"
-        >
-          <Field label="Date range">
-            <select
-              aria-label="Date range"
-              className={selectClassName}
+    <Container header={<Header variant="h2">Report parameters</Header>}>
+      <SpaceBetween size="l">
+        <section aria-label="Date and report mode">
+          <ColumnLayout columns={columns}>
+            <SelectField<DateRangePreset>
+              label="Date range"
               value={datePreset}
-              onChange={(event) => {
-                const preset = event.target.value as DateRangePreset;
+              options={[
+                { value: 'CURRENT_MONTH', label: 'Current month' },
+                { value: 'LAST_7_DAYS', label: 'Last 7 days' },
+                { value: 'LAST_30_DAYS', label: 'Last 30 days' },
+                { value: 'LAST_3_MONTHS', label: 'Last 3 months' },
+                { value: 'LAST_6_MONTHS', label: 'Last 6 months' },
+                { value: 'YEAR_TO_DATE', label: 'Year to date' },
+                { value: 'CUSTOM', label: 'Custom' },
+              ]}
+              onChange={(preset) => {
                 setDatePreset(preset);
                 if (preset !== 'CUSTOM') {
-                  setDraft((current) => ({
-                    ...current,
-                    timePeriod: periodForPreset(preset, now),
-                  }));
+                  setDraft((current) => ({ ...current, timePeriod: periodForPreset(preset, now) }));
                 }
               }}
-            >
-              <option value="CURRENT_MONTH">Current month</option>
-              <option value="LAST_7_DAYS">Last 7 days</option>
-              <option value="LAST_30_DAYS">Last 30 days</option>
-              <option value="LAST_3_MONTHS">Last 3 months</option>
-              <option value="LAST_6_MONTHS">Last 6 months</option>
-              <option value="YEAR_TO_DATE">Year to date</option>
-              <option value="CUSTOM">Custom</option>
-            </select>
-          </Field>
-          <Field label="Start date">
-            <Input
-              type="date"
-              aria-label="Start date"
-              value={draft.timePeriod.start}
-              onChange={(event) => {
-                setDatePreset('CUSTOM');
-                setDraft((current) => ({
-                  ...current,
-                  timePeriod: { ...current.timePeriod, start: event.target.value },
-                }));
-              }}
             />
-          </Field>
-          <Field label="End date" hint="Exclusive end date">
-            <Input
-              type="date"
-              aria-label="End date"
-              value={draft.timePeriod.end}
-              onChange={(event) => {
-                setDatePreset('CUSTOM');
-                setDraft((current) => ({
-                  ...current,
-                  timePeriod: { ...current.timePeriod, end: event.target.value },
-                }));
-              }}
-            />
-          </Field>
-          <Field label="Report mode">
-            <select
-              aria-label="Report mode"
-              className={selectClassName}
+            <DateField label="Start date" value={draft.timePeriod.start} onChange={setStart} />
+            <DateField label="End date" description="Exclusive end date" value={draft.timePeriod.end} onChange={setEnd} />
+            <SelectField<CostExplorerReportRequest['mode']>
+              label="Report mode"
               value={draft.mode}
-              onChange={(event) => {
-                const mode = event.target.value as CostExplorerReportRequest['mode'];
+              options={[
+                { value: 'STANDARD', label: 'Standard' },
+                { value: 'RESOURCE', label: 'Resource', disabled: !granularDataEnabled },
+                { value: 'COMPARISON', label: 'Comparison' },
+              ]}
+              onChange={(mode) => {
                 setComparisonPreset('CUSTOM');
                 setDraft((current) => ({
                   ...current,
                   mode,
                   ...(mode === 'COMPARISON'
                     ? {
-                        comparisonTimePeriod:
-                          current.comparisonTimePeriod ?? previousPeriod(current.timePeriod),
+                        comparisonTimePeriod: current.comparisonTimePeriod ?? previousPeriod(current.timePeriod),
                         showForecast: false,
                       }
                     : { comparisonTimePeriod: undefined }),
                   ...(mode !== 'STANDARD' ? { showForecast: false } : {}),
                 }));
               }}
-            >
-              <option value="STANDARD">Standard</option>
-              <option value="RESOURCE" disabled={!granularDataEnabled}>
-                Resource
-              </option>
-              <option value="COMPARISON">Comparison</option>
-            </select>
-          </Field>
+            />
+          </ColumnLayout>
         </section>
 
         {draft.mode === 'COMPARISON' && draft.comparisonTimePeriod && (
-          <section className="grid gap-4 rounded-xl border border-gray-200 p-4 dark:border-gray-800 sm:grid-cols-3" aria-label="Comparison period">
-            <Field label="Comparison range">
-              <select
-                aria-label="Comparison range"
-                className={selectClassName}
-                value={comparisonPreset}
-                onChange={(event) => {
-                  const preset = event.target.value as typeof comparisonPreset;
-                  setComparisonPreset(preset);
-                  if (preset === 'MONTH_TO_MONTH') {
-                    const periods = closedMonthComparison(now);
-                    setDatePreset('CUSTOM');
-                    setDraft((current) => ({ ...current, ...periods }));
-                  }
-                }}
-              >
-                <option value="MONTH_TO_MONTH">Month to month</option>
-                <option value="CUSTOM">Custom comparison</option>
-              </select>
-            </Field>
-            <Field label="Comparison start date">
-              <Input
-                type="date"
-                aria-label="Comparison start date"
-                value={draft.comparisonTimePeriod.start}
-                onChange={(event) =>
-                  {
-                    setComparisonPreset('CUSTOM');
-                    setDraft((current) => ({
-                      ...current,
-                      comparisonTimePeriod: {
-                        ...current.comparisonTimePeriod!,
-                        start: event.target.value,
-                      },
-                    }));
-                  }
-                }
-              />
-            </Field>
-            <Field label="Comparison end date">
-              <Input
-                type="date"
-                aria-label="Comparison end date"
-                value={draft.comparisonTimePeriod.end}
-                onChange={(event) =>
-                  {
-                    setComparisonPreset('CUSTOM');
-                    setDraft((current) => ({
-                      ...current,
-                      comparisonTimePeriod: {
-                        ...current.comparisonTimePeriod!,
-                        end: event.target.value,
-                      },
-                    }));
-                  }
-                }
-              />
-            </Field>
+          <section aria-label="Comparison period">
+            <Container variant="stacked">
+              <ColumnLayout columns={compact ? 1 : 3}>
+                <SelectField<'MONTH_TO_MONTH' | 'CUSTOM'>
+                  label="Comparison range"
+                  value={comparisonPreset}
+                  options={[
+                    { value: 'MONTH_TO_MONTH', label: 'Month to month' },
+                    { value: 'CUSTOM', label: 'Custom comparison' },
+                  ]}
+                  onChange={(preset) => {
+                    setComparisonPreset(preset);
+                    if (preset === 'MONTH_TO_MONTH') {
+                      const periods = closedMonthComparison(now);
+                      setDatePreset('CUSTOM');
+                      setDraft((current) => ({ ...current, ...periods }));
+                    }
+                  }}
+                />
+                <DateField
+                  label="Comparison start date"
+                  value={draft.comparisonTimePeriod.start}
+                  onChange={(value) => setComparison('start', value)}
+                />
+                <DateField
+                  label="Comparison end date"
+                  value={draft.comparisonTimePeriod.end}
+                  onChange={(value) => setComparison('end', value)}
+                />
+              </ColumnLayout>
+            </Container>
           </section>
         )}
 
-        <section
-          className={cn(
-            'grid gap-4',
-            compact ? 'sm:grid-cols-2 xl:grid-cols-1' : 'sm:grid-cols-2 lg:grid-cols-4',
-          )}
-          aria-label="Cost calculation"
-        >
-          <Field label="Billing view">
-            <select
-              aria-label="Billing view"
-              className={selectClassName}
+        <section aria-label="Cost calculation">
+          <ColumnLayout columns={columns}>
+            <SelectField
+              label="Billing view"
               value={draft.billingViewArn ?? ''}
+              options={billingViewOptions}
               onFocus={() => void loadBillingViews()}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  billingViewArn: event.target.value || undefined,
-                }))
+              onChange={(value) => setDraft((current) => ({ ...current, billingViewArn: value || undefined }))}
+              footer={
+                billingViewsLoading ? (
+                  <StatusIndicator type="loading">Loading…</StatusIndicator>
+                ) : billingViewsError ? (
+                  <div role="alert">
+                    <StatusIndicator type="error">{billingViewsError}</StatusIndicator>
+                  </div>
+                ) : undefined
               }
-            >
-              <option value="">All billing data</option>
-              {draft.billingViewArn &&
-                !billingViews.some((view) => view.arn === draft.billingViewArn) && (
-                  <option value={draft.billingViewArn}>Current billing view</option>
-                )}
-              {billingViews.map((view) => (
-                <option key={view.arn} value={view.arn}>{view.name}</option>
-              ))}
-            </select>
-            {billingViewsLoading && <span className="flex items-center gap-1 text-gray-500"><Loader2 className="size-3 animate-spin motion-reduce:animate-none" /> Loading…</span>}
-            {billingViewsError && <span role="alert" className="text-error-600">{billingViewsError}</span>}
-          </Field>
-          <Field label="Metric">
-            <select
-              aria-label="Metric"
-              className={selectClassName}
+            />
+            <SelectField<CostExplorerReportRequest['metric']>
+              label="Metric"
               value={draft.metric}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  metric: event.target.value as CostExplorerReportRequest['metric'],
-                }))
-              }
-            >
-              {metrics.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-          </Field>
-          <Field label="Granularity">
-            <select
-              aria-label="Granularity"
-              className={selectClassName}
+              options={metrics.map(([value, label]) => ({ value, label }))}
+              onChange={(metric) => setDraft((current) => ({ ...current, metric }))}
+            />
+            <SelectField<CostExplorerReportRequest['granularity']>
+              label="Granularity"
               value={draft.granularity}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  granularity: event.target.value as CostExplorerReportRequest['granularity'],
-                }))
-              }
-            >
-              <option value="MONTHLY">Monthly</option>
-              <option value="DAILY">Daily</option>
-              <option value="HOURLY" disabled={!granularDataEnabled || draft.mode !== 'RESOURCE'}>Hourly</option>
-            </select>
-          </Field>
-          <Field label="Chart style">
-            <select
-              aria-label="Chart style"
-              className={selectClassName}
+              options={[
+                { value: 'MONTHLY', label: 'Monthly' },
+                { value: 'DAILY', label: 'Daily' },
+                { value: 'HOURLY', label: 'Hourly', disabled: !granularDataEnabled || draft.mode !== 'RESOURCE' },
+              ]}
+              onChange={(granularity) => setDraft((current) => ({ ...current, granularity }))}
+            />
+            <SelectField<CostExplorerReportRequest['chartStyle']>
+              label="Chart style"
               value={effectiveDraft.chartStyle}
-              onChange={(event) => {
-                const next = event.target
-                  .value as CostExplorerReportRequest['chartStyle'];
+              options={[
+                { value: 'BAR', label: 'Bar' },
+                { value: 'STACK', label: 'Stacked bar' },
+                { value: 'LINE', label: 'Line' },
+              ]}
+              onChange={(next) => {
                 setDraft((current) => ({ ...current, chartStyle: next }));
                 onChartStyleChange?.(next);
               }}
-            >
-              <option value="BAR">Bar</option>
-              <option value="STACK">Stacked bar</option>
-              <option value="LINE">Line</option>
-            </select>
-          </Field>
+            />
+          </ColumnLayout>
         </section>
 
-        <section
-          className={cn('grid gap-3', compact ? 'sm:grid-cols-2 xl:grid-cols-1' : 'lg:grid-cols-2')}
-          aria-label="Group definitions"
-        >
-          <GroupControl index={0} group={draft.groupBy[0] ?? null} onChange={(group) => updateGroup(0, group)} />
-          <GroupControl index={1} group={draft.groupBy[1] ?? null} onChange={(group) => updateGroup(1, group)} />
+        <section aria-label="Group definitions">
+          <ColumnLayout columns={compact ? 1 : 2}>
+            <GroupControl index={0} group={draft.groupBy[0] ?? null} onChange={(group) => updateGroup(0, group)} />
+            <GroupControl index={1} group={draft.groupBy[1] ?? null} onChange={(group) => updateGroup(1, group)} />
+          </ColumnLayout>
         </section>
 
         <FilterBuilder
           value={draft.filter}
           timePeriod={draft.timePeriod}
           billingViewArn={draft.billingViewArn}
-          onChange={(filter) =>
-            setDraft((current) => ({ ...current, filter }))
-          }
+          onChange={(filter) => setDraft((current) => ({ ...current, filter }))}
         />
 
-        <section className="space-y-3" aria-labelledby="advanced-options-heading">
-          <h3 id="advanced-options-heading" className="text-sm font-semibold text-gray-900 dark:text-white/90">
-            Advanced options
-          </h3>
-          <div className={cn('grid gap-3', compact ? 'sm:grid-cols-2 xl:grid-cols-1' : 'sm:grid-cols-3')}>
-            {[
-              {
-                label: 'Show forecast',
-                checked: draft.showForecast,
-                disabled: forecastDisabled,
-                update: (checked: boolean) => ({ showForecast: checked }),
-              },
-              {
-                label: 'Show only untagged',
-                checked: draft.showOnlyUntagged,
-                disabled: false,
-                update: (checked: boolean) => ({ showOnlyUntagged: checked }),
-              },
-              {
-                label: 'Show only uncategorized',
-                checked: draft.showOnlyUncategorized,
-                disabled: false,
-                update: (checked: boolean) => ({ showOnlyUncategorized: checked }),
-              },
-            ].map((option) => {
-              const id = option.label.toLowerCase().replace(/ /g, '-');
-              return (
-                <label key={option.label} htmlFor={id} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-gray-200 px-3 text-sm text-gray-700 dark:border-gray-800 dark:text-gray-300">
-                  <Checkbox
-                    id={id}
-                    aria-label={option.label}
-                    checked={option.checked}
-                    disabled={option.disabled}
-                    onCheckedChange={(checked) =>
-                      setDraft((current) => ({
-                        ...current,
-                        ...option.update(checked === true),
-                      }))
-                    }
-                  />
+        <section aria-labelledby="advanced-options-heading">
+          <SpaceBetween size="s">
+            <Header variant="h3">
+              <span id="advanced-options-heading">Advanced options</span>
+            </Header>
+            <ColumnLayout columns={compact ? 1 : 3}>
+              {[
+                {
+                  label: 'Show forecast',
+                  checked: draft.showForecast,
+                  disabled: forecastDisabled,
+                  update: (checked: boolean) => ({ showForecast: checked }),
+                },
+                {
+                  label: 'Show only untagged',
+                  checked: draft.showOnlyUntagged,
+                  disabled: false,
+                  update: (checked: boolean) => ({ showOnlyUntagged: checked }),
+                },
+                {
+                  label: 'Show only uncategorized',
+                  checked: draft.showOnlyUncategorized,
+                  disabled: false,
+                  update: (checked: boolean) => ({ showOnlyUncategorized: checked }),
+                },
+              ].map((option) => (
+                <Checkbox
+                  key={option.label}
+                  checked={option.checked}
+                  disabled={option.disabled}
+                  onChange={({ detail }) => setDraft((current) => ({ ...current, ...option.update(detail.checked) }))}
+                >
                   {option.label}
-                </label>
-              );
-            })}
-          </div>
-          {forecastDisabled && !forecastMessageIsValidationIssue && (
-            <p className="text-sm text-gray-500">
-              {forecastMessage}
-            </p>
-          )}
+                </Checkbox>
+              ))}
+            </ColumnLayout>
+            {forecastDisabled && !forecastMessageIsValidationIssue && (
+              <Box color="text-body-secondary">{forecastMessage}</Box>
+            )}
+          </SpaceBetween>
         </section>
 
         <IssueList issues={validation.issues} />
@@ -742,24 +602,23 @@ export function ReportParameters({
           />
         )}
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-5 dark:border-gray-800">
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" className="min-h-11" onClick={reset}>
-              <RotateCcw aria-hidden />
-              Reset report
-            </Button>
-            <Button type="button" variant="outline" className="min-h-11" onClick={() => void copyLink()}>
-              <Copy aria-hidden />
-              Copy report link
-            </Button>
-          </div>
-          <Button type="button" className="min-h-11" onClick={apply} disabled={!validation.valid}>
-            <Play aria-hidden />
+        <SpaceBetween direction="horizontal" size="xs">
+          <Button iconName="undo" onClick={reset}>
+            Reset report
+          </Button>
+          <Button iconName="copy" onClick={() => void copyLink()}>
+            Copy report link
+          </Button>
+          <Button variant="primary" iconName="caret-right-filled" onClick={apply} disabled={!validation.valid}>
             Apply report
           </Button>
-        </div>
-        {copyStatus && <p role="status" className="text-sm text-gray-500">{copyStatus}</p>}
-      </CardContent>
-    </Card>
+        </SpaceBetween>
+        {copyStatus && (
+          <div role="status">
+            <Box color="text-body-secondary">{copyStatus}</Box>
+          </div>
+        )}
+      </SpaceBetween>
+    </Container>
   );
 }

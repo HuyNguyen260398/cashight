@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { useAuth } from '@/frontend/auth/auth-provider';
 import { signOut } from '@/frontend/auth/oidc';
-import { AdminShell } from './admin-shell';
+import { ConsoleShell } from './console/console-shell';
 
 /**
  * Top-level navigation shell. Sources the user's email from the OIDC
@@ -24,8 +24,8 @@ export function Nav({ children }: { children: ReactNode }) {
   if (!email) return <>{children}</>;
 
   return (
-    <AdminShell email={email} signOutAction={signOutAction}>
+    <ConsoleShell email={email} signOutAction={signOutAction}>
       {children}
-    </AdminShell>
+    </ConsoleShell>
   );
 }

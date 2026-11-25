@@ -18,7 +18,7 @@ flowchart TB
         auth_provider["AuthProvider\noidc-client-ts PKCE"]
         api_client["API client\nBearer token → api.cashight.nghuy.link"]
         upload["upload-dropzone.tsx\nSHA-256 + presigned PUT"]
-        dash["Dashboard + charts\n(recharts, client component)"]
+        dash["Dashboard + charts\n(Cloudscape + chart-components, client component)"]
         aicard["ai-summary-card.tsx\nReadableStream"]
     end
 

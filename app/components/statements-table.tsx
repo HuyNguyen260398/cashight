@@ -1,36 +1,23 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
-import { ArrowDown, ArrowUp, ChevronsUpDown, Trash2 } from 'lucide-react';
-
-import { Badge } from '@/components/ui/badge';
-import { Button, buttonVariants } from '@/components/ui/button';
-import { Pagination } from '@/components/ui/pagination';
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from '@/components/ui/table';
-import {
-  AlertDialog,
-  AlertDialogTrigger,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogFooter,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogAction,
-  AlertDialogCancel,
-} from '@/components/ui/alert-dialog';
+import { useCollection } from '@cloudscape-design/collection-hooks';
+import Badge from '@cloudscape-design/components/badge';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import Link from '@cloudscape-design/components/link';
+import Modal from '@cloudscape-design/components/modal';
+import Pagination from '@cloudscape-design/components/pagination';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import Table, { type TableProps } from '@cloudscape-design/components/table';
+import { shouldHandleClientSide } from '@/app/components/console/follow';
+import { notify } from '@/app/components/console/notifications';
 import { formatVND, formatDate } from '@/lib/format';
 import { statementDashboardHref } from '@/frontend/lib/dashboard-routes';
 import { bankShortName, type BankCode } from '@/lib/banks';
+import { PAGINATION_LABELS } from './table-labels';
+import { descendingFirst } from './table-sorting';
 
 export type StatementRow = {
   key: string;
@@ -42,32 +29,9 @@ export type StatementRow = {
   uploadedAt: string | null;
 };
 
-type SortKey = 'period' | 'totalSpend';
-type SortDir = 'asc' | 'desc';
+const PAGE_SIZE = 12;
 
-interface SortState {
-  key: SortKey;
-  dir: SortDir;
-}
-
-function SortIndicator({
-  sortKey,
-  active,
-  dir,
-}: {
-  sortKey: SortKey;
-  active: SortKey;
-  dir: SortDir;
-}) {
-  if (sortKey !== active) {
-    return <ChevronsUpDown className="ml-1 size-3 opacity-30" aria-hidden />;
-  }
-  return dir === 'asc' ? (
-    <ArrowUp className="ml-1 size-3" aria-hidden />
-  ) : (
-    <ArrowDown className="ml-1 size-3" aria-hidden />
-  );
-}
+const period = (row: StatementRow) => `${row.year}-${String(row.month).padStart(2, '0')}`;
 
 export function StatementsTable({
   rows,
@@ -78,182 +42,114 @@ export function StatementsTable({
 }) {
   const router = useRouter();
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
-  const [openKey, setOpenKey] = useState<string | null>(null);
-  const [sort, setSort] = useState<SortState>({ key: 'period', dir: 'desc' });
-  const PAGE_SIZE = 12;
-  const [page, setPage] = useState(1);
-
-  function toggleSort(key: SortKey) {
-    setSort((prev) =>
-      prev.key === key
-        ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-        : { key, dir: 'desc' },
-    );
-    setPage(1);
-  }
-
-  const sorted = [...rows].sort((a, b) => {
-    const cmp =
-      sort.key === 'period'
-        ? a.year - b.year || a.month - b.month
-        : a.totalSpend - b.totalSpend;
-    return sort.dir === 'asc' ? cmp : -cmp;
-  });
-
-  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  // Derive the clamped page rather than storing an out-of-range value, so a
-  // delete that shrinks the data (via router.refresh()) never strands an
-  // empty page.
-  const currentPage = Math.min(page, pageCount);
-  const paged = sorted.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
-  );
+  const [pending, setPending] = useState<StatementRow | null>(null);
 
   async function handleDelete(row: StatementRow) {
     setDeletingKey(row.key);
     try {
       if (onDelete) {
-        // Delegated to parent — parent manages state and toasts.
         await onDelete(row.key);
-        setOpenKey(null);
+        setPending(null);
       } else {
-        // Fallback: call the Lambda API directly and refresh the route cache.
         const { apiFetch } = await import('@/frontend/api/client');
         const { getPublicConfig } = await import('@/frontend/auth/config');
         const config = getPublicConfig();
-        await apiFetch(
-          `${config.apiBaseUrl}/statements/${encodeURIComponent(row.key)}`,
-          { method: 'DELETE' },
-        );
-        setOpenKey(null);
-        toast.success('Statement deleted');
+        await apiFetch(`${config.apiBaseUrl}/statements/${encodeURIComponent(row.key)}`, { method: 'DELETE' });
+        setPending(null);
+        notify({ type: 'success', content: 'Statement deleted' });
         router.refresh();
       }
     } catch {
-      toast.error('Could not delete statement');
+      notify({ type: 'error', content: 'Could not delete statement' });
     } finally {
       setDeletingKey(null);
     }
   }
 
+  const columns: TableProps.ColumnDefinition<StatementRow>[] = [
+    { id: 'bank', header: 'Bank', cell: (row) => <Badge>{bankShortName(row.bank)}</Badge> },
+    { id: 'card', header: 'Card', cell: (row) => <Badge color="grey">****{row.cardLast4}</Badge> },
+    {
+      id: 'period',
+      header: 'Period',
+      cell: (row) => {
+        const href = statementDashboardHref(row);
+        return (
+          <Link
+            href={href}
+            onFollow={(event) => {
+              if (!shouldHandleClientSide({ detail: event.detail })) return;
+              event.preventDefault();
+              router.push(href);
+            }}
+          >
+            {period(row)}
+          </Link>
+        );
+      },
+      sortingComparator: (a, b) => a.year - b.year || a.month - b.month,
+    },
+    {
+      id: 'totalSpend',
+      header: 'Total spend',
+      cell: (row) => <Box textAlign="right" fontWeight="bold">{formatVND(row.totalSpend)}</Box>,
+      sortingField: 'totalSpend',
+    },
+    { id: 'uploaded', header: 'Uploaded', cell: (row) => (row.uploadedAt ? formatDate(row.uploadedAt) : '—') },
+    {
+      id: 'actions',
+      header: 'Actions',
+      cell: (row) => (
+        <Button iconName="remove" disabled={deletingKey === row.key} onClick={() => setPending(row)}>
+          Delete
+        </Button>
+      ),
+    },
+  ];
+
+  const { items, collectionProps, paginationProps, actions } = useCollection(rows, {
+    sorting: { defaultState: { sortingColumn: columns[2], isDescending: true } },
+    pagination: { pageSize: PAGE_SIZE },
+  });
+
+  const isDeleting = pending !== null && deletingKey === pending.key;
+
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03]">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Bank</TableHead>
-            <TableHead>Card</TableHead>
-            <TableHead
-              className="cursor-pointer select-none"
-              onClick={() => toggleSort('period')}
-            >
-              <span className="inline-flex items-center">
-                Period
-                <SortIndicator
-                  sortKey="period"
-                  active={sort.key}
-                  dir={sort.dir}
-                />
-              </span>
-            </TableHead>
-            <TableHead
-              className="cursor-pointer select-none text-right"
-              onClick={() => toggleSort('totalSpend')}
-            >
-              <span className="inline-flex items-center justify-end">
-                Total spend
-                <SortIndicator
-                  sortKey="totalSpend"
-                  active={sort.key}
-                  dir={sort.dir}
-                />
-              </span>
-            </TableHead>
-            <TableHead>Uploaded</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {paged.map((row) => {
-            const mm = String(row.month).padStart(2, '0');
-            const isDeleting = deletingKey === row.key;
-            return (
-              <TableRow key={row.key}>
-                <TableCell>
-                  <Badge variant="outline">{bankShortName(row.bank)}</Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="secondary">****{row.cardLast4}</Badge>
-                </TableCell>
-                <TableCell>
-                  <Link
-                    href={statementDashboardHref(row)}
-                    className="font-medium text-brand-500 underline-offset-4 hover:underline dark:text-brand-400"
-                  >
-                    {row.year}-{mm}
-                  </Link>
-                </TableCell>
-                <TableCell className="text-right font-semibold tabular-nums text-gray-900 dark:text-white/90">
-                  {formatVND(row.totalSpend)}
-                </TableCell>
-                <TableCell className="text-gray-500 dark:text-gray-400">
-                  {row.uploadedAt ? formatDate(row.uploadedAt) : '—'}
-                </TableCell>
-                <TableCell className="text-right">
-                  <AlertDialog
-                    open={openKey === row.key}
-                    onOpenChange={(o) => setOpenKey(o ? row.key : null)}
-                  >
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        disabled={isDeleting}
-                      >
-                        <Trash2 className="size-4" aria-hidden />
-                        Delete
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>
-                          Delete this statement?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription>
-                          This permanently deletes the {row.year}-{mm} statement
-                          for ****{row.cardLast4}. The previous S3 version is
-                          retained for 90 days.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isDeleting}>
-                          Cancel
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                          className={buttonVariants({ variant: 'destructive' })}
-                          disabled={isDeleting}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleDelete(row);
-                          }}
-                        >
-                          {isDeleting ? 'Deleting…' : 'Delete'}
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-      <Pagination
-        page={currentPage}
-        pageCount={pageCount}
-        onPageChange={setPage}
+    <>
+      <Table
+        {...collectionProps}
+        onSortingChange={descendingFirst(collectionProps.sortingColumn, actions.setSorting)}
+        variant="container"
+        columnDefinitions={columns}
+        items={items}
+        trackBy="key"
+        pagination={<Pagination {...paginationProps} ariaLabels={PAGINATION_LABELS} />}
       />
-    </div>
+      {pending ? (
+      <Modal
+        visible
+        onDismiss={() => {
+          if (!isDeleting) setPending(null);
+        }}
+        header="Delete this statement?"
+        closeAriaLabel="Close"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" disabled={isDeleting} onClick={() => setPending(null)}>
+                Cancel
+              </Button>
+              <Button variant="primary" loading={isDeleting} onClick={() => void handleDelete(pending)}>
+                {isDeleting ? 'Deleting…' : 'Delete'}
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        This permanently deletes the {period(pending)} statement for ****{pending.cardLast4}. The previous S3
+        version is retained for 90 days.
+      </Modal>
+      ) : null}
+    </>
   );
 }

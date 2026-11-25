@@ -8,8 +8,9 @@
 |------|---------|----------|
 | `app/` | Next.js App Router — pages, API routes, React components | `app/page.tsx`, `app/api/`, `app/components/` |
 | `app/api/` | Route handlers: `parse/`, `summarize/`, `statements/`, `statements/[id]/`, `auth/[...nextauth]/` | scan tree lines 21-30 |
-| `app/components/` | Feature/UI components (dashboard, charts, upload, nav, KPI) | scan tree 31-47 |
-| `components/ui/` | shadcn/ui primitives (button, card, table, tabs, badge…) | `components.json`, scan tree 62-71 |
+| `app/components/` | Feature components (dashboard, upload, KPI, AWS cost/invoice) built from Cloudscape | `app/components/` |
+| `app/components/console/` | Cloudscape console shell: AppLayout, top/side navigation, Flashbar notifications, visual settings | `console-shell.tsx`, `nav-model.ts` |
+| `app/components/charts/` | Pure chart series builders + Highcharts loader for chart-components | `cost-series.ts`, `use-highcharts.ts` |
 | `lib/` | Domain logic: parser, categorizer, schemas, storage, aggregations, gemini, auth helpers | scan tree 102-129 |
 | `lib/parsers/` | `tpbank.ts` — the deterministic statement parser | `lib/parsers/tpbank.ts` |
 | `lib/__tests__/` | Vitest unit + fixture-acceptance suites | scan tree 103-112 |

@@ -3,6 +3,8 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import createWrapper from '@cloudscape-design/components/test-utils/dom';
+
 import { BankSelector, bankOptions } from '@/app/components/bank-selector';
 
 const push = vi.fn();
@@ -26,12 +28,28 @@ describe('BankSelector', () => {
     expect(screen.queryByText('All banks')).toBeNull();
   });
 
-  it('is labelled for assistive technology', () => {
+  it('is a Cloudscape select labelled for assistive technology', () => {
     const { container } = render(
       <BankSelector current={'VIB'} available={['VIB']} />,
     );
-    const trigger = container.querySelector('[data-slot="select-trigger"]');
-    expect(trigger?.getAttribute('aria-label')).toBe('Filter by bank');
+    const select = createWrapper(container).findSelect();
+    expect(select).not.toBeNull();
+    // Cloudscape names the trigger via aria-labelledby, so assert the accessible name.
+    expect(screen.getByRole('button', { name: /Filter by bank/ })).toBe(select!.findTrigger().getElement());
+  });
+
+  it('switches bank while preserving the period params', () => {
+    push.mockClear();
+    const { container } = render(
+      <BankSelector current={'TPBank'} available={['TPBank', 'VIB']} />,
+    );
+    const select = createWrapper(container).findSelect()!;
+    select.openDropdown();
+    select.selectOptionByValue('VIB');
+    const url = new URLSearchParams(push.mock.calls[0][0].split('?')[1]);
+    expect(url.get('bank')).toBe('VIB');
+    expect(url.get('period')).toBe('month');
+    expect(url.get('month')).toBe('7');
   });
 });
 

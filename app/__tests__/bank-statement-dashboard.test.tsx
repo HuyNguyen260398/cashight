@@ -74,7 +74,7 @@ it('refreshes analytics after deleting the last statement without navigating', a
   render(<BankStatementDashboard />);
   await screen.findByText('****2222');
   await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
-  await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }));
+  await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
   await waitFor(() => expect(screen.queryByText('****2222')).not.toBeInTheDocument());
   await waitFor(() => expect(screen.getByRole('link', { name: 'Go to latest' })).toBeVisible());
   expect(router.push).not.toHaveBeenCalled();

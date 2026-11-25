@@ -77,7 +77,7 @@ test('bank pages keep history isolated, retain links, and support mobile/light/d
     await expect(history.getByRole('link')).toHaveAttribute('href', new RegExp(`bank=${bank}`));
     for (const mobile of [false, true]) {
       await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 1000 });
-      await page.evaluate((dark) => document.documentElement.classList.toggle('dark', dark), mobile);
+      await page.evaluate((dark) => document.body.classList.toggle('awsui-dark-mode', dark), mobile);
       await expect(page.locator('#statement-upload')).toBeVisible();
       // The shell animates desktop sidebar padding when crossing the breakpoint.
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -99,16 +99,16 @@ test('follows a cross-bank upload, refreshes same-month overwrite, and deletes w
   state.amount = 900;
   state.conflict = true;
   await upload(page);
-  await expect(page.getByRole('alertdialog')).toBeVisible();
-  await page.getByRole('alertdialog').getByRole('button', { name: /overwrite|replace/i }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: /overwrite|replace/i }).click();
   await expect(history.getByRole('row').filter({ hasText: '2026-08' })).toContainText('900');
   expect(state.dashboardRequests).toBeGreaterThan(requests);
   state.failDelete = true;
   await history.getByRole('row').filter({ hasText: '2026-08' }).getByRole('button', { name: 'Delete' }).click();
-  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete', exact: true }).click();
-  await expect(page.getByRole('alertdialog')).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
   state.failDelete = false;
-  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
   await expect(history.getByRole('link', { name: '2026-08' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Go to latest' })).toBeVisible();
   await expect(page).toHaveURL(/bank=VIB&period=month&year=2026&month=8/);
@@ -130,6 +130,17 @@ test('retired bookmarks reach inline sections and history errors can be retried'
   await expect(page.locator('#statement-history').getByText('****2222')).toBeVisible();
   await page.goto('/upload/?bank=TPBank');
   await expect(page).toHaveURL(/bank=TPBank.*#statement-upload/);
+});
+
+test('a #statement-upload bookmark scrolls the upload section into view below the top navigation', async ({ page }) => {
+  await fixture(page);
+  await page.setViewportSize({ width: 1440, height: 700 });
+  await page.goto('/upload/?bank=VIB');
+  await expect(page).toHaveURL(/bank=VIB.*#statement-upload/);
+  const upload = page.locator('#statement-upload');
+  await expect(upload).toBeInViewport();
+  const navBottom = await page.locator('#console-top-navigation').evaluate((el) => el.getBoundingClientRect().bottom);
+  await expect.poll(() => upload.evaluate((el) => el.getBoundingClientRect().top)).toBeGreaterThanOrEqual(navBottom - 1);
 });
 
 test('allows a first upload from an empty bank and keeps saved status when completion metadata lacks an ID', async ({ page }) => {
@@ -165,7 +176,7 @@ test('does not navigate away from a new bank when an older upload finishes', asy
   await page.goto('/?bank=TPBank&period=month&year=2026&month=7');
   await upload(page);
   await polling;
-  await page.getByRole('navigation').getByRole('link', { name: 'VIB' }).click();
+  await page.locator('[data-testid="console-side-navigation"]').getByRole('link', { name: 'VIB' }).click();
   await expect(page).toHaveURL(/bank=VIB.*month=6/);
   const completed = page.waitForResponse((response) => response.url().includes('/uploads/'));
   release();

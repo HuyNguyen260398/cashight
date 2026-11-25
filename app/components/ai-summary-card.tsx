@@ -2,9 +2,12 @@
 
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import type { AggregatedView } from '@/lib/aggregations';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Button } from '@/components/ui/button';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import Container from '@cloudscape-design/components/container';
+import Header from '@cloudscape-design/components/header';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import { apiFetch, ApiRequestError } from '@/frontend/api/client';
 import { getPublicConfig } from '@/frontend/auth/config';
 
@@ -149,64 +152,45 @@ export function AiSummaryCard({ view }: { view: AggregatedView }) {
     };
   }, []);
 
+  const summaryText = (text: string) => <div style={{ whiteSpace: 'pre-wrap' }}>{text}</div>;
+
   return (
-    <Card className="h-full min-h-0 gap-0">
-      <CardHeader className="shrink-0 border-b border-gray-100 dark:border-gray-800">
-        <CardTitle>AI summary</CardTitle>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Privacy-preserving aggregate insight.
-        </p>
-      </CardHeader>
-      <CardContent className="min-h-0 flex-1 overflow-y-auto pt-5">
-        {isEmpty ? (
-          <p className="text-muted-foreground text-sm">
-            No spending data to summarize for this period.
-          </p>
-        ) : state.phase === 'idle' ? (
-          <div className="flex flex-col items-start gap-3">
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Generate an AI overview of {view.label} spending.
-            </p>
-            <Button onClick={() => void runSummary()}>
-              Summarize expenses with AI
-            </Button>
-          </div>
-        ) : state.phase === 'loading' ? (
-          state.text ? (
-            <div className="prose prose-sm max-w-none whitespace-pre-wrap">
-              {state.text}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-[90%]" />
-              <Skeleton className="h-4 w-[80%]" />
-              <Skeleton className="h-4 w-[85%]" />
-            </div>
-          )
-        ) : state.phase === 'error' ? (
-          <div className="flex flex-col items-start gap-3">
-            <p className="text-destructive text-sm">{state.message}</p>
-            <Button variant="outline" onClick={() => void runSummary()}>
-              Try again
-            </Button>
-          </div>
+    <Container
+      fitHeight
+      header={
+        <Header variant="h2" description="Privacy-preserving aggregate insight.">
+          AI summary
+        </Header>
+      }
+    >
+      {isEmpty ? (
+        <Box color="text-body-secondary">No spending data to summarize for this period.</Box>
+      ) : state.phase === 'idle' ? (
+        <SpaceBetween size="s">
+          <Box color="text-body-secondary">Generate an AI overview of {view.label} spending.</Box>
+          <Button variant="primary" iconName="gen-ai" onClick={() => void runSummary()}>
+            Summarize expenses with AI
+          </Button>
+        </SpaceBetween>
+      ) : state.phase === 'loading' ? (
+        state.text ? (
+          summaryText(state.text)
         ) : (
-          <div className="space-y-4">
-            <div className="prose prose-sm max-w-none whitespace-pre-wrap">
-              {state.text}
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground"
-              onClick={() => void runSummary()}
-            >
-              Regenerate
-            </Button>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          <StatusIndicator type="loading">Generating summary…</StatusIndicator>
+        )
+      ) : state.phase === 'error' ? (
+        <SpaceBetween size="s">
+          <StatusIndicator type="error">{state.message}</StatusIndicator>
+          <Button onClick={() => void runSummary()}>Try again</Button>
+        </SpaceBetween>
+      ) : (
+        <SpaceBetween size="m">
+          {summaryText(state.text)}
+          <Button variant="inline-link" iconName="refresh" onClick={() => void runSummary()}>
+            Regenerate
+          </Button>
+        </SpaceBetween>
+      )}
+    </Container>
   );
 }

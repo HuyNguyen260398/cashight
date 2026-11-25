@@ -1,20 +1,22 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react';
 import type {
   CostExplorerExpression,
   CostDimensionRequest,
 } from '@cashight/domain/aws-cost-explorer';
 
-import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
-import { Input } from '@/components/ui/input';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import Checkbox from '@cloudscape-design/components/checkbox';
+import ColumnLayout from '@cloudscape-design/components/column-layout';
+import Container from '@cloudscape-design/components/container';
+import FormField from '@cloudscape-design/components/form-field';
+import Header from '@cloudscape-design/components/header';
+import Input from '@cloudscape-design/components/input';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
+import { SelectField } from './fields';
 import { apiFetch } from '@/frontend/api/client';
 import { CostDimensionValuesResponseSchema } from '@/frontend/api/contracts';
 import { getPublicConfig } from '@/frontend/auth/config';
@@ -45,9 +47,6 @@ export const COST_FILTER_DIMENSIONS = [
   { key: 'USAGE_TYPE', label: 'Usage type' },
   { key: 'USAGE_TYPE_GROUP', label: 'Usage type group' },
 ] as const;
-
-const selectClassName =
-  'h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-theme-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-800 dark:bg-white/[0.03] dark:text-gray-300';
 
 function dimensionLabel(key: string): string {
   return COST_FILTER_DIMENSIONS.find((item) => item.key === key)?.label ?? key;
@@ -191,81 +190,65 @@ function ValueSelector({
   };
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full justify-between"
-          disabled={!canLoad}
-          aria-label={`${open ? 'Close' : 'Choose'} ${label || 'filter'} values`}
-        >
-          <span className="truncate">
-            {card.values.length > 0
-              ? `${card.values.length} selected`
-              : 'Choose values'}
-          </span>
-          {open ? <ChevronUp aria-hidden /> : <ChevronDown aria-hidden />}
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="mt-2 space-y-2 rounded-lg border border-gray-200 bg-gray-25 p-3 dark:border-gray-800 dark:bg-white/[0.02]">
-        <label className="block space-y-1 text-xs font-medium text-gray-700 dark:text-gray-300">
-          <span>Search values</span>
-          <Input
-            aria-label={`Search ${label} values`}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={`Search ${label.toLowerCase()}`}
-          />
-        </label>
-        {card.values.length > 0 && (
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Selected:{' '}
-            {card.values
-              .map((value) => displayFilterValue(card, value))
-              .join(', ')}
-          </p>
-        )}
-        <div className="max-h-48 space-y-1 overflow-y-auto" aria-live="polite">
-          {visibleValues.map((value, index) => {
-            const id = `cost-filter-${card.id}-${index}`;
-            return (
-              <label
-                key={value}
-                htmlFor={id}
-                className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/[0.06]"
-              >
-                <Checkbox
-                  id={id}
-                  checked={card.values.includes(value)}
-                  onCheckedChange={(checked) => toggleValue(value, checked === true)}
-                />
-                <span className="break-all">
-                  {displayFilterValue(card, value)}
-                </span>
-              </label>
-            );
-          })}
-          {!loading && visibleValues.length === 0 && (
-            <p className="px-2 py-3 text-sm text-gray-500">No values found.</p>
-          )}
-        </div>
-        {loading && <p className="text-xs text-gray-500">Loading values…</p>}
-        {error && <p role="alert" className="text-xs text-error-600">{error}</p>}
-        {nextCursor && (
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="min-h-11"
-            disabled={loading}
-            onClick={() => void loadValues(nextCursor, true)}
-          >
-            Load more values
-          </Button>
-        )}
-      </CollapsibleContent>
-    </Collapsible>
+    <SpaceBetween size="xs">
+      <Button
+        iconName={open ? 'caret-up-filled' : 'caret-down-filled'}
+        iconAlign="right"
+        disabled={!canLoad}
+        ariaLabel={`${open ? 'Close' : 'Choose'} ${label || 'filter'} values`}
+        ariaExpanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        {card.values.length > 0 ? `${card.values.length} selected` : 'Choose values'}
+      </Button>
+      {open ? (
+        <Box padding="s">
+          <SpaceBetween size="xs">
+            <FormField label="Search values">
+              <Input
+                ariaLabel={`Search ${label} values`}
+                value={search}
+                type="search"
+                onChange={({ detail }) => setSearch(detail.value)}
+                placeholder={`Search ${label.toLowerCase()}`}
+              />
+            </FormField>
+            {card.values.length > 0 && (
+              <Box variant="small" color="text-body-secondary">
+                Selected: {card.values.map((value) => displayFilterValue(card, value)).join(', ')}
+              </Box>
+            )}
+            <div style={{ maxHeight: 192, overflowY: 'auto' }} aria-live="polite">
+              <SpaceBetween size="xxs">
+                {visibleValues.map((value) => (
+                  <Checkbox
+                    key={value}
+                    checked={card.values.includes(value)}
+                    onChange={({ detail }) => toggleValue(value, detail.checked)}
+                  >
+                    {displayFilterValue(card, value)}
+                  </Checkbox>
+                ))}
+              </SpaceBetween>
+              {!loading && visibleValues.length === 0 && (
+                <Box color="text-body-secondary" padding={{ vertical: 's' }}>No values found.</Box>
+              )}
+            </div>
+            {loading && <StatusIndicator type="loading">Loading values…</StatusIndicator>}
+            {error && (
+              <div role="alert">
+                <StatusIndicator type="error">{error}</StatusIndicator>
+              </div>
+            )}
+            {nextCursor && (
+              <Button disabled={loading} onClick={() => void loadValues(nextCursor, true)}>
+                Load more values
+              </Button>
+            )}
+          </SpaceBetween>
+        </Box>
+      ) : null}
+    </SpaceBetween>
   );
 }
 
@@ -311,118 +294,80 @@ export function FilterBuilder({
   };
 
   return (
-    <section className="space-y-3" aria-labelledby="cost-filter-heading">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h3 id="cost-filter-heading" className="text-sm font-semibold text-gray-900 dark:text-white/90">
-            Filters
-          </h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Values within a filter use OR; filter cards use AND.
-          </p>
-        </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="min-h-11"
-          onClick={() => {
-            publish([
-              ...cards,
-              {
-                id: nextIdRef.current++,
-                type: 'DIMENSION',
-                key: 'SERVICE',
-                values: [],
-              },
-            ]);
-          }}
-        >
-          <Plus aria-hidden />
-          Add filter
-        </Button>
-      </div>
-
-      {cards.map((card, index) => (
-        <div
-          key={card.id}
-          className="grid gap-3 rounded-xl border border-gray-200 p-3 dark:border-gray-800 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,1.2fr)_auto]"
-        >
-          <label className="space-y-1 text-xs font-medium text-gray-700 dark:text-gray-300">
-            <span>Category</span>
-            <select
-              aria-label={`Filter ${index + 1} category`}
-              className={selectClassName}
-              value={card.type}
-              onChange={(event) => {
-                const type = event.target.value as FilterType;
-                updateCard(card.id, {
-                  type,
-                  key: type === 'DIMENSION' ? 'SERVICE' : '',
-                  values: [],
-                });
+    <section aria-labelledby="cost-filter-heading">
+      <SpaceBetween size="s">
+        <Header
+          variant="h3"
+          description="Values within a filter use OR; filter cards use AND."
+          actions={
+            <Button
+              iconName="add-plus"
+              onClick={() => {
+                publish([
+                  ...cards,
+                  { id: nextIdRef.current++, type: 'DIMENSION', key: 'SERVICE', values: [] },
+                ]);
               }}
             >
-              <option value="DIMENSION">Dimension</option>
-              <option value="TAG">Tag</option>
-              <option value="COST_CATEGORY">Cost category</option>
-            </select>
-          </label>
+              Add filter
+            </Button>
+          }
+        >
+          <span id="cost-filter-heading">Filters</span>
+        </Header>
 
-          {card.type === 'DIMENSION' ? (
-            <label className="space-y-1 text-xs font-medium text-gray-700 dark:text-gray-300">
-              <span>Dimension</span>
-              <select
-                aria-label={`Filter ${index + 1} dimension`}
-                className={selectClassName}
-                value={card.key}
-                onChange={(event) =>
-                  updateCard(card.id, { key: event.target.value, values: [] })
-                }
-              >
-                {COST_FILTER_DIMENSIONS.map((dimension) => (
-                  <option key={dimension.key} value={dimension.key}>
-                    {dimension.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : (
-            <label className="space-y-1 text-xs font-medium text-gray-700 dark:text-gray-300">
-              <span>{card.type === 'TAG' ? 'Tag key' : 'Cost category name'}</span>
-              <Input
-                aria-label={`Filter ${index + 1} key`}
-                value={card.key}
-                onChange={(event) =>
-                  updateCard(card.id, { key: event.target.value, values: [] })
+        {cards.map((card, index) => (
+          <Container key={card.id} variant="stacked">
+            <ColumnLayout columns={4}>
+              <SelectField
+                label={`Filter ${index + 1} category`}
+                value={card.type}
+                options={[
+                  { value: 'DIMENSION', label: 'Dimension' },
+                  { value: 'TAG', label: 'Tag' },
+                  { value: 'COST_CATEGORY', label: 'Cost category' },
+                ]}
+                onChange={(type: FilterType) =>
+                  updateCard(card.id, { type, key: type === 'DIMENSION' ? 'SERVICE' : '', values: [] })
                 }
               />
-            </label>
-          )}
-
-          <div className="space-y-1 text-xs font-medium text-gray-700 dark:text-gray-300">
-            <span className="block">Values</span>
-            <ValueSelector
-              key={`${card.type}:${card.key}`}
-              card={card}
-              timePeriod={timePeriod}
-              billingViewArn={billingViewArn}
-              onValuesChange={(values) => updateCard(card.id, { values })}
-            />
-          </div>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-11 self-end text-gray-500 sm:mb-0.5"
-            aria-label={`Remove filter ${index + 1}`}
-            onClick={() => publish(cards.filter((item) => item.id !== card.id))}
-          >
-            <Trash2 aria-hidden />
-          </Button>
-        </div>
-      ))}
+              {card.type === 'DIMENSION' ? (
+                <SelectField
+                  label={`Filter ${index + 1} dimension`}
+                  value={card.key}
+                  options={COST_FILTER_DIMENSIONS.map((dimension) => ({ value: dimension.key, label: dimension.label }))}
+                  onChange={(key) => updateCard(card.id, { key, values: [] })}
+                />
+              ) : (
+                <FormField label={card.type === 'TAG' ? 'Tag key' : 'Cost category name'}>
+                  <Input
+                    ariaLabel={`Filter ${index + 1} key`}
+                    value={card.key}
+                    onChange={({ detail }) => updateCard(card.id, { key: detail.value, values: [] })}
+                  />
+                </FormField>
+              )}
+              <FormField label="Values">
+                <ValueSelector
+                  key={`${card.type}:${card.key}`}
+                  card={card}
+                  timePeriod={timePeriod}
+                  billingViewArn={billingViewArn}
+                  onValuesChange={(values) => updateCard(card.id, { values })}
+                />
+              </FormField>
+              <FormField label={<span className="visually-hidden">Remove</span>}>
+                <Button
+                  variant="icon"
+                  iconName="remove"
+                  ariaLabel={`Remove filter ${index + 1}`}
+                  onClick={() => publish(cards.filter((item) => item.id !== card.id))}
+                />
+              </FormField>
+            </ColumnLayout>
+          </Container>
+        ))}
+      </SpaceBetween>
     </section>
   );
 }

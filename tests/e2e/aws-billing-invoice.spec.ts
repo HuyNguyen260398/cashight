@@ -243,7 +243,7 @@ test.describe('AWS billing invoice dashboard', () => {
     for (const chart of [
       'Monthly invoice trend line chart',
     ]) {
-      await expect(page.getByRole('img', { name: chart })).toBeVisible();
+      await expect(page.getByRole('group', { name: chart })).toBeVisible();
     }
     await expect(page.locator('[data-dashboard-panel="cost-usage"]')).toBeVisible();
     await expect(page.getByText('Service details', { exact: true })).toBeVisible();

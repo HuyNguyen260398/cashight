@@ -45,7 +45,7 @@ it('keeps loaded rows and offers retry on refresh failure', async () => {
 it('requires confirmation and preserves a row on cancelled deletion', async () => {
   render(<BankStatementHistory items={items} bank="VIB" loading={false} error={null} {...actions} />);
   await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
-  const dialog = screen.getByRole('alertdialog');
+  const dialog = screen.getByRole('dialog');
   await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
   expect(screen.getByText('****2222')).toBeVisible();
   expect(actions.onDelete).not.toHaveBeenCalled();

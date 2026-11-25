@@ -1,9 +1,10 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import SegmentedControl from '@cloudscape-design/components/segmented-control';
+import SpaceBetween from '@cloudscape-design/components/space-between';
 import {
   previousPeriod,
   nextPeriod,
@@ -62,41 +63,34 @@ export function PeriodSelector({ current }: { current: PeriodSpec }) {
   }
 
   return (
-    <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-      <Tabs
-        value={current.type}
-        onValueChange={(t) => setPeriod(toType(t as PeriodType))}
-      >
-        <TabsList className="h-10 rounded-lg bg-gray-100 text-gray-500 dark:bg-white/[0.06] dark:text-gray-400">
-          <TabsTrigger value="month">Month</TabsTrigger>
-          <TabsTrigger value="quarter">Quarter</TabsTrigger>
-          <TabsTrigger value="year">Year</TabsTrigger>
-        </TabsList>
-      </Tabs>
-
-      <div className="flex items-center justify-center gap-1 rounded-lg border border-gray-200 bg-white p-1 shadow-theme-xs dark:border-gray-800 dark:bg-white/[0.03]">
+    <SpaceBetween direction="horizontal" size="xs" alignItems="center">
+      <SegmentedControl
+        label="Period type"
+        selectedId={current.type}
+        options={[
+          { id: 'month', text: 'Month' },
+          { id: 'quarter', text: 'Quarter' },
+          { id: 'year', text: 'Year' },
+        ]}
+        onChange={({ detail }) => setPeriod(toType(detail.selectedId as PeriodType))}
+      />
+      <SpaceBetween direction="horizontal" size="xxs" alignItems="center">
         <Button
-          variant="ghost"
-          size="icon"
-          className="size-8 rounded-md text-gray-500"
-          aria-label="Previous period"
+          variant="icon"
+          iconName="angle-left"
+          ariaLabel="Previous period"
           onClick={() => setPeriod(previousPeriod(current))}
-        >
-          <ChevronLeft />
-        </Button>
-        <span className="min-w-[120px] text-center text-sm font-medium text-gray-700 dark:text-gray-300">
-          {periodLabel(current)}
-        </span>
+        />
+        <Box fontWeight="bold" textAlign="center" display="inline-block">
+          <span style={{ display: 'inline-block', minWidth: 96 }}>{periodLabel(current)}</span>
+        </Box>
         <Button
-          variant="ghost"
-          size="icon"
-          className="size-8 rounded-md text-gray-500"
-          aria-label="Next period"
+          variant="icon"
+          iconName="angle-right"
+          ariaLabel="Next period"
           onClick={() => setPeriod(nextPeriod(current))}
-        >
-          <ChevronRight />
-        </Button>
-      </div>
-    </div>
+        />
+      </SpaceBetween>
+    </SpaceBetween>
   );
 }

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import createWrapper from '@cloudscape-design/components/test-utils/dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AwsInvoiceDashboard } from '@cashight/domain/aws-invoices';
 
@@ -10,6 +11,7 @@ import { InvoiceMonthlyTrend } from '@/app/components/aws-invoices/invoice-month
 import { InvoiceServicesTable } from '@/app/components/aws-invoices/invoice-services-table';
 import { InvoiceHistory } from '@/app/components/aws-invoices/invoice-history';
 import { AwsInvoiceUpload } from '@/app/components/aws-invoices/aws-invoice-upload';
+import { invoiceMonthlyTrendSeries } from '@/app/components/charts/invoice-series';
 
 const { mockUseAwsInvoiceUpload } = vi.hoisted(() => ({
   mockUseAwsInvoiceUpload: vi.fn(),
@@ -19,27 +21,7 @@ vi.mock('@/frontend/hooks/use-aws-invoice-upload', () => ({
   useAwsInvoiceUpload: () => mockUseAwsInvoiceUpload(),
 }));
 
-vi.mock('recharts', () => {
-  const Wrapper = ({ children }: { children?: React.ReactNode }) => (
-    <div>{children}</div>
-  );
-  const Empty = () => null;
-  return {
-    ResponsiveContainer: Wrapper,
-    PieChart: Wrapper,
-    Pie: Wrapper,
-    Cell: Empty,
-    Tooltip: Empty,
-    Legend: Empty,
-    BarChart: Wrapper,
-    Bar: Wrapper,
-    XAxis: Empty,
-    YAxis: Empty,
-    CartesianGrid: Empty,
-    LineChart: Wrapper,
-    Line: Empty,
-  };
-});
+vi.mock('@/app/components/charts/use-highcharts', () => ({ useHighcharts: () => null }));
 
 afterEach(() => cleanup());
 
@@ -132,7 +114,7 @@ describe('AWS invoice KPI and charts', () => {
     render(<InvoiceMonthlyTrend dashboard={dashboard} />);
 
     expect(
-      screen.getByRole('img', { name: /monthly invoice trend/i }),
+      screen.getByRole('group', { name: /monthly invoice trend/i }),
     ).toHaveTextContent('2026-06: $100.00');
 
     expect(document.body.textContent).not.toMatch(/123456789012|invoiceNumber|billTo/i);
@@ -150,6 +132,20 @@ describe('AWS invoice KPI and charts', () => {
   });
 });
 
+describe('invoiceMonthlyTrendSeries', () => {
+  it('sorts months and maps amount due to one line series', () => {
+    const unsorted = { ...dashboard, monthlyTrend: [{ yearMonth: '2026-07', value: 127 }, { yearMonth: '2026-05', value: 90 }, { yearMonth: '2026-06', value: 100 }] };
+    expect(invoiceMonthlyTrendSeries(unsorted)).toEqual({
+      categories: ['2026-05', '2026-06', '2026-07'],
+      series: [{ type: 'line', name: 'Amount due', data: [90, 100, 127] }],
+    });
+  });
+
+  it('returns no series without months', () => {
+    expect(invoiceMonthlyTrendSeries({ ...dashboard, monthlyTrend: [] }).series).toEqual([]);
+  });
+});
+
 describe('AWS invoice tables', () => {
   it('sorts services deterministically and paginates detail rows', () => {
     const services = Array.from({ length: 12 }, (_, index) => ({
@@ -160,15 +156,15 @@ describe('AWS invoice tables', () => {
     }));
     render(<InvoiceServicesTable services={services} currency="USD" />);
 
-    const body = screen.getByTestId('invoice-services-body');
-    expect(within(body).getAllByRole('row')).toHaveLength(10);
-    expect(within(body).getAllByRole('row')[0]).toHaveTextContent('Service 12');
+    const rows = () => createWrapper(document.body).findTable()!.findRows().map((row) => row.getElement());
+    expect(rows()).toHaveLength(10);
+    expect(rows()[0]).toHaveTextContent('Service 12');
     expect(screen.getByRole('columnheader', { name: /total/i })).toHaveAttribute('aria-sort', 'descending');
     fireEvent.click(screen.getByRole('button', { name: /sort by service/i }));
-    expect(within(body).getAllByRole('row')[0]).toHaveTextContent('Service 01');
+    expect(rows()[0]).toHaveTextContent('Service 01');
     expect(screen.getByRole('columnheader', { name: /service/i })).toHaveAttribute('aria-sort', 'ascending');
     fireEvent.click(screen.getByRole('button', { name: /next page/i }));
-    expect(screen.getByText('Page 2 of 2')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Page 2' })).toHaveAttribute('aria-current', 'true');
   });
 
   it('shows only privacy-safe history fields with view and delete actions', () => {
@@ -210,8 +206,9 @@ describe('AWS invoice upload', () => {
       start: vi.fn(),
       reset: vi.fn(),
     });
-    render(<AwsInvoiceUpload />);
+    const { container } = render(<AwsInvoiceUpload />);
 
+    expect(createWrapper(container).findFileDropzone()).not.toBeNull();
     expect(screen.getByRole('status')).toHaveTextContent('Processing invoice…');
     const input = document.querySelector('input[type="file"]');
     expect(input).toHaveAttribute('accept', 'application/pdf,.pdf');

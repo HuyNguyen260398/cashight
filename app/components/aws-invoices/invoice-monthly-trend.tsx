@@ -1,27 +1,50 @@
 'use client';
 
 import type { AwsInvoiceDashboard } from '@cashight/domain/aws-invoices';
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { CartesianChart } from '@cloudscape-design/chart-components';
 
-import { ChartTooltip } from '@/app/components/chart-tooltip';
-import { CHART_AXIS_COLOR, CHART_COLORS } from '@/lib/chart-colors';
+import { ChartLoading } from '@/app/components/charts/chart-states';
+import { invoiceMonthlyTrendSeries } from '@/app/components/charts/invoice-series';
+import { useHighcharts } from '@/app/components/charts/use-highcharts';
 import { InvoiceChartCard } from './invoice-chart-card';
 import { formatInvoiceMoney } from './invoice-format';
 
+const HEIGHT = 300;
+
 export function InvoiceMonthlyTrend({ dashboard }: { dashboard: AwsInvoiceDashboard }) {
-  const data = [...dashboard.monthlyTrend].sort((a, b) => a.yearMonth.localeCompare(b.yearMonth));
+  const highcharts = useHighcharts();
+  const { categories, series } = invoiceMonthlyTrendSeries(dashboard);
   const format = (value: number) => formatInvoiceMoney(value, dashboard.selected.currency);
   return (
-    <InvoiceChartCard title="Monthly invoice trend" description="Amount due across available months" ariaLabel="Monthly invoice trend line chart" empty={data.length === 0} summary={<ul>{data.map((item) => <li key={item.yearMonth}>{item.yearMonth}: {format(item.value)}</li>)}</ul>}>
-      <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={data} margin={{ left: 4, right: 12, top: 8 }}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.2} />
-          <XAxis dataKey="yearMonth" tick={{ fontSize: 11, fill: CHART_AXIS_COLOR }} />
-          <YAxis hide />
-          <Tooltip content={<ChartTooltip format={format} />} />
-          <Line type="monotone" dataKey="value" stroke={CHART_COLORS.brand} strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-        </LineChart>
-      </ResponsiveContainer>
+    <InvoiceChartCard
+      title="Monthly invoice trend"
+      description="Amount due across available months"
+      ariaLabel="Monthly invoice trend line chart"
+      empty={series.length === 0}
+      summary={
+        <ul>
+          {categories.map((month, index) => (
+            <li key={month}>
+              {month}: {format(series[0]!.data[index] as number)}
+            </li>
+          ))}
+        </ul>
+      }
+    >
+      {highcharts ? (
+        <CartesianChart
+          highcharts={highcharts}
+          chartHeight={HEIGHT}
+          ariaLabel="Monthly invoice trend"
+          legend={{ enabled: false }}
+          series={series}
+          xAxis={{ type: 'category', title: 'Month', categories }}
+          yAxis={{ title: 'Amount due', valueFormatter: (v) => format(v ?? 0) }}
+          tooltip={{ point: ({ item }) => ({ key: item.series.name, value: format(item.y ?? 0) }) }}
+        />
+      ) : (
+        <ChartLoading height={HEIGHT} />
+      )}
     </InvoiceChartCard>
   );
 }

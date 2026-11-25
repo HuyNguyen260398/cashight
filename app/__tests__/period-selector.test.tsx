@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import '@testing-library/jest-dom/vitest';
+
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -58,11 +60,26 @@ describe('PeriodSelector', () => {
 
   it('drops the month param when switching to a year view', async () => {
     render(<PeriodSelector current={{ type: 'month', year: 2026, month: 7 }} />);
-    await userEvent.click(screen.getByRole('tab', { name: 'Year' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Year' }));
 
     const url = new URLSearchParams(push.mock.calls[0][0].split('?')[1]);
     expect(url.get('period')).toBe('year');
     expect(url.get('month')).toBeNull();
     expect(url.get('bank')).toBe('VIB');
+  });
+
+  it('preserves the selected bank when switching to a quarter view', async () => {
+    render(<PeriodSelector current={{ type: 'month', year: 2026, month: 7 }} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Quarter' }));
+    const url = new URLSearchParams(push.mock.calls[0][0].split('?')[1]);
+    expect(url.get('period')).toBe('quarter');
+    expect(url.get('quarter')).toBe('3');
+    expect(url.get('month')).toBeNull();
+    expect(url.get('bank')).toBe('VIB');
+  });
+
+  it('marks the current period type as pressed', () => {
+    render(<PeriodSelector current={{ type: 'month', year: 2026, month: 7 }} />);
+    expect(screen.getByRole('button', { name: 'Month' })).toHaveAttribute('aria-pressed', 'true');
   });
 });

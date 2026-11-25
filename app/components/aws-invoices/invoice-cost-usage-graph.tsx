@@ -1,15 +1,17 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Alert from '@cloudscape-design/components/alert';
+import Container from '@cloudscape-design/components/container';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import type { YearMonth } from '@cashight/domain/aws-invoices';
 import type { CostExplorerReportRequest } from '@cashight/domain/aws-cost-explorer';
 
 import { CognitoReauthWarning } from '@/app/components/aws-cost-explorer/cognito-reauth-warning';
 import { CostUsageGraph } from '@/app/components/aws-cost-explorer/cost-usage-graph';
-import { Card, CardContent } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
 import { useCostExplorer } from '@/frontend/hooks/use-cost-explorer';
 import { useSessionCapabilities } from '@/frontend/hooks/use-session-capabilities';
+import { AlertHeading } from '@/app/components/console/alert-heading';
 
 type ChartStyle = CostExplorerReportRequest['chartStyle'];
 
@@ -45,12 +47,11 @@ export function invoiceCostReportRequest(
 
 function GraphSkeleton() {
   return (
-    <Card aria-label="Loading cost and usage graph" aria-busy="true">
-      <CardContent className="space-y-4 pt-1">
-        <Skeleton className="h-5 w-48 motion-reduce:animate-none" />
-        <Skeleton className="h-64 w-full motion-reduce:animate-none" />
-      </CardContent>
-    </Card>
+    <Container>
+      <div aria-label="Loading cost and usage graph" aria-busy="true">
+        <StatusIndicator type="loading">Loading cost and usage graph…</StatusIndicator>
+      </div>
+    </Container>
   );
 }
 
@@ -99,16 +100,10 @@ export function InvoiceCostUsageGraph({ yearMonth }: { yearMonth: YearMonth }) {
       return <CognitoReauthWarning />;
     }
     return (
-      <div
-        role="alert"
-        className="rounded-2xl border border-error-200 bg-error-50 p-5 dark:border-error-500/30 dark:bg-error-500/10"
-      >
-        <h2 className="font-semibold text-gray-900 dark:text-white/90">
-          Couldn&apos;t load the cost and usage graph
-        </h2>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+      <div role="alert">
+        <Alert type="error" header={<AlertHeading>Couldn&apos;t load the cost and usage graph</AlertHeading>}>
           {state.error?.message ?? 'The AWS cost query failed. Try again shortly.'}
-        </p>
+        </Alert>
       </div>
     );
   }

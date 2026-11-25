@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  chooseOption,
+  dateValue,
+  hasSelect,
+  optionLabels,
+  selectedLabel,
+} from './helpers/cloudscape-fields';
 import userEvent from '@testing-library/user-event';
 import type {
   CostExplorerReportRequest,
@@ -93,8 +100,7 @@ describe('ReportParameters control coverage', () => {
     renderParameters();
 
     expect(screen.getByRole('heading', { name: 'Report parameters' })).toBeTruthy();
-    const dateRange = screen.getByLabelText('Date range');
-    for (const label of [
+    expect(optionLabels('Date range')).toEqual([
       'Current month',
       'Last 7 days',
       'Last 30 days',
@@ -102,23 +108,14 @@ describe('ReportParameters control coverage', () => {
       'Last 6 months',
       'Year to date',
       'Custom',
-    ]) {
-      expect(within(dateRange).getByRole('option', { name: label })).toBeTruthy();
-    }
+    ]);
     expect(screen.getByLabelText('Start date')).toBeTruthy();
     expect(screen.getByLabelText('End date')).toBeTruthy();
 
-    const mode = screen.getByLabelText('Report mode');
-    expect(within(mode).getByRole('option', { name: 'Standard' })).toBeTruthy();
-    expect(
-      (within(mode).getByRole('option', { name: 'Resource' }) as HTMLOptionElement)
-        .disabled,
-    ).toBe(true);
-    expect(within(mode).getByRole('option', { name: 'Comparison' })).toBeTruthy();
-    expect(screen.getByLabelText('Billing view')).toBeTruthy();
+    expect(optionLabels('Report mode')).toEqual(['Standard', 'Resource (disabled)', 'Comparison']);
+    expect(hasSelect('Billing view')).toBe(true);
 
-    const metric = screen.getByLabelText('Metric');
-    for (const label of [
+    expect(optionLabels('Metric')).toEqual([
       'Unblended cost',
       'Blended cost',
       'Amortized cost',
@@ -126,43 +123,31 @@ describe('ReportParameters control coverage', () => {
       'Net amortized cost',
       'Usage quantity',
       'Normalized usage amount',
-    ]) {
-      expect(within(metric).getByRole('option', { name: label })).toBeTruthy();
+    ]);
+    for (const label of ['Granularity', 'Group 1 type', 'Group 2 type', 'Chart style']) {
+      expect(hasSelect(label)).toBe(true);
     }
-    expect(screen.getByLabelText('Granularity')).toBeTruthy();
-    expect(screen.getByLabelText('Group 1 type')).toBeTruthy();
-    expect(screen.getByLabelText('Group 1 key')).toBeTruthy();
-    expect(screen.getByLabelText('Group 2 type')).toBeTruthy();
+    // Group 1 defaults to a dimension (a select); group 2 is empty (a disabled input).
+    expect(hasSelect('Group 1 key')).toBe(true);
     expect(screen.getByLabelText('Group 2 key')).toBeTruthy();
-    expect(screen.getByLabelText('Chart style')).toBeTruthy();
     expect(screen.getByLabelText('Show forecast')).toBeTruthy();
     expect(screen.getByLabelText('Show only untagged')).toBeTruthy();
     expect(screen.getByLabelText('Show only uncategorized')).toBeTruthy();
 
-    fireEvent.change(mode, { target: { value: 'COMPARISON' } });
-    expect(screen.getByLabelText('Comparison range')).toBeTruthy();
+    chooseOption('Report mode', 'COMPARISON');
+    expect(hasSelect('Comparison range')).toBe(true);
     expect(screen.getByLabelText('Comparison start date')).toBeTruthy();
     expect(screen.getByLabelText('Comparison end date')).toBeTruthy();
 
     await userEvent.click(screen.getByRole('button', { name: 'Add filter' }));
-    const category = screen.getByLabelText('Filter 1 category');
-    expect(within(category).getByRole('option', { name: 'Dimension' })).toBeTruthy();
-    expect(within(category).getByRole('option', { name: 'Tag' })).toBeTruthy();
-    expect(within(category).getByRole('option', { name: 'Cost category' })).toBeTruthy();
-    const dimension = screen.getByLabelText('Filter 1 dimension');
-    for (const label of dimensionLabels) {
-      expect(within(dimension).getByRole('option', { name: label })).toBeTruthy();
-    }
+    expect(optionLabels('Filter 1 category')).toEqual(['Dimension', 'Tag', 'Cost category']);
+    expect(optionLabels('Filter 1 dimension')).toEqual(dimensionLabels);
   });
 
   it('keeps edits local until Apply validates and emits the complete request', async () => {
     const { onApply } = renderParameters();
-    fireEvent.change(screen.getByLabelText('Metric'), {
-      target: { value: 'AmortizedCost' },
-    });
-    fireEvent.change(screen.getByLabelText('Chart style'), {
-      target: { value: 'LINE' },
-    });
+    chooseOption('Metric', 'AmortizedCost');
+    chooseOption('Chart style', 'LINE');
 
     expect(onApply).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Apply report' }));
@@ -178,24 +163,20 @@ describe('ReportParameters control coverage', () => {
 
   it('derives consecutive closed calendar months for month-to-month comparison', () => {
     renderParameters({ granularDataEnabled: true });
-    fireEvent.change(screen.getByLabelText('Report mode'), {
-      target: { value: 'COMPARISON' },
-    });
-    fireEvent.change(screen.getByLabelText('Comparison range'), {
-      target: { value: 'MONTH_TO_MONTH' },
-    });
+    chooseOption('Report mode', 'COMPARISON');
+    chooseOption('Comparison range', 'MONTH_TO_MONTH');
 
-    expect((screen.getByLabelText('Start date') as HTMLInputElement).value).toBe(
+    expect(dateValue('Start date')).toBe(
       '2026-07-01',
     );
-    expect((screen.getByLabelText('End date') as HTMLInputElement).value).toBe(
+    expect(dateValue('End date')).toBe(
       '2026-08-01',
     );
     expect(
-      (screen.getByLabelText('Comparison start date') as HTMLInputElement).value,
+      dateValue('Comparison start date'),
     ).toBe('2026-06-01');
     expect(
-      (screen.getByLabelText('Comparison end date') as HTMLInputElement).value,
+      dateValue('Comparison end date'),
     ).toBe('2026-07-01');
   });
 });
@@ -207,7 +188,7 @@ describe('ReportParameters compatibility feedback', () => {
     });
 
     expect(
-      (screen.getByLabelText('Show forecast') as HTMLButtonElement).disabled,
+      (screen.getByLabelText('Show forecast') as HTMLInputElement).disabled,
     ).toBe(true);
     expect(
       screen.getByText('Forecast values are unavailable for grouped reports.'),
@@ -332,9 +313,7 @@ describe('FilterBuilder lazy values', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: 'Add filter' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add filter' }));
-    fireEvent.change(screen.getByLabelText('Filter 2 category'), {
-      target: { value: 'TAG' },
-    });
+    chooseOption('Filter 2 category', 'TAG');
     fireEvent.change(screen.getByLabelText('Filter 2 key'), {
       target: { value: 'Team' },
     });
@@ -379,13 +358,9 @@ describe('ReportParameters reset and sharing', () => {
       value: { writeText },
     });
     const { onApply } = renderParameters();
-    fireEvent.change(screen.getByLabelText('Metric'), {
-      target: { value: 'BlendedCost' },
-    });
+    chooseOption('Metric', 'BlendedCost');
     await userEvent.click(screen.getByRole('button', { name: 'Reset report' }));
-    expect((screen.getByLabelText('Metric') as HTMLSelectElement).value).toBe(
-      'UnblendedCost',
-    );
+    expect(selectedLabel('Metric')).toBe('Unblended cost');
     expect(onApply).not.toHaveBeenCalled();
 
     await userEvent.click(screen.getByRole('button', { name: 'Copy report link' }));
@@ -427,9 +402,7 @@ describe('SavedReports', () => {
         onDelete={onDelete}
       />,
     );
-    fireEvent.change(screen.getByLabelText('Saved report'), {
-      target: { value: REPORT_ID },
-    });
+    chooseOption('Saved report', REPORT_ID);
     await userEvent.click(screen.getByRole('button', { name: 'Load report' }));
     expect(onLoad).toHaveBeenCalledWith(defaultRequest);
 
@@ -444,7 +417,7 @@ describe('SavedReports', () => {
     expect(onSave).toHaveBeenCalledWith('Renamed report', defaultRequest, REPORT_ID);
 
     await userEvent.click(screen.getByRole('button', { name: 'Delete report' }));
-    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    expect(screen.getByRole('dialog')).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: 'Confirm delete report' }));
     expect(onDelete).toHaveBeenCalledWith(REPORT_ID);
   });

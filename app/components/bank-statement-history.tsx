@@ -1,6 +1,13 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
+import Alert from '@cloudscape-design/components/alert';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import Container from '@cloudscape-design/components/container';
+import Header from '@cloudscape-design/components/header';
+import Link from '@cloudscape-design/components/link';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import type { StatementListItem } from '@/frontend/api/contracts';
 import { statementRows } from '@/frontend/lib/statement-history';
 import { bankShortName, type BankCode } from '@/lib/banks';
@@ -16,31 +23,47 @@ export function BankStatementHistory({ items, bank, loading, error, onRetry, onD
 }) {
   const rows = bank ? statementRows(items, bank) : [];
   return (
-    <section id="statement-history" aria-labelledby="statement-history-heading" className="scroll-mt-24 space-y-4">
-      <div>
-        <h2 id="statement-history-heading" className="text-xl font-semibold text-gray-900 dark:text-white/90">
-          {bank ? `${bankShortName(bank)} statement history` : 'Statement history'}
-        </h2>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">All uploaded months for this bank. Select a month to view its spending.</p>
-      </div>
-      {error ? (
-        <div role="alert" className="surface-card space-y-3 p-5">
-          <p className="text-sm text-error-700 dark:text-error-400">Could not refresh statement history: {error}</p>
-          <Button variant="outline" onClick={onRetry}>Retry history</Button>
-        </div>
-      ) : null}
-      {loading || bank === null ? (
-        <p role="status" className="surface-card p-6 text-sm text-gray-500 dark:text-gray-400">
-          {bank === null && !loading ? 'Choose a bank or wait for the spending view to select one.' : 'Loading statement history…'}
-        </p>
-      ) : rows.length > 0 ? (
-        <StatementsTable key={bank} rows={rows} onDelete={onDelete} />
-      ) : !error ? (
-        <div className="surface-card p-8 text-center">
-          <p className="font-medium text-gray-900 dark:text-white/90">No {bankShortName(bank)} statements uploaded yet</p>
-          <a className="mt-3 inline-block text-sm font-medium text-brand-500 underline underline-offset-4" href="#statement-upload">Upload a statement</a>
-        </div>
-      ) : null}
+    <section id="statement-history" aria-labelledby="statement-history-heading" className="console-anchor">
+      <SpaceBetween size="m">
+        <Header
+          variant="h2"
+          headingTagOverride="h2"
+          description="All uploaded months for this bank. Select a month to view its spending."
+        >
+          <span id="statement-history-heading">
+            {bank ? `${bankShortName(bank)} statement history` : 'Statement history'}
+          </span>
+        </Header>
+        {error ? (
+          <div role="alert">
+            <Alert type="error" action={<Button onClick={onRetry}>Retry history</Button>}>
+              Could not refresh statement history: {error}
+            </Alert>
+          </div>
+        ) : null}
+        {loading || bank === null ? (
+          <Container>
+            <div role="status">
+              {bank === null && !loading ? (
+                <Box color="text-body-secondary">Choose a bank or wait for the spending view to select one.</Box>
+              ) : (
+                <StatusIndicator type="loading">Loading statement history…</StatusIndicator>
+              )}
+            </div>
+          </Container>
+        ) : rows.length > 0 ? (
+          <StatementsTable key={bank} rows={rows} onDelete={onDelete} />
+        ) : !error ? (
+          <Container>
+            <Box textAlign="center">
+              <SpaceBetween size="xs">
+                <Box variant="strong">No {bankShortName(bank)} statements uploaded yet</Box>
+                <Link href="#statement-upload">Upload a statement</Link>
+              </SpaceBetween>
+            </Box>
+          </Container>
+        ) : null}
+      </SpaceBetween>
     </section>
   );
 }

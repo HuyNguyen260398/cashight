@@ -1,30 +1,21 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo } from 'react';
 import type { AwsInvoiceService } from '@cashight/domain/aws-invoices';
-import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react';
+import { useCollection } from '@cloudscape-design/collection-hooks';
+import Box from '@cloudscape-design/components/box';
+import Header from '@cloudscape-design/components/header';
+import Pagination from '@cloudscape-design/components/pagination';
+import Table, { type TableProps } from '@cloudscape-design/components/table';
 
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Pagination } from '@/components/ui/pagination';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { PAGINATION_LABELS } from '@/app/components/table-labels';
 import { formatInvoiceMoney } from './invoice-format';
 
-type SortKey = 'name' | 'charges' | 'tax' | 'total';
-type SortDirection = 'asc' | 'desc';
 const PAGE_SIZE = 10;
 
-function SortIcon({ active, direction }: { active: boolean; direction: SortDirection }) {
-  if (!active) return <ChevronsUpDown className="size-3 opacity-40" aria-hidden />;
-  return direction === 'asc' ? <ArrowUp className="size-3" aria-hidden /> : <ArrowDown className="size-3" aria-hidden />;
-}
+const byName = (a: AwsInvoiceService, b: AwsInvoiceService) => a.name.localeCompare(b.name);
+const byNumber = (key: 'charges' | 'tax' | 'total') => (a: AwsInvoiceService, b: AwsInvoiceService) =>
+  a[key] - b[key] || a.name.localeCompare(b.name);
 
 export function InvoiceServicesTable({
   services,
@@ -33,72 +24,49 @@ export function InvoiceServicesTable({
   services: AwsInvoiceService[];
   currency: string;
 }) {
-  const [sortKey, setSortKey] = useState<SortKey>('total');
-  const [direction, setDirection] = useState<SortDirection>('desc');
-  const [page, setPage] = useState(1);
+  const columns = useMemo<TableProps.ColumnDefinition<AwsInvoiceService>[]>(() => {
+    const money = (key: 'charges' | 'tax' | 'total', label: string, bold = false): TableProps.ColumnDefinition<AwsInvoiceService> => ({
+      id: key,
+      header: label,
+      ariaLabel: () => `Sort by ${label.toLowerCase()}`,
+      sortingComparator: byNumber(key),
+      cell: (service) => (
+        <Box textAlign="right" fontWeight={bold ? 'bold' : 'normal'}>
+          {formatInvoiceMoney(service[key], currency)}
+        </Box>
+      ),
+    });
+    return [
+      { id: 'name', header: 'Service', ariaLabel: () => 'Sort by service', sortingComparator: byName, cell: (service) => service.name },
+      money('charges', 'Charges'),
+      money('tax', 'Tax'),
+      money('total', 'Total', true),
+    ];
+  }, [currency]);
 
-  function toggleSort(nextKey: SortKey) {
-    setDirection((current) =>
-      nextKey === sortKey ? (current === 'asc' ? 'desc' : 'asc') : nextKey === 'name' ? 'asc' : 'desc',
-    );
-    setSortKey(nextKey);
-    setPage(1);
-  }
-
-  const sorted = [...services].sort((a, b) => {
-    const comparison = sortKey === 'name' ? a.name.localeCompare(b.name) : a[sortKey] - b[sortKey] || a.name.localeCompare(b.name);
-    return direction === 'asc' ? comparison : -comparison;
+  const { items, collectionProps, paginationProps, actions } = useCollection(services, {
+    sorting: { defaultState: { sortingColumn: columns[3], isDescending: true } },
+    pagination: { pageSize: PAGE_SIZE },
   });
-  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
-  const visible = sorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
-    <Card className="gap-4 overflow-hidden py-0">
-      <CardHeader className="pt-5 md:pt-6">
-        <CardTitle>Service details</CardTitle>
-      </CardHeader>
-      <CardContent className="px-0">
-        {services.length === 0 ? (
-          <p className="px-5 pb-6 text-sm text-gray-500 dark:text-gray-400 md:px-6">No billed service data</p>
-        ) : (
-          <>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {([
-                    ['name', 'Service'],
-                    ['charges', 'Charges'],
-                    ['tax', 'Tax'],
-                    ['total', 'Total'],
-                  ] as const).map(([key, label]) => (
-                    <TableHead
-                      key={key}
-                      className={key === 'name' ? '' : 'text-right'}
-                      aria-sort={sortKey === key ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}
-                    >
-                      <Button variant="ghost" size="sm" className="min-h-11 gap-1 px-1" aria-label={`Sort by ${label.toLowerCase()}`} onClick={() => toggleSort(key)}>
-                        {label}<SortIcon active={sortKey === key} direction={direction} />
-                      </Button>
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody data-testid="invoice-services-body">
-                {visible.map((service) => (
-                  <TableRow key={service.name}>
-                    <TableCell className="max-w-64 truncate font-medium text-gray-900 dark:text-white/90">{service.name}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatInvoiceMoney(service.charges, currency)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatInvoiceMoney(service.tax, currency)}</TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">{formatInvoiceMoney(service.total, currency)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <Pagination page={currentPage} pageCount={pageCount} onPageChange={setPage} />
-          </>
-        )}
-      </CardContent>
-    </Card>
+    <Table
+      {...collectionProps}
+      // Service sorts A→Z first; amounts start largest-first.
+      onSortingChange={({ detail }) => {
+        const same = detail.sortingColumn.sortingComparator === collectionProps.sortingColumn?.sortingComparator;
+        actions.setSorting({
+          sortingColumn: detail.sortingColumn,
+          isDescending: same ? detail.isDescending : detail.sortingColumn.sortingComparator !== byName,
+        });
+      }}
+      variant="container"
+      columnDefinitions={columns}
+      items={items}
+      trackBy="name"
+      header={<Header variant="h2">Service details</Header>}
+      empty={<Box textAlign="center" color="inherit">No billed service data</Box>}
+      pagination={services.length ? <Pagination {...paginationProps} ariaLabels={PAGINATION_LABELS} /> : undefined}
+    />
   );
 }

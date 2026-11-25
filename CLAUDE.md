@@ -20,7 +20,7 @@ A personal Next.js 16 (App Router, React 19) web app that:
 3. Streams a Gemini-generated natural-language summary of the month's spending.
 4. Persists statements to S3 keyed by `statements/{cardLast4}/{year}/{year}-{mm}.json`.
 5. Aggregates across statements for month / quarter / year views, with the period in the URL (`?period=quarter&year=2026&quarter=2`).
-6. Gates all access behind single-user authentication (Auth.js v5: Google + AWS Cognito, one allowlisted email), with a light/dark theme toggle.
+6. Gates all access behind single-user authentication (Auth.js v5: Google + AWS Cognito, one allowlisted email), with an AWS-console-style UI built on the Cloudscape Design System (light/dark and comfortable/compact modes).
 7. Deploys to AWS Amplify Hosting (SSR) in `ap-southeast-1`.
 
 ## Commands
@@ -49,7 +49,7 @@ These cut across multiple steps; deviating from them means rewriting later steps
 - **`pdf-parse` requires the Node runtime.** Any route that imports it must export `runtime = 'nodejs'`. Edge runtime breaks it.
 - **Bank knowledge lives in `packages/domain/src/banks.ts`** — codes, short names, detection markers, `DEFAULT_BANK`, and `?bank=` URL parsing. Adding a bank means adding a profile there plus a parser; nothing else should hard-code a bank name.
 - **The dashboard views exactly one bank.** There is no combined view — totals from different cards do not add up to anything meaningful. `parseBankFromSearch()` returns `null` when `?bank=` is absent or unrecognised, meaning "not chosen"; `aggregate()` then calls `resolveBank()` to pick one that actually has statements in the period (preferring `DEFAULT_BANK`), and reports the choice back as `selectedBank`. **The resolution must stay server-side** — which banks have data is only knowable after loading the period's statements, so URL parsing cannot decide it. The UI renders the dropdown from `selectedBank`, so the highlighted bank always matches the numbers on screen. An explicit `?bank=` is always honoured, even when that bank has no statements that period.
-- **`availableBanks` is computed before the bank filter**, so the dropdown keeps offering the other banks in the period. `BankSelector` also always lists its `current` bank — Radix renders a blank trigger when the value has no matching item.
+- **`availableBanks` is computed before the bank filter**, so the dropdown keeps offering the other banks in the period. `BankSelector` also always lists its `current` bank — a select renders a blank trigger when the value has no matching option.
 - **Both selectors preserve each other's URL params.** `PeriodSelector` starts from the current query string (clearing stale `month`/`quarter`) so the bank filter survives a period change, and `BankSelector` preserves the period.
 - **Vietnamese number format is per-bank.** TPBank uses `.` as the thousands separator (`17.184.741` is seventeen million); VIB uses `,` with a `.` decimal (`5,591,567.00`). Each conversion lives only in that bank's parser module — `parsers/tpbank.ts` and `parsers/vib-fields.ts` respectively. Do not spread it elsewhere.
 - **VIB descriptions embed PII** — a masked PAN, the card-account number, and the cardholder's name. `scrubVibDescription()` strips them at the parser boundary, before the text reaches storage or the Gemini payload.
@@ -62,6 +62,7 @@ These cut across multiple steps; deviating from them means rewriting later steps
 - **Storage key derivation is the dedupe mechanism.** Key = `statements/{cardLast4}/{year}/{year}-{mm}.json`. Re-uploading the same month overwrites; S3 versioning (90-day expiry) preserves the prior version. There is no separate ID generation.
 - **Aggregation functions are pure.** `lib/aggregations.ts` and `lib/dashboard-aggregations.ts` return new objects, take no I/O. The Step 08 vitest suite is the correctness baseline — update it when changing aggregation logic.
 - **Region is `ap-southeast-1` everywhere.** S3 bucket, Amplify app, and the region env var (`STORAGE_REGION` in prod, `AWS_REGION` in dev) must agree. Mismatched regions cause silent S3 GET failures in production.
+- **The UI is Cloudscape.** Pages use `@cloudscape-design/components` (imported per path, e.g. `@cloudscape-design/components/button`) inside the single `ConsoleShell` (`app/components/console/`: `AppLayout` + `TopNavigation` + `SideNavigation` + `Flashbar`). There is no Tailwind; the few app-level rules live in `app/globals.css`, colours come from `@cloudscape-design/design-tokens`. Charts use `@cloudscape-design/chart-components` with `highcharts` pinned to `^12` (the peer range) and loaded lazily via `useHighcharts()`. Light/dark and density classes go on `<body>` — Cloudscape defines its tokens there, so a class on `<html>` does nothing. Notifications go through `notify()` (Flashbar), not toasts. No AWS logo or AWS branding in the shell — Cashight's own name and icon only.
 - **Installments are accounted separately.** They are a large chunk of the statement; the plan deliberately keeps `totalSpend` and `totalInstallments` distinct rather than double-counting. The dashboard decides how to display them.
 
 ## Data flow

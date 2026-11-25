@@ -8,9 +8,8 @@
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js_16-static_export-000000?logo=nextdotjs&logoColor=white">
   <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white">
-  <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white">
-  <img alt="shadcn/ui" src="https://img.shields.io/badge/shadcn%2Fui-000000?logo=shadcnui&logoColor=white">
-  <img alt="Recharts" src="https://img.shields.io/badge/Recharts-22B5BF?logo=chartdotjs&logoColor=white">
+  <img alt="Cloudscape" src="https://img.shields.io/badge/Cloudscape_Design_System-232F3E">
+  <img alt="Highcharts" src="https://img.shields.io/badge/Highcharts-12-8087E8">
   <img alt="Zod" src="https://img.shields.io/badge/Zod-3E67B1?logo=zod&logoColor=white">
 </p>
 
@@ -113,7 +112,10 @@ AI summary
 - **Aggregation functions are pure** — no I/O, new objects only.
 - **Region is `ap-southeast-1`** (Singapore) everywhere, for proximity to HCMC.
 
-**Stack**: Next.js 16 (App Router, static export) · React 19 · TypeScript · Tailwind 4 · shadcn/ui · Recharts · Zod · `pdf-parse` · `@google/genai` · `oidc-client-ts` · AWS Lambda (Node 22) · API Gateway · S3 · DynamoDB · SQS · CloudFront · Cognito · SSM Parameter Store · CodeDeploy · Terraform · Vitest.
+**Stack**: Next.js 16 (App Router, static export) · React 19 · TypeScript · Cloudscape Design System · Cloudscape chart-components (Highcharts 12) · Zod · `pdf-parse` · `@google/genai` · `oidc-client-ts` · AWS Lambda (Node 22) · API Gateway · S3 · DynamoDB · SQS · CloudFront · Cognito · SSM Parameter Store · CodeDeploy · Terraform · Vitest.
+
+> [!NOTE]
+> Charts use [Highcharts](https://www.highcharts.com/license) through Cloudscape's chart-components. Highcharts is free for personal and non-commercial use only; a commercial deployment of Cashight would need a Highcharts licence.
 
 > [!TIP]
 > Full architecture documentation lives in [`docs/codebase/`](./docs/codebase/) — stack, structure, conventions, integrations, testing, concerns, and Mermaid diagrams.
@@ -208,11 +210,10 @@ See [`docs/DEPLOYMENT_SERVERLESS.md`](./docs/DEPLOYMENT_SERVERLESS.md) for the f
 ```
 .
 ├── app/                    # Next.js App Router — static page shells (client components)
-│   ├── components/         # Dashboard, charts, upload, nav
+│   ├── components/         # Dashboard, charts, upload; console/ = Cloudscape shell, nav, notifications
 │   ├── upload/             # Upload page
 │   ├── statements/         # Statement list
 │   └── signin/, auth/      # Cognito PKCE sign-in and callback
-├── components/ui/          # shadcn/ui primitives
 ├── frontend/
 │   ├── api/                # Typed fetch client, 401 handling, summary streaming
 │   ├── auth/               # Cognito PKCE session, token storage, route guard

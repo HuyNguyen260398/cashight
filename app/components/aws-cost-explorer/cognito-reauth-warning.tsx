@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2, ShieldAlert } from 'lucide-react';
-
-import { Button } from '@/components/ui/button';
+import Alert from '@cloudscape-design/components/alert';
+import Button from '@cloudscape-design/components/button';
 import { getOidcManager } from '@/frontend/auth/oidc';
+import { AlertHeading } from '@/app/components/console/alert-heading';
 
 export const COST_EXPLORER_RETURN_TO = '/aws/cost-explorer/' as const;
 
@@ -30,41 +30,20 @@ export function CognitoReauthWarning() {
   };
 
   return (
-    <div
-      role="alert"
-      className="rounded-2xl border border-warning-200 bg-warning-50 p-5 shadow-theme-xs dark:border-warning-500/30 dark:bg-warning-500/10"
-    >
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 gap-3">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-warning-100 text-warning-700 dark:bg-warning-500/15 dark:text-warning-400">
-            <ShieldAlert className="size-5" aria-hidden />
-          </span>
-          <div>
-            <h2 className="font-semibold text-gray-900 dark:text-white/90">
-              Continue with Cognito to view AWS costs
-            </h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-600 dark:text-gray-300">
-              Your current Google-federated session can still use Cashight, but AWS billing data requires a native Cognito session. Cashight never asks for AWS credentials in the browser.
-            </p>
-            {error ? (
-              <p className="mt-2 text-sm text-error-700 dark:text-error-400">
-                {error}
-              </p>
-            ) : null}
-          </div>
-        </div>
-        <Button
-          type="button"
-          className="min-h-11 shrink-0"
-          disabled={loading}
-          onClick={() => void continueWithCognito()}
-        >
-          {loading ? (
-            <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden />
-          ) : null}
-          {loading ? 'Opening Cognito…' : 'Continue with Cognito'}
-        </Button>
-      </div>
+    <div role="alert">
+      <Alert
+        type="warning"
+        header={<AlertHeading>Continue with Cognito to view AWS costs</AlertHeading>}
+        action={
+          <Button loading={loading} onClick={() => void continueWithCognito()}>
+            {loading ? 'Opening Cognito…' : 'Continue with Cognito'}
+          </Button>
+        }
+      >
+        Your current Google-federated session can still use Cashight, but AWS billing data requires a native Cognito
+        session. Cashight never asks for AWS credentials in the browser.
+        {error ? <div>{error}</div> : null}
+      </Alert>
     </div>
   );
 }

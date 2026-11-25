@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 import type { YearMonth } from '@cashight/domain/aws-invoices';
-import { Sparkles } from 'lucide-react';
-
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import Box from '@cloudscape-design/components/box';
+import Button from '@cloudscape-design/components/button';
+import Container from '@cloudscape-design/components/container';
+import Header from '@cloudscape-design/components/header';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import { ApiRequestError, apiFetch } from '@/frontend/api/client';
 import { getPublicConfig } from '@/frontend/auth/config';
 
@@ -88,45 +89,42 @@ export function AwsInvoiceAiSummary({ yearMonth }: { yearMonth: YearMonth }) {
   useEffect(() => () => controllerRef.current?.abort(), []);
 
   return (
-    <Card className="h-full min-h-60 gap-4">
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Sparkles className="size-5 text-brand-500" aria-hidden />
-          <CardTitle>AI invoice summary</CardTitle>
-        </div>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Generated from totals, top services, masked allocations, and trend data only.
-        </p>
-      </CardHeader>
-      <CardContent aria-live="polite">
+    <Container
+      fitHeight
+      header={
+        <Header variant="h2" description="Generated from totals, top services, masked allocations, and trend data only.">
+          AI invoice summary
+        </Header>
+      }
+    >
+      <div aria-live="polite">
         {state.phase === 'idle' ? (
-          <div className="space-y-4">
-            <p className="text-sm leading-6 text-gray-600 dark:text-gray-300">
-              Ask Gemini for a concise aggregate overview of this month.
-            </p>
-            <Button className="min-h-11" onClick={() => void generate()}>
+          <SpaceBetween size="s">
+            <Box color="text-body-secondary">Ask Gemini for a concise aggregate overview of this month.</Box>
+            <Button variant="primary" iconName="gen-ai" onClick={() => void generate()}>
               Generate AI summary
             </Button>
-          </div>
+          </SpaceBetween>
         ) : state.phase === 'loading' ? (
-          <div role="status" aria-label="Generating AI summary" className="space-y-3">
-            <p className="text-sm text-gray-500 dark:text-gray-400">Generating aggregate insight…</p>
-            <Skeleton className="h-4 w-full motion-reduce:animate-none" />
-            <Skeleton className="h-4 w-5/6 motion-reduce:animate-none" />
-            <Skeleton className="h-4 w-2/3 motion-reduce:animate-none" />
+          <div role="status" aria-label="Generating AI summary">
+            <StatusIndicator type="loading">Generating aggregate insight…</StatusIndicator>
           </div>
         ) : state.phase === 'error' ? (
-          <div className="space-y-3">
-            <p role="alert" className="text-sm text-error-700 dark:text-error-400">{state.message}</p>
-            <Button variant="outline" className="min-h-11" onClick={() => void generate()}>Try again</Button>
-          </div>
+          <SpaceBetween size="s">
+            <div role="alert">
+              <StatusIndicator type="error">{state.message}</StatusIndicator>
+            </div>
+            <Button onClick={() => void generate()}>Try again</Button>
+          </SpaceBetween>
         ) : (
-          <div className="space-y-4">
-            <p className="whitespace-pre-wrap text-sm leading-6 text-gray-700 dark:text-gray-300">{state.text}</p>
-            <Button variant="ghost" size="sm" className="min-h-11" onClick={() => void generate()}>Regenerate</Button>
-          </div>
+          <SpaceBetween size="m">
+            <div style={{ whiteSpace: 'pre-wrap' }}>{state.text}</div>
+            <Button variant="inline-link" iconName="refresh" onClick={() => void generate()}>
+              Regenerate
+            </Button>
+          </SpaceBetween>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </Container>
   );
 }
