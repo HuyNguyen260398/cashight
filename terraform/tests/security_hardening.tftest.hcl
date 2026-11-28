@@ -128,3 +128,19 @@ run "csp_mode_rejects_unknown_value" {
 
   expect_failures = [var.csp_mode]
 }
+
+# ── API throttling ───────────────────────────────────────────────────────────
+
+run "api_throttle_tightened" {
+  command = plan
+
+  assert {
+    condition     = aws_api_gateway_method_settings.cashight.settings[0].throttling_rate_limit == 10
+    error_message = "API stage rate limit must be 10 rps"
+  }
+
+  assert {
+    condition     = aws_api_gateway_method_settings.cashight.settings[0].throttling_burst_limit == 20
+    error_message = "API stage burst limit must be 20"
+  }
+}
