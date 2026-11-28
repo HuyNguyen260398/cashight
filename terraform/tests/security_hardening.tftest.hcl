@@ -77,3 +77,54 @@ run "dev_client_localhost_only" {
     error_message = "Dev client is a public PKCE client"
   }
 }
+
+# ── Content-Security-Policy ──────────────────────────────────────────────────
+
+run "csp_report_only_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(aws_cloudfront_response_headers_policy.frontend.security_headers_config[0].content_security_policy) == 0
+    error_message = "Report-only mode must not send an enforcing CSP"
+  }
+
+  assert {
+    condition = anytrue([
+      for h in aws_cloudfront_response_headers_policy.frontend.custom_headers_config[0].items :
+      h.header == "Content-Security-Policy-Report-Only"
+      && strcontains(h.value, "frame-ancestors 'none'")
+      && strcontains(h.value, "https://api.cashight.nghuy.link")
+      && strcontains(h.value, ".auth.ap-southeast-1.amazoncognito.com")
+      && strcontains(h.value, ".s3.ap-southeast-1.amazonaws.com")
+    ])
+    error_message = "Report-only CSP header must carry the full policy"
+  }
+}
+
+run "csp_enforced" {
+  command = plan
+
+  variables {
+    csp_mode = "enforce"
+  }
+
+  assert {
+    condition     = strcontains(aws_cloudfront_response_headers_policy.frontend.security_headers_config[0].content_security_policy[0].content_security_policy, "object-src 'none'")
+    error_message = "Enforce mode must send the CSP"
+  }
+
+  assert {
+    condition     = length(aws_cloudfront_response_headers_policy.frontend.custom_headers_config) == 0
+    error_message = "Enforce mode must not also send the report-only header"
+  }
+}
+
+run "csp_mode_rejects_unknown_value" {
+  command = plan
+
+  variables {
+    csp_mode = "off"
+  }
+
+  expect_failures = [var.csp_mode]
+}

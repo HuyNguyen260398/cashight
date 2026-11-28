@@ -74,3 +74,19 @@ variable "cutover_dns_to_cloudfront" {
   EOT
   default     = true
 }
+
+variable "csp_mode" {
+  type        = string
+  description = <<-EOT
+    How CloudFront sends the SPA's Content-Security-Policy.
+    "report-only": Content-Security-Policy-Report-Only; violations appear in the
+                   browser console but nothing is blocked. Used for rollout.
+    "enforce":     Content-Security-Policy; violations are blocked.
+  EOT
+  default     = "report-only"
+
+  validation {
+    condition     = contains(["report-only", "enforce"], var.csp_mode)
+    error_message = "csp_mode must be \"report-only\" or \"enforce\"."
+  }
+}
