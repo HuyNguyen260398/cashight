@@ -89,8 +89,12 @@ run "dev_client_localhost_only" {
 
 # ── Content-Security-Policy ──────────────────────────────────────────────────
 
-run "csp_report_only_by_default" {
+run "csp_report_only" {
   command = plan
+
+  variables {
+    csp_mode = "report-only"
+  }
 
   assert {
     condition     = length(aws_cloudfront_response_headers_policy.frontend.security_headers_config[0].content_security_policy) == 0
@@ -111,12 +115,8 @@ run "csp_report_only_by_default" {
   }
 }
 
-run "csp_enforced" {
+run "csp_enforced_by_default" {
   command = plan
-
-  variables {
-    csp_mode = "enforce"
-  }
 
   assert {
     condition     = strcontains(aws_cloudfront_response_headers_policy.frontend.security_headers_config[0].content_security_policy[0].content_security_policy, "object-src 'none'")
