@@ -57,6 +57,15 @@ run "spa_client_hardened" {
     condition     = aws_cognito_user_pool_client.spa.refresh_token_rotation[0].feature == "ENABLED"
     error_message = "Refresh token rotation must be enabled"
   }
+
+  # AWS: rotation is incompatible with REFRESH_TOKEN_AUTH; the SPA refreshes via /oauth2/token.
+  assert {
+    condition = alltrue([
+      for c in [aws_cognito_user_pool_client.spa, aws_cognito_user_pool_client.dev] :
+      !contains(tolist(c.explicit_auth_flows), "ALLOW_REFRESH_TOKEN_AUTH")
+    ])
+    error_message = "Clients with refresh token rotation must not allow REFRESH_TOKEN_AUTH"
+  }
 }
 
 run "dev_client_localhost_only" {
@@ -95,7 +104,8 @@ run "csp_report_only_by_default" {
       && strcontains(h.value, "frame-ancestors 'none'")
       && strcontains(h.value, "https://api.cashight.nghuy.link")
       && strcontains(h.value, ".auth.ap-southeast-1.amazoncognito.com")
-      && strcontains(h.value, ".s3.ap-southeast-1.amazonaws.com")
+      && strcontains(h.value, "https://${aws_s3_bucket.uploads.bucket}.s3.ap-southeast-1.amazonaws.com")
+      && strcontains(h.value, "https://${aws_s3_bucket.cost_exports.bucket}.s3.ap-southeast-1.amazonaws.com")
     ])
     error_message = "Report-only CSP header must carry the full policy"
   }

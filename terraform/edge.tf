@@ -101,10 +101,11 @@ data "aws_cloudfront_cache_policy" "optimized" {
 # style-src 'unsafe-inline': Cloudscape and Highcharts set inline styles.
 # connect-src: the API; cognito-idp (OIDC discovery + JWKS); the hosted UI
 #   domain (/oauth2/token for code exchange and refresh); the uploads bucket
-#   (presigned PUT). This is what stops a token being sent to any other host.
+#   (presigned PUT, statements and invoices); the cost-exports bucket (the CSV
+#   export is fetch()ed from a presigned GET in use-cost-explorer.ts). This is
+#   what stops a token being sent to any other host.
 # frame-src: the hosted UI, for oidc-client-ts's signinSilent iframe fallback.
-# Sign-in, sign-out and CSV downloads are top-level navigations, which CSP does
-# not govern.
+# Sign-in and sign-out are top-level navigations, which CSP does not govern.
 
 locals {
   csp = join("; ", [
@@ -119,6 +120,7 @@ locals {
       "https://cognito-idp.${var.region}.amazonaws.com",
       "https://${aws_cognito_user_pool_domain.users.domain}.auth.${var.region}.amazoncognito.com",
       "https://${aws_s3_bucket.uploads.bucket}.s3.${var.region}.amazonaws.com",
+      "https://${aws_s3_bucket.cost_exports.bucket}.s3.${var.region}.amazonaws.com",
     ]),
     "frame-src https://${aws_cognito_user_pool_domain.users.domain}.auth.${var.region}.amazoncognito.com",
     "frame-ancestors 'none'",

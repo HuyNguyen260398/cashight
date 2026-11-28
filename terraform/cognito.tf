@@ -164,7 +164,9 @@ resource "aws_cognito_user_pool_client" "spa" {
     refresh_token = "days"
   }
 
-  explicit_auth_flows = ["ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
+  # No ALLOW_REFRESH_TOKEN_AUTH: AWS documents it as incompatible with refresh
+  # token rotation. The SPA refreshes through /oauth2/token, which supports it.
+  explicit_auth_flows = ["ALLOW_USER_SRP_AUTH"]
 
   # Every refresh returns a new refresh token and invalidates the old one, so a
   # stolen refresh token stops working once the app refreshes. The grace period
@@ -220,7 +222,7 @@ resource "aws_cognito_user_pool_client" "dev" {
     refresh_token = "days"
   }
 
-  explicit_auth_flows = ["ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
+  explicit_auth_flows = ["ALLOW_USER_SRP_AUTH"]
 
   refresh_token_rotation {
     feature                    = "ENABLED"
