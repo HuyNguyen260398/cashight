@@ -32,3 +32,48 @@ run "user_pool_hardened" {
     error_message = "Self sign-up must be disabled"
   }
 }
+
+# ── App clients ──────────────────────────────────────────────────────────────
+
+run "spa_client_hardened" {
+  command = plan
+
+  assert {
+    condition = length([
+      for u in concat(
+        tolist(aws_cognito_user_pool_client.spa.callback_urls),
+        tolist(aws_cognito_user_pool_client.spa.logout_urls),
+      ) : u if strcontains(u, "localhost") || strcontains(u, "cashight-v2")
+    ]) == 0
+    error_message = "Production client must not allow localhost or v2 redirects"
+  }
+
+  assert {
+    condition     = contains(tolist(aws_cognito_user_pool_client.spa.callback_urls), "https://cashight.nghuy.link/auth/callback/")
+    error_message = "Production callback must remain"
+  }
+
+  assert {
+    condition     = aws_cognito_user_pool_client.spa.refresh_token_rotation[0].feature == "ENABLED"
+    error_message = "Refresh token rotation must be enabled"
+  }
+}
+
+run "dev_client_localhost_only" {
+  command = plan
+
+  assert {
+    condition     = tolist(aws_cognito_user_pool_client.dev.callback_urls) == tolist(["http://localhost:3000/auth/callback/"])
+    error_message = "Dev client callback must be localhost only"
+  }
+
+  assert {
+    condition     = tolist(aws_cognito_user_pool_client.dev.logout_urls) == tolist(["http://localhost:3000/signin/"])
+    error_message = "Dev client logout must be localhost only"
+  }
+
+  assert {
+    condition     = aws_cognito_user_pool_client.dev.generate_secret == false
+    error_message = "Dev client is a public PKCE client"
+  }
+}

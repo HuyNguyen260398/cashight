@@ -120,6 +120,7 @@ resource "aws_cognito_identity_provider" "google" {
 }
 
 # ── SPA public client (PKCE / code flow — no secret) ─────────────────────────
+# Production origins only. localhost lives on the separate dev client below.
 
 resource "aws_cognito_user_pool_client" "spa" {
   name         = "${var.project_name}-spa"
@@ -144,17 +145,11 @@ resource "aws_cognito_user_pool_client" "spa" {
   callback_urls = [
     "https://cashight.nghuy.link/auth/callback/",
     "https://${aws_cloudfront_distribution.frontend.domain_name}/auth/callback/",
-    "http://localhost:3000/auth/callback/",
-    # v2 parallel stack (open-points answer 4); remove at the rename.
-    "https://cashight-v2.nghuy.link/auth/callback/",
   ]
 
   logout_urls = [
     "https://cashight.nghuy.link/signin/",
     "https://${aws_cloudfront_distribution.frontend.domain_name}/signin/",
-    "http://localhost:3000/signin/",
-    # v2 parallel stack (open-points answer 4); remove at the rename.
-    "https://cashight-v2.nghuy.link/signin/",
   ]
 
   prevent_user_existence_errors = "ENABLED"
@@ -171,7 +166,67 @@ resource "aws_cognito_user_pool_client" "spa" {
 
   explicit_auth_flows = ["ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
 
+  # Every refresh returns a new refresh token and invalidates the old one, so a
+  # stolen refresh token stops working once the app refreshes. The grace period
+  # covers two tabs refreshing at nearly the same moment.
+  refresh_token_rotation {
+    feature                    = "ENABLED"
+    retry_grace_period_seconds = 10
+  }
+
   # Wait for the Google IdP to exist before creating the client that references it.
+  depends_on = [
+    aws_cognito_resource_server.cashight,
+    aws_cognito_identity_provider.google,
+  ]
+}
+
+# ── Local-dev public client ──────────────────────────────────────────────────
+# Same settings as spa, but redirects only to localhost (docs/local-dev.md).
+# Keeping localhost off the production client means a production sign-in can
+# never be redirected to a local listener.
+
+resource "aws_cognito_user_pool_client" "dev" {
+  name         = "${var.project_name}-dev"
+  user_pool_id = aws_cognito_user_pool.users.id
+
+  generate_secret = false
+
+  allowed_oauth_flows                  = ["code"]
+  allowed_oauth_flows_user_pool_client = true
+
+  allowed_oauth_scopes = [
+    "openid",
+    "email",
+    "profile",
+    "cashight/read",
+    "cashight/write",
+  ]
+
+  supported_identity_providers = ["COGNITO", "Google"]
+
+  callback_urls = ["http://localhost:3000/auth/callback/"]
+  logout_urls   = ["http://localhost:3000/signin/"]
+
+  prevent_user_existence_errors = "ENABLED"
+  enable_token_revocation       = true
+  access_token_validity         = 1
+  id_token_validity             = 1
+  refresh_token_validity        = 7
+
+  token_validity_units {
+    access_token  = "hours"
+    id_token      = "hours"
+    refresh_token = "days"
+  }
+
+  explicit_auth_flows = ["ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]
+
+  refresh_token_rotation {
+    feature                    = "ENABLED"
+    retry_grace_period_seconds = 10
+  }
+
   depends_on = [
     aws_cognito_resource_server.cashight,
     aws_cognito_identity_provider.google,
@@ -187,6 +242,11 @@ output "cognito_user_pool_id" {
 output "cognito_spa_client_id" {
   value       = aws_cognito_user_pool_client.spa.id
   description = "Public SPA client ID (no secret). Set as NEXT_PUBLIC_COGNITO_CLIENT_ID."
+}
+
+output "cognito_dev_client_id" {
+  value       = aws_cognito_user_pool_client.dev.id
+  description = "Public client for localhost dev. Set as NEXT_PUBLIC_COGNITO_CLIENT_ID in .env.local."
 }
 
 # The OIDC issuer NextAuth needs (NOT the Hosted-UI domain).
