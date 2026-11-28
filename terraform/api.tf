@@ -90,8 +90,11 @@ resource "aws_api_gateway_method_settings" "cashight" {
   method_path = "*/*"
 
   settings {
-    throttling_burst_limit = 50
-    throttling_rate_limit  = 100
+    # Single-user app: a dashboard load fires a handful of parallel calls, so
+    # 20 burst leaves headroom while capping abuse (and its bill) now that the
+    # WAF is gone. This is a stage-wide cap, not per caller.
+    throttling_burst_limit = 20
+    throttling_rate_limit  = 10
     logging_level          = "INFO"
     data_trace_enabled     = false
     metrics_enabled        = true
@@ -106,8 +109,9 @@ resource "aws_api_gateway_method_settings" "cashight" {
 # Its AWSManagedRulesCommonRuleSet also returned 403 to User-Agent-less requests,
 # which broke smoke tests and uptime monitors.
 #
-# If reinstating: prefer API Gateway usage-plan throttling (free) for rate
-# limiting, and add the ACL back with CommonRuleSet only.
+# Rate limiting is the stage throttle in aws_api_gateway_method_settings.cashight
+# below (10 rps / 20 burst). If reinstating a WAF, add the ACL back with
+# CommonRuleSet only.
 
 # ── Custom domain and Route 53 ────────────────────────────────────────────────
 

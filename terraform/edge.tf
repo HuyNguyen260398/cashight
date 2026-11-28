@@ -91,6 +91,46 @@ data "aws_cloudfront_cache_policy" "optimized" {
   name = "Managed-CachingOptimized"
 }
 
+# ── Content-Security-Policy ──────────────────────────────────────────────────
+# Built from Terraform references so no bucket or domain name is hard-coded.
+#
+# script-src 'unsafe-inline': the static export (next.config.ts output:
+#   'export') emits inline bootstrap scripts whose contents change every build,
+#   so hashing them would need a post-build step. External script origins are
+#   still blocked.
+# style-src 'unsafe-inline': Cloudscape and Highcharts set inline styles.
+# connect-src: the API; cognito-idp (OIDC discovery + JWKS); the hosted UI
+#   domain (/oauth2/token for code exchange and refresh); the uploads bucket
+#   (presigned PUT, statements and invoices); the cost-exports bucket (the CSV
+#   export is fetch()ed from a presigned GET in use-cost-explorer.ts). This is
+#   what stops a token being sent to any other host.
+# frame-src: the hosted UI, for oidc-client-ts's signinSilent iframe fallback.
+# Sign-in and sign-out are top-level navigations, which CSP does not govern.
+
+locals {
+  csp = join("; ", [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    join(" ", [
+      "connect-src 'self'",
+      "https://api.cashight.nghuy.link",
+      "https://cognito-idp.${var.region}.amazonaws.com",
+      "https://${aws_cognito_user_pool_domain.users.domain}.auth.${var.region}.amazoncognito.com",
+      "https://${aws_s3_bucket.uploads.bucket}.s3.${var.region}.amazonaws.com",
+      "https://${aws_s3_bucket.cost_exports.bucket}.s3.${var.region}.amazonaws.com",
+    ]),
+    "frame-src https://${aws_cognito_user_pool_domain.users.domain}.auth.${var.region}.amazoncognito.com",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "upgrade-insecure-requests",
+  ])
+}
+
 resource "aws_cloudfront_response_headers_policy" "frontend" {
   name    = "${var.project_name}-frontend-security-headers"
   comment = "Security headers for Cashight SPA"
@@ -121,6 +161,26 @@ resource "aws_cloudfront_response_headers_policy" "frontend" {
     referrer_policy {
       referrer_policy = "strict-origin"
       override        = true
+    }
+
+    dynamic "content_security_policy" {
+      for_each = var.csp_mode == "enforce" ? [1] : []
+      content {
+        content_security_policy = local.csp
+        override                = true
+      }
+    }
+  }
+
+  # Report-only rollout: same policy, nothing blocked (see var.csp_mode).
+  dynamic "custom_headers_config" {
+    for_each = var.csp_mode == "report-only" ? [1] : []
+    content {
+      items {
+        header   = "Content-Security-Policy-Report-Only"
+        value    = local.csp
+        override = true
+      }
     }
   }
 }

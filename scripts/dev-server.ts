@@ -481,7 +481,7 @@ function initialiseAuth(): void {
         '',
         '  Either set the Cognito values in .env.local:',
         '    NEXT_PUBLIC_COGNITO_AUTHORITY=https://cognito-idp.<region>.amazonaws.com/<user-pool-id>',
-        '    NEXT_PUBLIC_COGNITO_CLIENT_ID=<spa client id>',
+        '    NEXT_PUBLIC_COGNITO_CLIENT_ID=<terraform output cognito_dev_client_id>',
         '',
         '  ...or go back to synthesized claims:',
         '    NEXT_PUBLIC_DEV_AUTH_BYPASS=true',

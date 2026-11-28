@@ -2,7 +2,7 @@
 
 Since the [hybrid serverless migration](./DEPLOYMENT_SERVERLESS.md), `pnpm dev` only serves the Next.js static SPA — there is no local API. `next.config.ts` sets `output: 'export'`; all `app/api/*` routes are gone, replaced by Lambda functions in `backend/functions/` behind API Gateway. There is also only one deployed API stage (`prod`) — no separate dev/staging backend.
 
-This means local dev is: **local frontend (`localhost:3000`) + real production backend and Cognito user pool.** Two things about that setup don't work out of the box, and both are fixed by local-only configuration — nothing on AWS needs to change.
+This means local dev is: **local frontend (`localhost:3000`) + real production backend and Cognito user pool.** Two things about that setup don't work out of the box, and both are fixed by local-only configuration (plus the `cashight-dev` Cognito client that Terraform already manages).
 
 ---
 
@@ -19,9 +19,12 @@ In `.env.local`:
 
 ```
 NEXT_PUBLIC_APP_ORIGIN=http://localhost:3000
+NEXT_PUBLIC_COGNITO_CLIENT_ID=<output of: terraform -chdir=terraform output -raw cognito_dev_client_id>
 ```
 
-`frontend/auth/config.ts` exempts `http://localhost` / `http://127.0.0.1` from the HTTPS check it otherwise enforces on all `NEXT_PUBLIC_*` origins, so this value is accepted outside of test mode. The Cognito app client's callback/logout URL allowlist already includes the localhost URLs (`terraform/cognito.tf`), so no Terraform change is needed.
+`frontend/auth/config.ts` exempts `http://localhost` / `http://127.0.0.1` from the HTTPS check it otherwise enforces on all `NEXT_PUBLIC_*` origins, so this value is accepted outside of test mode.
+
+The localhost callback/logout URLs live only on the dedicated `cashight-dev` app client (`terraform/cognito.tf`), not on the production `cashight-spa` client. Using the production client id from localhost fails at Cognito with `redirect_mismatch`. Both clients belong to the same user pool and authorisation is keyed by your user's `sub`, so you sign in as the same user with the same data.
 
 > After changing any `NEXT_PUBLIC_*` variable, restart `pnpm dev` — Next.js inlines these at build/start time, not per-request.
 
@@ -76,6 +79,7 @@ cp .env.example .env.local   # if you haven't already
 # then set, at minimum:
 #   NEXT_PUBLIC_APP_ORIGIN=http://localhost:3000
 #   NEXT_PUBLIC_API_BASE_URL=http://localhost:8787
+#   NEXT_PUBLIC_COGNITO_CLIENT_ID=<terraform -chdir=terraform output -raw cognito_dev_client_id>
 
 pnpm dev:api-proxy   # terminal 1
 pnpm dev             # terminal 2
