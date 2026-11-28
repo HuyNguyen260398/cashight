@@ -144,3 +144,72 @@ run "api_throttle_tightened" {
     error_message = "API stage burst limit must be 20"
   }
 }
+
+# ── Security alerting and Access Analyzer ────────────────────────────────────
+
+run "security_alarms" {
+  command = plan
+
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.auth_guard_denials.metric_name == "Errors"
+      && aws_cloudwatch_metric_alarm.auth_guard_denials.namespace == "AWS/Lambda"
+      && aws_cloudwatch_metric_alarm.auth_guard_denials.threshold == 3
+      && aws_cloudwatch_metric_alarm.auth_guard_denials.period == 300
+      && aws_cloudwatch_metric_alarm.auth_guard_denials.dimensions.FunctionName == "cashight-auth-guard"
+    )
+    error_message = "auth-guard denial alarm must watch Lambda Errors >= 3 per 5 min"
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.api_4xx_burst.metric_name == "4XXError"
+      && aws_cloudwatch_metric_alarm.api_4xx_burst.threshold == 50
+      && aws_cloudwatch_metric_alarm.api_4xx_burst.dimensions.Stage == "prod"
+    )
+    error_message = "API 4XX alarm must watch 4XXError >= 50 on the prod stage"
+  }
+
+  assert {
+    condition = alltrue([
+      for a in [aws_cloudwatch_metric_alarm.auth_guard_denials, aws_cloudwatch_metric_alarm.api_4xx_burst] :
+      a.treat_missing_data == "notBreaching" && a.comparison_operator == "GreaterThanOrEqualToThreshold"
+    ])
+    error_message = "Alarms must not breach on missing data and must use >= threshold"
+  }
+}
+
+run "alert_subscription_optional" {
+  command = plan
+
+  variables {
+    allowed_email = ""
+  }
+
+  assert {
+    condition     = length(aws_sns_topic_subscription.security_alerts_email) == 0
+    error_message = "No email subscription without an address"
+  }
+}
+
+run "alert_subscription_created" {
+  command = plan
+
+  variables {
+    allowed_email = "owner@example.invalid"
+  }
+
+  assert {
+    condition     = length(aws_sns_topic_subscription.security_alerts_email) == 1 && aws_sns_topic_subscription.security_alerts_email[0].protocol == "email"
+    error_message = "Email subscription must exist when an address is set"
+  }
+}
+
+run "access_analyzer" {
+  command = plan
+
+  assert {
+    condition     = aws_accessanalyzer_analyzer.account.type == "ACCOUNT" && aws_accessanalyzer_analyzer.account.analyzer_name == "cashight-external-access"
+    error_message = "Account-level external access analyzer must exist"
+  }
+}
