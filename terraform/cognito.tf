@@ -18,7 +18,15 @@ resource "aws_cognito_user_pool" "users" {
 
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
-  mfa_configuration        = "OPTIONAL"
+  # Required for every native sign-in (TOTP only). Google-federated sign-ins
+  # are not subject to Cognito MFA; they rely on Google 2-Step Verification.
+  mfa_configuration   = "ON"
+  deletion_protection = "ACTIVE"
+
+  # Native users are created by an admin only; the public SignUp API is closed.
+  admin_create_user_config {
+    allow_admin_create_user_only = true
+  }
 
   password_policy {
     minimum_length    = 12
