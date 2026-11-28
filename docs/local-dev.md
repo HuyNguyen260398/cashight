@@ -79,6 +79,7 @@ cp .env.example .env.local   # if you haven't already
 # then set, at minimum:
 #   NEXT_PUBLIC_APP_ORIGIN=http://localhost:3000
 #   NEXT_PUBLIC_API_BASE_URL=http://localhost:8787
+#   NEXT_PUBLIC_COGNITO_CLIENT_ID=<terraform -chdir=terraform output -raw cognito_dev_client_id>
 
 pnpm dev:api-proxy   # terminal 1
 pnpm dev             # terminal 2

@@ -70,7 +70,7 @@ drift apart. Turn it off in `.env.local` to exercise the real auth path:
 ```dotenv
 NEXT_PUBLIC_DEV_AUTH_BYPASS=false
 NEXT_PUBLIC_COGNITO_AUTHORITY=https://cognito-idp.ap-southeast-1.amazonaws.com/<user-pool-id>
-NEXT_PUBLIC_COGNITO_CLIENT_ID=<terraform output cognito_spa_client_id>
+NEXT_PUBLIC_COGNITO_CLIENT_ID=<terraform output cognito_dev_client_id>
 NEXT_PUBLIC_APP_ORIGIN=http://localhost:3000
 ```
 
@@ -81,9 +81,11 @@ issuer, audience, expiry and `token_use` checks, and the handlers see the real
 `sub` and `scope` claims. A missing or invalid token gets a 401 from the router
 instead of reaching a handler.
 
-No AWS change is needed: the user pool already lists
-`http://localhost:3000/auth/callback/` in its callback URLs
-(`terraform/cognito.tf`).
+Use the `cashight-dev` client id, not the production `cashight-spa` one: only
+the dev client lists `http://localhost:3000/auth/callback/` in its callback URLs
+(`terraform/cognito.tf`), so the production client fails at Cognito with
+`redirect_mismatch`. The dev server checks the token audience against this same
+variable, so no other setting changes.
 
 Because there is no Cognito trigger locally, the dev server stands in for
 `auth-guard/handler.ts` and writes the `AUTHZ` record for whichever `sub` signs

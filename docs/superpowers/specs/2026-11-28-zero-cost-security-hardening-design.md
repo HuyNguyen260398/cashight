@@ -62,7 +62,10 @@ On `aws_cognito_user_pool.users`:
 - Google-federated sign-ins are not subject to Cognito MFA; they rely on Google 2-Step Verification. That is accepted: the Google identity is the less-privileged one.
 - Admin-only creation blocks the public `SignUp` API. Federated first-sign-in still creates users. The existing Google user is unaffected either way.
 
-**Lockout recovery:** the Google sign-in keeps working. An admin can reset the native user's MFA with `aws cognito-idp admin-set-user-mfa-preference`.
+**Lockout recovery:** the Google sign-in keeps working. While the pool is `ON`, Cognito does not let anyone (admin included) disable a user's MFA, only change the preferred method. To recover the native user:
+1. Set the pool back to `OPTIONAL` with `aws cognito-idp set-user-pool-mfa-config --user-pool-id <id> --mfa-configuration OPTIONAL --software-token-mfa-configuration Enabled=true`.
+2. Run `admin-set-user-mfa-preference ... --software-token-mfa-settings Enabled=false,PreferredMfa=false`.
+3. Sign in, re-enrol, and return the pool to `ON` by re-applying Terraform.
 
 ### 2. auth-guard defence in depth (`backend/functions/auth-guard/handler.ts`)
 
@@ -79,7 +82,7 @@ Add `PreSignUp_SignUp` to the guarded triggers. With admin-only creation it shou
 - Remove the `http://localhost:3000` callback and logout URLs.
 - Add `refresh_token_rotation { feature = "ENABLED", retry_grace_period_seconds = 10 }`. Provider 6.52 supports it, verified with `terraform providers schema`.
 - oidc-client-ts refreshes through `/oauth2/token` and stores the rotated `refresh_token` from the response.
-- **Implementation risk:** if the Cognito API refuses rotation while `explicit_auth_flows` contains `ALLOW_REFRESH_TOKEN_AUTH`, drop that flow. The SPA never calls `InitiateAuth`; it uses the OAuth token endpoint.
+- Drop `ALLOW_REFRESH_TOKEN_AUTH` from `explicit_auth_flows`, leaving `["ALLOW_USER_SRP_AUTH"]`. AWS documents that flow as incompatible with refresh token rotation. The SPA never calls `InitiateAuth`; it refreshes through the OAuth token endpoint, which supports rotation.
 
 **New `aws_cognito_user_pool_client.dev`** (`cashight-dev`):
 - Same settings as `spa`.
@@ -105,7 +108,7 @@ script-src 'self' 'unsafe-inline';
 style-src 'self' 'unsafe-inline';
 img-src 'self' data: blob:;
 font-src 'self' data:;
-connect-src 'self' https://api.cashight.nghuy.link https://cognito-idp.ap-southeast-1.amazonaws.com https://<cognito hosted domain> https://<uploads bucket regional domain>;
+connect-src 'self' https://api.cashight.nghuy.link https://cognito-idp.ap-southeast-1.amazonaws.com https://<cognito hosted domain> https://<uploads bucket regional domain> https://<cost-exports bucket regional domain>;
 frame-src https://<cognito hosted domain>;
 frame-ancestors 'none';
 object-src 'none';
@@ -121,10 +124,11 @@ Why each source is needed:
   - the API;
   - `cognito-idp` (OIDC discovery and JWKS from `NEXT_PUBLIC_COGNITO_AUTHORITY`);
   - the hosted domain (`/oauth2/token`, for code exchange and refresh);
-  - the uploads bucket (presigned PUT).
+  - the uploads bucket (presigned PUT, statements and invoices);
+  - the cost-exports bucket (the CSV export is a `fetch()` of a presigned GET).
 - **`frame-src`:** fallback for the `signinSilent` iframe when no refresh token is present.
 
-Hosted-UI sign-in, logout, and the cost-export CSV download are top-level navigations, which CSP does not govern.
+Hosted-UI sign-in and logout are top-level navigations, which CSP does not govern.
 
 **Not changed:** the existing HSTS, nosniff, X-Frame-Options, referrer and XSS headers.
 

@@ -356,7 +356,6 @@ Manual. No code, except recording results in the PR description.
   - **no destroy or replace of the user pool or the `spa` client.** If either would be replaced, stop.
 - [ ] **Step 3: Apply.**
   - Run with `action=apply` and approve.
-  - If Cognito rejects rotation together with `ALLOW_REFRESH_TOKEN_AUTH`, remove that flow from `explicit_auth_flows` on both `spa` and `dev` in a follow-up commit and re-apply.
   - If it rejects `mfa_configuration = "ON"` on an existing pool, revert to `"OPTIONAL"` and instead enrol the native user (Step 6). With OPTIONAL, an enrolled user is still always challenged.
 - [ ] **Step 4: Verify the live config.** Run:
   - `aws cognito-idp describe-user-pool --user-pool-id ap-southeast-1_ZazpeBFju --region ap-southeast-1 --query 'UserPool.{mfa:MfaConfiguration,del:DeletionProtection,admin:AdminCreateUserConfig.AllowAdminCreateUserOnly}'`
@@ -367,9 +366,9 @@ Manual. No code, except recording results in the PR description.
     Expected: `RefreshTokenRotation.Feature = ENABLED`, and no localhost or v2 URLs.
 - [ ] **Step 5: Confirm self sign-up is blocked.** Run `aws cognito-idp sign-up --client-id <spa id> --username probe@example.invalid --password 'Probe-Passw0rd!x' --region ap-southeast-1`. Expected: `NotAuthorizedException`.
 - [ ] **Step 6: Check native sign-in and MFA.** Sign in as the native user at https://cashight.nghuy.link. Expected: a TOTP QR code. Scan it, enter the code, and reach the dashboard and Cost Explorer.
-  - **Recovery if locked out:** `aws cognito-idp admin-set-user-mfa-preference --user-pool-id ap-southeast-1_ZazpeBFju --username <native username> --software-token-mfa-settings Enabled=false,PreferredMfa=false`.
+  - **Recovery if locked out:** Cognito won't disable a user's MFA while the pool is `ON`. Follow the 3-step lockout recovery in spec §1: set the pool to `OPTIONAL`, reset the user's MFA, then re-enrol and re-apply.
 - [ ] **Step 7: Check Google sign-in.** Expected: reaches the dashboard.
-- [ ] **Step 8: Check the CSP pass** (Review Focus 1). Open DevTools Console with "Verbose" off and walk every flow in spec acceptance item 8. Expected: zero `Content-Security-Policy-Report-Only` violation messages. For any violation, add the origin to `local.csp`, then re-run Task 4's tests and apply.
+- [ ] **Step 8: Check the CSP pass** (Review Focus 1). Open DevTools Console with "Verbose" off and walk every flow in spec acceptance item 8. Expected: zero `Content-Security-Policy-Report-Only` violation messages. Chrome's one-off note that `upgrade-insecure-requests` is ignored in a report-only policy is expected, and it is not a violation. For any violation, add the origin to `local.csp`, then re-run Task 4's tests and apply.
 - [ ] **Step 9: Check the throttle** (Review Focus 4). Hard-refresh the dashboard and switch period and bank 10 times quickly. Expected: no 429 in the Network tab.
 - [ ] **Step 10: Check refresh with rotation** (Review Focus 2).
   - Leave a tab open past 1 hour, then act. Expected: still signed in.
