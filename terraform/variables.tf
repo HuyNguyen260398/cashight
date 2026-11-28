@@ -81,9 +81,10 @@ variable "csp_mode" {
     How CloudFront sends the SPA's Content-Security-Policy.
     "report-only": Content-Security-Policy-Report-Only; violations appear in the
                    browser console but nothing is blocked. Used for rollout.
-    "enforce":     Content-Security-Policy; violations are blocked.
+    "enforce":     Content-Security-Policy; violations are blocked. Default
+                   since the 2026-11-28 report-only pass showed no violations.
   EOT
-  default     = "report-only"
+  default     = "enforce"
 
   validation {
     condition     = contains(["report-only", "enforce"], var.csp_mode)
