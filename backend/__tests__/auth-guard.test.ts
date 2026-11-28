@@ -155,6 +155,37 @@ describe('Cognito auth guard', () => {
       ),
     ).rejects.toThrow('AccessDenied');
   });
+
+  it.each([
+    { email: 'other@example.com', email_verified: 'false' },
+    // Native sign-up is never pre-verified, so even the allowlisted email is rejected.
+    { email: 'huy@example.com', email_verified: 'false' },
+    { email: undefined, email_verified: undefined },
+  ])('rejects native self-sign-up (%o)', async (attributes) => {
+    const upsertAuthorizedUser = vi.fn();
+    const handler = createAuthGuardHandler({
+      allowedEmail: 'huy@example.com',
+      upsertAuthorizedUser,
+    });
+
+    await expect(
+      handler(event('PreSignUp_SignUp', { sub: 'native-1', ...attributes })),
+    ).rejects.toThrow('AccessDenied');
+    expect(upsertAuthorizedUser).not.toHaveBeenCalled();
+  });
+
+  it('still passes admin-created users through untouched', async () => {
+    const handler = createAuthGuardHandler({
+      allowedEmail: 'huy@example.com',
+      upsertAuthorizedUser: vi.fn(),
+    });
+    const input = event('PreSignUp_AdminCreateUser', {
+      email: 'huy@example.com',
+      email_verified: 'false',
+    });
+
+    await expect(handler(input)).resolves.toBe(input);
+  });
 });
 
 describe('deriveAuthProvider', () => {

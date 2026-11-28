@@ -61,8 +61,12 @@ export function createAuthGuardHandler({
     const attributes = event.request.userAttributes;
     const email = normalizeEmail(attributes.email);
     const isVerified = attributes.email_verified === 'true';
+    // PreSignUp_SignUp is defence in depth: the pool sets
+    // allow_admin_create_user_only, so native self-sign-up should never reach
+    // here. Its email is not yet verified, so the check below rejects it.
     const isGuardedTrigger =
       event.triggerSource === 'PreSignUp_ExternalProvider' ||
+      event.triggerSource === 'PreSignUp_SignUp' ||
       event.triggerSource.startsWith('TokenGeneration_');
 
     if (!isGuardedTrigger) return event;

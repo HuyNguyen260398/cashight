@@ -40,7 +40,8 @@ resource "aws_cognito_user_pool" "users" {
   }
 
   # SEC-003: auth-guard enforces ALLOWED_EMAIL before each token issuance and
-  # at Google federation sign-up (pre_sign_up).
+  # at sign-up (pre_sign_up) — Google federation and, as defence in depth,
+  # native self-sign-up (which admin_create_user_config already blocks).
   lambda_config {
     pre_token_generation = aws_lambda_alias.auth_guard_live.arn
     pre_sign_up          = aws_lambda_alias.auth_guard_live.arn
